@@ -76,7 +76,9 @@ allowBuilds:
 # Patched versions for packages that development tools pin exactly. @cloudflare/vitest-pool-workers
 # (0.22.0, and 0.23.0 too) depends on zod 4.4.3 and on a miniflare alpha that depends on undici 7.29.0
 # and sharp 0.35.2, all with open advisories; none is in the app or in the deployed Worker. Each target
-# is the version wrangler already brings. Remove an entry once the tool stops asking for the old one.
+# is a fixed version the lockfile already had through another package, so a later advisory against it
+# means editing the target here. The tool is deprecated (renamed @cloudflare/vitest-plugin) and gets no
+# more releases, so these stay until server/ moves to that package; remove them then.
 overrides:
   "undici@7.29.0": 7.30.1
   "sharp@0.35.2": 0.35.5
