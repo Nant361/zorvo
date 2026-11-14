@@ -4,6 +4,10 @@
 > the steps to reproduce (with or without a Mac), a judge code, and what existed before the hackathon.
 > The submitted state is the tag
 > [`hackathon-submission`](https://github.com/zakyirsyaad/zorvo/tree/hackathon-submission).
+>
+> **Other submission by the author.** One other submission to this hackathon, independent of this one:
+> [Foundling](https://github.com/zakyirsyaad/foundling), a USDC vault on NEAR whose strategy runs sealed
+> in an OutLayer TEE. It shares no code, contract or service with Zorvo Private.
 
 <p align="center">
   <img src="docs/assets/zorvo-icon.png" alt="" width="112" height="112">
