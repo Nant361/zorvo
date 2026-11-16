@@ -11,36 +11,53 @@ interface AutoInstallOptions {
 }
 
 /**
- * Installs, once per run of the app, the agents in use whose npm package Zorvo has not
- * installed yet (see `autoInstallTargets`): one at a time, through the Install button's own
- * path, so the rows show the same progress and Cancel. An install that fails or is
- * cancelled is not tried again until Zorvo is opened again; its row offers Install.
+ * Installs the agents in use whose npm package Zorvo has not installed yet (see
+ * `autoInstallTargets`): one at a time, through the Install button's own path, so the rows
+ * show the same progress and Cancel. Each agent is tried once per run of the app: an install
+ * that fails or is cancelled is not tried again until Zorvo is opened again, and its row
+ * offers Install.
+ *
+ * The agents are read again every time one is picked, never kept in a list: startup puts an
+ * agent found on this Mac in use a render after the profiles load, and the user may take one
+ * out of use while another installs.
  */
 export function useAutoInstall({ agentsInUse, isReady }: AutoInstallOptions): void {
   const agentsRef = useLatest(agentsInUse);
-  /** The agents still to install; null until the run has taken them. */
-  const queueRef = useRef<string[] | null>(null);
+  /** Every agent this run has picked, whether it was started or left to the user's own install. */
+  const attemptedRef = useRef<Set<string>>(new Set());
   const currentRef = useRef<string | null>(null);
+  const advanceRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!isReady) return;
-    queueRef.current ??= autoInstallTargets(agentsRef.current);
-    const queue = queueRef.current;
+    const attempted = attemptedRef.current;
 
     const advance = () => {
       const current = currentRef.current;
       if (current !== null && installEntryOf(current).status === 'installing') return;
       currentRef.current = null;
-      let next = queue.shift();
-      // An agent the user is installing right now is theirs: skip it.
-      while (next !== undefined && installEntryOf(next).status === 'installing') next = queue.shift();
-      if (next === undefined) return;
-      currentRef.current = next;
-      startInstall(next);
+      for (const id of autoInstallTargets(agentsRef.current)) {
+        if (attempted.has(id)) continue;
+        attempted.add(id);
+        // An agent the user is installing right now is theirs: leave it.
+        if (installEntryOf(id).status === 'installing') continue;
+        currentRef.current = id;
+        startInstall(id);
+        return;
+      }
     };
 
+    advanceRef.current = advance;
     const unsubscribe = subscribeToInstalls(advance);
     advance();
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      advanceRef.current = () => {};
+    };
   }, [isReady, agentsRef]);
+
+  // An agent that came into use since the last pick gets its turn.
+  useEffect(() => {
+    advanceRef.current();
+  }, [agentsInUse]);
 }

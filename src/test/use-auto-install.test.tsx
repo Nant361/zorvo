@@ -89,16 +89,63 @@ describe("useAutoInstall", () => {
     expect(store.started).toEqual(["b"]);
   });
 
-  it("takes its agents once: a later list starts nothing more", () => {
+  it("installs an agent that comes into use after the run began", () => {
+    const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: true }), {
+      initialProps: { agents: [] as AgentProfile[] },
+    });
+    expect(store.started).toEqual([]);
+
+    // Startup enables an agent found on this Mac one render after the profiles load.
+    rerender({ agents: [npxAgent("late")] });
+
+    expect(store.started).toEqual(["late"]);
+  });
+
+  it("waits for the running install before one that comes into use meanwhile", () => {
     const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: true }), {
       initialProps: { agents: [npxAgent("a")] },
     });
+
+    rerender({ agents: [npxAgent("a"), npxAgent("late")] });
+    expect(store.started).toEqual(["a"]);
     settle("a", "idle");
 
-    rerender({ agents: [npxAgent("a"), npxAgent("z")] });
+    expect(store.started).toEqual(["a", "late"]);
+  });
+
+  it("does not install an agent taken out of use while another installs", () => {
+    const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: true }), {
+      initialProps: { agents: [npxAgent("a"), npxAgent("b"), npxAgent("c")] },
+    });
+
+    rerender({ agents: [npxAgent("a"), npxAgent("c")] });
     settle("a", "idle");
+    settle("c", "idle");
+
+    expect(store.started).toEqual(["a", "c"]);
+  });
+
+  it("tries each agent once, even when the list is given again", () => {
+    const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: true }), {
+      initialProps: { agents: [npxAgent("a")] },
+    });
+    settle("a", "failed");
+
+    // Still not installed, so still eligible by its profile: it is not started again.
+    rerender({ agents: [npxAgent("a")] });
+    settle("a", "failed");
 
     expect(store.started).toEqual(["a"]);
+  });
+
+  it("starts nothing while it is not ready, whatever comes into use", () => {
+    const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: false }), {
+      initialProps: { agents: [] as AgentProfile[] },
+    });
+
+    rerender({ agents: [npxAgent("a")] });
+
+    expect(store.started).toEqual([]);
   });
 
   it("stops listening when it unmounts", () => {
