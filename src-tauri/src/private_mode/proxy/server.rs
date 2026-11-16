@@ -222,10 +222,27 @@ impl TokenTable {
             }
         }
         self.release(app_session_id);
+        self.hand_over_tokens_of(app_session_id);
         tokens
             .into_iter()
             .filter(|token| !self.by_token.contains_key(token))
             .collect()
+    }
+
+    /// A token outlives the session it was made for while a fork still holds it, and every call
+    /// on it is recorded under the session the token names. Once that session is deleted nobody
+    /// reads its records, so the token is handed to a session that still holds it: what that one
+    /// spends from here on is counted for it. The lowest id is taken, so the choice is the same
+    /// every time.
+    fn hand_over_tokens_of(&mut self, deleted: &str) {
+        for entry in self.by_token.values_mut() {
+            if entry.app_session_id != deleted {
+                continue;
+            }
+            if let Some(heir) = entry.holders.iter().min() {
+                entry.app_session_id = heir.clone();
+            }
+        }
     }
 
     /// Every token the session has held this run, oldest first.
@@ -660,6 +677,42 @@ mod tests {
         table.release("fork");
         assert!(table.find(&token).is_some());
         assert_eq!(table.token_of("source"), Some(token));
+    }
+
+    #[test]
+    fn deleting_the_source_hands_its_token_to_the_fork_that_still_holds_it() {
+        let mut table = TokenTable::default();
+        let token = table.issue("source", "model", "key", false).expect("token");
+        assert!(table.share("source", "fork-b"));
+        assert!(table.share("source", "fork-a"));
+        assert_eq!(
+            table.find(&token).map(|entry| entry.app_session_id),
+            Some("source".to_string())
+        );
+
+        // Stopped first or not, a deleted source can no longer be read: its calls would be lost.
+        let dropped = table.forget("source");
+
+        assert!(dropped.is_empty(), "the forks still hold the token");
+        assert_eq!(
+            table.find(&token).map(|entry| entry.app_session_id),
+            Some("fork-a".to_string())
+        );
+    }
+
+    #[test]
+    fn stopping_the_source_keeps_its_token_in_its_name() {
+        let mut table = TokenTable::default();
+        let token = table.issue("source", "model", "key", false).expect("token");
+        assert!(table.share("source", "fork"));
+
+        table.release("source");
+
+        // A stopped session is still listed and still read, so its fork's calls stay with it.
+        assert_eq!(
+            table.find(&token).map(|entry| entry.app_session_id),
+            Some("source".to_string())
+        );
     }
 
     #[test]
