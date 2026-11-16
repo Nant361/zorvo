@@ -212,6 +212,10 @@ decides behaviour. The page inside the frame is a stand-in drawn as markup.
 
 Offered only while the session has an artifact, main window only.
 
+- **Tab strip**: Artifacts sits between Files and Terminal, with the number of
+  artifacts. Five tabs need about 370 px, so the strip's tabs use 8 px side
+  padding (they fit the default 380 px inspector), and below that width the
+  strip scrolls sideways; no tab is hidden or cut.
 - **List**: title, version, time. A click opens the viewer in the list's place,
   as the file viewer does. A session with one artifact opens straight on it.
 - **Viewer**: the frame fills the tab and the inspector widens like the
