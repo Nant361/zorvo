@@ -210,8 +210,17 @@ every box (`claimed` and `live` in `useArtifactView.ts`), a box that leaves
 only gives up its claim, and the view is closed only when no box claimed the
 page by the time the close's turn comes in the queue. The box that arrives
 with the same session, artifact and version moves the view to itself
-(`artifact_view_bounds`). Reload still makes a new view. Checked by test, not
-yet seen on screen.
+(`artifact_view_bounds`). Reload still makes a new view. Seen on screen on
+2026-11-17 with a page Codex wrote: a note typed in the page and its scroll
+position stayed through Expand and then Shrink.
+
+Real agents, same day, review build: Codex (codex-acp 2.2.2) called
+`artifact_guide`, wrote the page to a temporary folder and called
+`show_artifact`; the tab opened by itself, and a second `show_artifact` for
+the same path gave "Version 2 of 2" and a second card. Qwen Code 0.25.2 did
+the same in its Default mode, asking permission for each tool call. Google
+Antigravity could not be tried: the catalog offered it only from 23 November
+(the 7-day rule for a newly listed version).
 
 Also learned: a window behind another has its page timers throttled, so a
 real-app test must not time anything with timers in the page.
