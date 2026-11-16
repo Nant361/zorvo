@@ -8,6 +8,7 @@
 //! downloads, unpacks, runs npm or waits for a lock.
 
 use std::collections::{BTreeSet, HashMap};
+use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
@@ -20,6 +21,7 @@ use super::archive::{ensure_agent_command, format_for_url, unpack, UnpackError, 
 use super::cleanup::{clean_up, CleanupInputs};
 use super::download::{download, DownloadError, DownloadLimits};
 use super::layout::{read_record, remove_path, CommitOutcome, InstallRecord, Staging, ToolsDir};
+use super::npm_bin::choose_bin;
 use super::plan::PlannedStep;
 use super::prerequisites::{
     npm_install_args, prerequisites_for, run_npm_install, NpmError, Prerequisite,
@@ -42,6 +44,8 @@ const PHASE_DOWNLOAD: &str = "download";
 const PHASE_VERIFY: &str = "verify";
 const PHASE_UNPACK: &str = "unpack";
 const PHASE_NPM: &str = "npm";
+/// Where `npm install -g --prefix` links a package's programs.
+const NPM_BIN_DIR: &str = "bin";
 
 /// The payload of the `agent-install-progress` event.
 #[derive(Debug, Clone, Serialize)]
@@ -354,6 +358,12 @@ impl Installer {
                 commit(run, staging, &dest, record(url, Some(sha256), None))
             }
             PlannedStep::Prerequisite(p) => self.install_prerequisite(p, run, env, user_node_major),
+            PlannedStep::NpmAgent {
+                id,
+                version,
+                package,
+                ..
+            } => self.install_npm_agent(id, version, package, run, env, user_node_major),
         }
     }
 
@@ -431,13 +441,46 @@ impl Installer {
         if read_record(&dest).is_some() {
             return Ok(());
         }
-        let (npm, npm_env) = self.npm_for(p, env, user_node_major)?;
+        let (npm, npm_env) = self.npm_for(p.command, env, user_node_major)?;
         let staging = self.tools.new_staging()?;
         run.report(PHASE_NPM, 0, None);
-        let args = npm_install_args(&staging.content_path(), p);
+        let spec = format!("{}@{}", p.package, p.version);
+        let args = npm_install_args(&staging.content_path(), &spec);
         run_npm_install(&npm, &args, &npm_env, NPM_INSTALL_TIMEOUT, run.cancel)?;
-        let source = format!("npm:{}@{}", p.package, p.version);
+        let source = format!("npm:{spec}");
         commit(run, staging, &dest, record(&source, None, None))
+    }
+
+    /// Installs an npx agent's package with npm and records which of its
+    /// programs is the agent, so a session starts that file and never `npx`.
+    fn install_npm_agent(
+        &self,
+        id: &str,
+        version: &str,
+        package: &str,
+        run: &StepRun,
+        env: &HashMap<String, String>,
+        user_node_major: Option<u32>,
+    ) -> Result<(), StepError> {
+        let dest = self.tools.agent_dir(id, version);
+        if read_record(&dest).is_some() {
+            return Ok(());
+        }
+        let (npm, npm_env) = self.npm_for(&run.name, env, user_node_major)?;
+        let staging = self.tools.new_staging()?;
+        run.report(PHASE_NPM, 0, None);
+        let args = npm_install_args(&staging.content_path(), package);
+        run_npm_install(&npm, &args, &npm_env, NPM_INSTALL_TIMEOUT, run.cancel)?;
+        let bins = file_names_in(&staging.content_path().join(NPM_BIN_DIR));
+        let chosen = choose_bin(package, &bins).ok_or_else(|| {
+            StepError::Failed(format!(
+                "{}'s package has no program Zorvo can pick.",
+                run.name
+            ))
+        })?;
+        let bin = format!("{NPM_BIN_DIR}/{chosen}");
+        let source = format!("npm:{package}");
+        commit(run, staging, &dest, record(&source, None, Some(&bin)))
     }
 
     /// The user's npm when their Node is new enough, else Zorvo's, read from
@@ -445,7 +488,7 @@ impl Installer {
     /// dir goes first on `PATH` so npm's scripts run with that Node.
     fn npm_for(
         &self,
-        p: &Prerequisite,
+        name: &str,
         env: &HashMap<String, String>,
         user_node_major: Option<u32>,
     ) -> Result<(PathBuf, HashMap<String, String>), String> {
@@ -464,9 +507,9 @@ impl Installer {
         )
         .ok_or_else(|| {
             if users_node {
-                format!("{} needs npm, which is not on your PATH", p.command)
+                format!("{name} needs npm, which is not on your PATH")
             } else {
-                format!("{} needs Node.js, which is not installed", p.command)
+                format!("{name} needs Node.js, which is not installed")
             }
         })?;
         let bin = node.bin_dir.display().to_string();
@@ -552,6 +595,7 @@ fn has_plain_path_parts(step: &PlannedStep) -> bool {
         PlannedStep::Runtime(_) => true,
         PlannedStep::Agent { id, version, .. } => is_single_name(id) && is_single_name(version),
         PlannedStep::Prerequisite(p) => is_single_name(p.command) && is_single_name(p.version),
+        PlannedStep::NpmAgent { id, version, .. } => is_single_name(id) && is_single_name(version),
     }
 }
 
@@ -559,7 +603,7 @@ fn lock_key(step: &PlannedStep) -> String {
     match step {
         PlannedStep::Runtime(RuntimeKind::Node) => "node".to_string(),
         PlannedStep::Runtime(RuntimeKind::Uv) => "uv".to_string(),
-        PlannedStep::Agent { id, .. } => format!("agent:{id}"),
+        PlannedStep::Agent { id, .. } | PlannedStep::NpmAgent { id, .. } => format!("agent:{id}"),
         PlannedStep::Prerequisite(p) => format!("prereq:{}", p.command),
     }
 }
@@ -620,6 +664,18 @@ fn record(source: &str, sha256: Option<&str>, bin: Option<&str>) -> InstallRecor
             .map_or(0, |d| d.as_secs()),
         bin: bin.map(String::from),
     }
+}
+
+/// The names of what is directly in `dir`, sorted; none when it cannot be read.
+fn file_names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+    names.sort();
+    names
 }
 
 /// True for exactly one plain path component, so a join stays one level down.

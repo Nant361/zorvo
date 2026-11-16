@@ -192,3 +192,19 @@ fn display_of_a_prerequisite_step_names_the_command() {
     assert_eq!(step.version, pi.version);
     assert_eq!(step.download_bytes, None);
 }
+
+#[test]
+fn an_npm_agent_step_displays_as_an_agent() {
+    let step = PlannedStep::NpmAgent {
+        id: "qwen-code".into(),
+        name: "Qwen Code".into(),
+        version: "0.27.0".into(),
+        package: "@qwen-code/qwen-code@0.27.0".into(),
+    }
+    .display(None, PLATFORM);
+
+    assert_eq!(step.kind, "agent");
+    assert_eq!(step.name, "Qwen Code");
+    assert_eq!(step.version, "0.27.0");
+    assert_eq!(step.download_bytes, None);
+}

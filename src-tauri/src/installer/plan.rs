@@ -113,6 +113,14 @@ pub enum PlannedStep {
         cmd: String,
     },
     Prerequisite(&'static Prerequisite),
+    /// An agent the registry distributes as an npm package, installed with
+    /// npm under `tools/agents/<id>/<version>`. `package` is the pinned spec.
+    NpmAgent {
+        id: String,
+        name: String,
+        version: String,
+        package: String,
+    },
 }
 
 /// A step as the UI shows it.
@@ -145,12 +153,14 @@ impl PlannedStep {
                         .map(|t| t.size),
                 }
             }
-            Self::Agent { name, version, .. } => InstallStep {
-                kind: "agent".to_string(),
-                name: name.clone(),
-                version: version.clone(),
-                download_bytes: None,
-            },
+            Self::Agent { name, version, .. } | Self::NpmAgent { name, version, .. } => {
+                InstallStep {
+                    kind: "agent".to_string(),
+                    name: name.clone(),
+                    version: version.clone(),
+                    download_bytes: None,
+                }
+            }
             Self::Prerequisite(p) => InstallStep {
                 kind: "prerequisite".to_string(),
                 name: p.command.to_string(),

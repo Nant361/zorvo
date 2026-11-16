@@ -73,9 +73,10 @@ pub fn all_prerequisites() -> impl Iterator<Item = &'static Prerequisite> {
     PI_ACP.iter()
 }
 
-/// The `npm` arguments that install `p` globally under `prefix`. Each value is
-/// its own argument, so a prefix with spaces needs no quoting.
-pub fn npm_install_args(prefix: &Path, p: &Prerequisite) -> Vec<OsString> {
+/// The `npm` arguments that install the package `spec` (`name@version`)
+/// globally under `prefix`. Each value is its own argument, so a prefix with
+/// spaces needs no quoting.
+pub fn npm_install_args(prefix: &Path, spec: &str) -> Vec<OsString> {
     vec![
         "install".into(),
         "-g".into(),
@@ -83,7 +84,7 @@ pub fn npm_install_args(prefix: &Path, p: &Prerequisite) -> Vec<OsString> {
         prefix.as_os_str().to_owned(),
         "--no-audit".into(),
         "--no-fund".into(),
-        format!("{}@{}", p.package, p.version).into(),
+        spec.into(),
     ]
 }
 
