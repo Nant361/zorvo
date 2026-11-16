@@ -121,8 +121,14 @@ export function useInspector(
   const artifactHere = openArtifact?.view === layout.view ? openArtifact : null;
   const viewedArtifact = artifactHere?.artifact ?? null;
   const isArtifactExpanded = artifactHere?.isExpanded ?? false;
+  // Only an open artifact can be expanded: the list has no Shrink, so going back to it (Back, or deleting
+  // the artifact that was expanded) gives the chat back.
   const viewArtifact = (artifact: ViewedArtifact | null, forView: string = layout.view) =>
-    setOpenArtifact((current) => ({ view: forView, artifact, isExpanded: current?.view === forView ? current.isExpanded : false }));
+    setOpenArtifact((current) => ({
+      view: forView,
+      artifact,
+      isExpanded: artifact !== null && current?.view === forView && current.isExpanded,
+    }));
   const setArtifactExpanded = (isExpanded: boolean) =>
     setOpenArtifact((current) => ({ view: layout.view, artifact: current?.view === layout.view ? current.artifact : null, isExpanded }));
 

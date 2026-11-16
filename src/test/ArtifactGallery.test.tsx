@@ -67,6 +67,11 @@ describe("the gallery", () => {
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
   });
 
+  it("shows a notice of its own, since the chat that usually shows one is hidden under it", () => {
+    render(<ArtifactGallery rows={ROWS} onOpen={vi.fn()} notice={<div role="alert">Could not delete the session's artifacts.</div>} />);
+    expect(within(screen.getByRole("region", { name: "Artifact gallery" })).getByRole("alert").textContent).toContain("Could not delete");
+  });
+
   it("counts one page in one session in the singular, and says where pages live", () => {
     render(<ArtifactGallery rows={ROWS.slice(0, 1)} onOpen={vi.fn()} />);
     expect(screen.getByText("1 page in 1 session")).toBeTruthy();

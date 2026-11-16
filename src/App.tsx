@@ -1650,6 +1650,7 @@ export default function App() {
               rows={gallery}
               onOpen={openFromGallery}
               onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
+              notice={settingsPage.section === null && noticeToast}
             />
           )}
           {/* Hidden, not unmounted, under the gallery: the composer keeps its text. */}
@@ -2071,7 +2072,7 @@ export default function App() {
                 </div>
               </article>
               {isArtifactExpanded && activeSession && (
-                <section aria-label="Artifact" className="flex min-w-0 flex-1 flex-col">
+                <section aria-label="Artifact" className="relative flex min-w-0 flex-1 flex-col">
                   <ArtifactsPanel
                     sessionId={activeSession.id}
                     artifacts={sessionArtifacts}
@@ -2081,6 +2082,9 @@ export default function App() {
                     onToggleExpanded={() => inspector.setArtifactExpanded(false)}
                     onError={reportError}
                   />
+                  {/* The chat, which draws the app's notice, is hidden under an expanded page: a failure here
+                      (export, rename, delete, a page that cannot be shown) is said here. The page hides under it. */}
+                  {settingsPage.section === null && noticeToast && <ToastStack>{noticeToast}</ToastStack>}
                 </section>
               )}
               {isDiffOpen && filesFolder && (

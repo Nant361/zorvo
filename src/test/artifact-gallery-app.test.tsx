@@ -101,6 +101,38 @@ describe("the gallery in the app", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Render steps", level: 3 })).toBeTruthy());
   });
 
+  it("shows a failure inside the expanded page, where the chat's notice cannot be seen", async () => {
+    seed(true);
+    vi.spyOn(internals(), "invoke").mockImplementation((cmd, args) => {
+      if (cmd === "artifact_list") {
+        const ids = (args as { sessionIds: string[] }).sessionIds;
+        return Promise.resolve(ids.map((sessionId) => ({ sessionId, artifacts: sessionId === "s-old" ? [ARTIFACT] : [] })));
+      }
+      if (cmd === "artifact_export") return Promise.reject("Zorvo could not save that file.");
+      return fakeTauriInvoke(cmd, args);
+    });
+    await renderApp();
+    await act(async () => {
+      fireEvent.click(await waitFor(() => sidebar().getByRole("button", { name: "Artifacts, 1" })));
+    });
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("region", { name: "Artifact gallery" })).getByRole("button", { name: /Session list performance/ }));
+    });
+    await act(async () => {
+      fireEvent.click(await waitFor(() => screen.getByRole("button", { name: "Expand" })));
+    });
+    const expanded = screen.getByRole("region", { name: "Artifact" });
+
+    await act(async () => {
+      fireEvent.click(within(expanded).getByRole("button", { name: "Export" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(expanded).getByRole("button", { name: "Choose where to save" }));
+    });
+
+    await waitFor(() => expect(within(expanded).getByRole("alert").textContent).toContain("Zorvo could not save that file."));
+  });
+
   it("leaves the gallery when a session is picked in the sidebar", async () => {
     seed(true);
     await renderApp();
