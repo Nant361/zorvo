@@ -109,3 +109,15 @@ Stopping one subagent; Monitor, Workflow and other tasks only the Claude Code ad
 1. The segment is named "Tasks". The top bar says "background tasks"; one name for both may be clearer.
 2. A finished shell command has no row and no tab in this version, since nothing lists it after its process ends.
 3. The Claude Code path rests on reading the adapter, not on a recording.
+
+## As built (2026-11-17)
+
+Where the code differs from the text above:
+
+- Rust is unchanged: transcripts are opaque JSON in `store.rs`, so only `lib/persistence.ts` reads the new fields.
+- A permission card records `toolCallId`; that is how a subagent's row reads Needs you.
+- A shell command's row sits after the last message, not inside the reply that started it: a process is not tied to a message.
+- A shell tab's output has no "N min ago", and a finished subagent's header has no duration: the transcript keeps no time for a tool's last update or its end.
+- A shell tab with no known tool call says "{Agent} reported no output for this command."
+- Closing the last task tab leaves the inspector closed.
+- A finished subagent's steps stay listed, not folded into a summary line; its last text is shown apart under "What it told {Agent}".

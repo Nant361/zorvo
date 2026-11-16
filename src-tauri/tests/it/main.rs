@@ -10,6 +10,7 @@ mod acp_private_errors_test;
 mod acp_prompt_blocks_test;
 mod acp_session_list_test;
 mod acp_session_reopen_test;
+mod acp_subagent_test;
 mod agent_tools_cli_test;
 mod agent_tools_e2e_test;
 mod agent_tools_service_test;

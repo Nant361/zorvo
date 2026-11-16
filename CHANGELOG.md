@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+
+- **Background task tabs.** A subagent or a shell command an agent started opens as a tab beside the chat, and the chat shows one row per subagent instead of every step. With Claude Code and Qwen Code you can follow a subagent's steps as they arrive.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added
