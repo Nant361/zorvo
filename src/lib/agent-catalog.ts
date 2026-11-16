@@ -1,4 +1,4 @@
-import type { CatalogAgent, CatalogStatus, InstallStep, Settings, UnavailableAgent, UnavailableReason } from '../types';
+import type { AgentProfile, CatalogAgent, CatalogStatus, InstallStep, Settings, UnavailableAgent, UnavailableReason } from '../types';
 import { describePlan } from './install-plan';
 import type { InstallStatus } from './agent-installs';
 
@@ -236,4 +236,21 @@ export function availableLine(agent: CatalogAgent, plan: readonly InstallStep[] 
       : [availableReason(agent), agent.description].filter(Boolean).join(' · ');
   if (agent.listed) return line;
   return line ? `${line} · No longer listed` : 'No longer listed';
+}
+
+/**
+ * The agents in use that Zorvo installs by itself when it opens: npm-package agents whose
+ * only missing part is that package. One that also needs Node.js or another program was
+ * not ready before either, and keeps its Install button.
+ */
+export function autoInstallTargets(agentsInUse: readonly AgentProfile[]): string[] {
+  return agentsInUse
+    .filter(
+      (agent) =>
+        agent.distribution === 'npx' &&
+        agent.availability === 'not_installed' &&
+        agent.install_plan?.length === 1 &&
+        agent.install_plan[0].kind === 'agent',
+    )
+    .map((agent) => agent.id);
 }
