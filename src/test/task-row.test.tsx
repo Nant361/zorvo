@@ -146,6 +146,16 @@ describe("a subagent that cannot be opened", () => {
     expect(screen.getByRole("button", { name: "Read a file" })).toBeInTheDocument();
   });
 
+  it("shows what the subagent's own tool call returned where no tab can open", () => {
+    const withResult: ChatMessage = {
+      ...withSteps,
+      tools: withSteps.tools!.map((t) => (t.id === "p" ? { ...t, details: [{ kind: "text" as const, text: "Parent result text." }] } : t)),
+    };
+    renderMessage({ message: withResult });
+
+    expect(screen.getByText("Parent result text.")).toBeInTheDocument();
+  });
+
   it("keeps a subagent's steps out of the reply where its tab can open", () => {
     renderMessage({ message: withSteps, onOpenTask: vi.fn() });
 

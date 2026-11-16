@@ -8,6 +8,7 @@ import { UserMessageBar } from "./UserMessageBar";
 import { AttachmentChips } from "../composer/AttachmentChips";
 import { ToolsPart } from "./ToolsPart";
 import { TaskRow } from "./TaskRow";
+import { ToolDetails } from "./ToolDetails";
 import { secondLine, shownTools, stepsOf, subagentTaskOf } from "../../lib/task-view";
 import { PlanUpdatedRow, ThinkingBlock } from "./ReplyExtras";
 import { VerificationBadge } from "../private/VerificationBadge";
@@ -68,6 +69,8 @@ function SubagentSteps({ tool, message, isTurnOver }: { tool: ToolExecution; mes
           <ToolsPart key={index} tools={part.toolIds.flatMap((id) => byId.get(id) ?? [])} isCurrentTurn={false} isTurnOver={isTurnOver} />
         ),
       )}
+      {/* What its own tool call returned, which the task tab shows as its result. */}
+      {tool.details && tool.details.length > 0 && <ToolDetails details={tool.details} />}
     </div>
   );
 }

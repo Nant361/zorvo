@@ -86,6 +86,25 @@ describe("the Tasks tab", () => {
     expect(screen.getByText("Final result from the tool.")).toBeInTheDocument();
   });
 
+  it("follows a running subagent's new steps only until you scroll up", () => {
+    const tabs: TaskTabs = { tabs: [SUB], selected: SUB, open: vi.fn(), select: vi.fn(), close: vi.fn() };
+    const props = (p: ToolExecution): TasksPanelProps => ({
+      tabs, sessionId: "s1", messages: messages(p), tasks: [], agentName: "Claude Code", isBusy: true, onStop: vi.fn(async () => true),
+    });
+    const { rerender } = render(<TasksPanel {...props(subagent())} />);
+    const scroller = screen.getByTestId("subagent-steps");
+    Object.defineProperties(scroller, { scrollHeight: { value: 900, configurable: true }, clientHeight: { value: 300, configurable: true } });
+
+    rerender(<TasksPanel {...props(subagent({ thinking: "more" }))} />);
+    expect(scroller.scrollTop).toBe(900);
+
+    scroller.scrollTop = 100;
+    fireEvent.scroll(scroller);
+    rerender(<TasksPanel {...props(subagent({ thinking: "even more" }))} />);
+
+    expect(scroller.scrollTop).toBe(100);
+  });
+
   it("says when a subagent's text was cut", () => {
     renderPanel(SUB, {}, subagent({ isTextCut: true }));
 

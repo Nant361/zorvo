@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAcpUpdate, applyReplayUpdate, partsOf, type AcpReducerContext } from "../lib/acp-events";
+import { applyAcpUpdate, applyPermissionRequest, applyReplayUpdate, partsOf, resolvePermissionCard, type AcpReducerContext } from "../lib/acp-events";
+import { buildForkHandoff } from "../lib/fork-handoff";
 import { MAX_SUBAGENT_TEXT, parentToolIdOf } from "../lib/acp-subagents";
 import type { ChatMessage } from "../types";
 import qwen from "./fixtures/acp-subagent-qwen.json";
@@ -93,5 +94,47 @@ describe("a subagent's updates", () => {
     expect(reply.tools!.find((t) => t.id === "g1")!.parentId).toBe(qwen.parentId);
     expect(parent.steps).toEqual([{ kind: "tools", toolIds: ["c1", "g1"] }]);
     expect(reply.tools!.find((t) => t.id === "c1")!.steps).toBeUndefined();
+  });
+
+  it("keeps filing a subagent's updates under its parent after a permission was answered", () => {
+    const c = ctx();
+    const options = [{ optionId: "allow", name: "Allow", kind: "allow_once" }];
+    let messages = qwen.updates.slice(0, 3).reduce<ChatMessage[]>((all, update) => applyAcpUpdate(all, update, c), []);
+    messages = applyPermissionRequest(messages, { requestId: 1, toolCall: { toolCallId: "c1", title: "Read" }, options }, c);
+    messages = resolvePermissionCard(messages, messages.at(-1)!.actionCard!.id, "allow");
+
+    // The subagent goes on: another tool call, its text, and more reasoning.
+    for (const update of [qwen.updates[4], qwen.updates[6], qwen.updates[1]]) messages = applyAcpUpdate(messages, update, c);
+
+    const withParent = messages.find((m) => m.tools?.some((t) => t.id === qwen.parentId))!;
+    const parent = withParent.tools!.find((t) => t.id === qwen.parentId)!;
+    expect(parent.steps).toEqual([
+      { kind: "tools", toolIds: ["c1", "c2"] },
+      { kind: "text", text: "notes.txt starts with alpha line." },
+    ]);
+    expect(withParent.tools!.find((t) => t.id === "c2")!.parentId).toBe(qwen.parentId);
+    expect(messages.every((m) => m.content === "")).toBe(true);
+    expect(messages).toHaveLength(1);
+  });
+
+  it("does not reach for a parent in an earlier turn", () => {
+    const c = ctx();
+    let messages = qwen.updates.slice(0, 1).reduce<ChatMessage[]>((all, update) => applyAcpUpdate(all, update, c), []);
+    messages = [...messages.map((m) => ({ ...m, isComplete: true })), { id: "u2", role: "user", content: "next", timestamp: 2 }];
+
+    messages = applyAcpUpdate(messages, qwen.updates[6], c);
+
+    expect(messages.at(-1)).toMatchObject({ role: "agent", content: "notes.txt starts with alpha line." });
+    expect(messages[0].tools![0].steps).toBeUndefined();
+  });
+
+  it("writes a subagent's text into a handoff", () => {
+    const messages = fold(qwen.updates);
+
+    const doc = buildForkHandoff(messages, messages.at(-1)!.id, { sourceSessionName: "s", agentName: "Qwen Code", cwd: "/w", createdAt: 0 });
+
+    expect(doc).toContain("notes.txt starts with alpha line.");
+    expect(doc).toContain("- Tool: Agent: read the notes");
+    expect(doc).toContain("  - Tool: ReadFile: notes.txt");
   });
 });

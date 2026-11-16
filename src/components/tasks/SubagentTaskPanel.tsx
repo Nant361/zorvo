@@ -5,6 +5,7 @@ import { ThinkingBlock } from "../chat/ReplyExtras";
 import { ToolCallList } from "../chat/ToolCallList";
 import { ToolDetails } from "../chat/ToolDetails";
 import { useNow } from "../../hooks/useNow";
+import { STICK_TO_BOTTOM_PX } from "../../hooks/useStickToBottom";
 import { formatElapsed } from "../../lib/background-tasks";
 import { formatRelativeTime } from "../../lib/relative-time";
 import type { SubagentTask } from "../../lib/task-view";
@@ -38,11 +39,17 @@ export function SubagentTaskPanel({ task, parts, tools, thinking, isTextCut, det
   const scrollRef = useRef<HTMLDivElement>(null);
   const toolsById = new Map(tools.map((tool) => [tool.id, tool]));
 
-  // While it works the newest step stays in sight, as the chat follows its last message.
+  // While it works the newest step stays in sight, until you scroll up to read an earlier one;
+  // back near the bottom it follows again, as the chat does.
+  const isFollowingRef = useRef(true);
+  const onScroll = () => {
+    const node = scrollRef.current;
+    if (node) isFollowingRef.current = node.scrollHeight - node.scrollTop - node.clientHeight <= STICK_TO_BOTTOM_PX;
+  };
   useEffect(() => {
     const node = scrollRef.current;
-    if (isLive && node) node.scrollTop = node.scrollHeight;
-  }, [isLive, parts, tools]);
+    if (isLive && node && isFollowingRef.current) node.scrollTop = node.scrollHeight;
+  });
 
   // Once it is done, its last text is what it handed back, so it is shown apart from the steps.
   const hasReport = !isLive && task.lastText !== undefined && parts[parts.length - 1]?.kind === "text";
@@ -52,7 +59,7 @@ export function SubagentTaskPanel({ task, parts, tools, thinking, isTextCut, det
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TaskHeader icon={<Users size={14} />} title={task.title} detail={detailOf(task, agentName, isLive)} />
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5 pb-3.5 select-text">
+      <div ref={scrollRef} onScroll={onScroll} data-testid="subagent-steps" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5 pb-3.5 select-text">
         {thinking && <ThinkingBlock text={thinking} isDone={!isLive} />}
         {steps.map((part, index) =>
           part.kind === "text" ? (

@@ -220,9 +220,31 @@ function addToolCall(messages: readonly ChatMessage[], update: Json, ctx: AcpRed
   };
   const parentId = parentToolIdOf(update._meta);
   const agentType = agentTypeOf(update._meta);
-  return withOpenReply(messages, ctx, (reply) =>
-    (parentId ? withChildTool(reply, parentId, tool, agentType) : undefined) ?? appendTool(reply, tool),
+  return (
+    filedInTurn(messages, parentId, (reply, id) => withChildTool(reply, id, tool, agentType)) ??
+    withOpenReply(messages, ctx, (reply) => appendTool(reply, tool))
   );
+}
+
+/**
+ * Files a subagent's update in the reply of this turn that holds its parent tool call, or returns
+ * undefined when none does. The open reply is not enough: an answered permission request closes
+ * its reply, and what the subagent does next would otherwise read as the agent's own.
+ */
+function filedInTurn(
+  messages: readonly ChatMessage[],
+  parentId: string | undefined,
+  file: (reply: ChatMessage, parentId: string) => ChatMessage | undefined,
+): ChatMessage[] | undefined {
+  if (parentId === undefined) return undefined;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    // The turn began with the user's message, and a finished reply belongs to an earlier one.
+    if (message.role !== 'agent' || message.isComplete) return undefined;
+    const filed = file(message, parentId);
+    if (filed) return messages.map((other, i) => (i === index ? filed : other));
+  }
+  return undefined;
 }
 
 /** Applies a tool_call_update: fields it carries replace the old ones (content as a whole), the rest stay. */
@@ -278,25 +300,17 @@ export function applyAcpUpdate(
       // Agents send stray empty chunks (Qwen Code does after a turn); they must not open a blank reply.
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      const parentId = parentToolIdOf(update._meta);
-      return withOpenReply(
-        messages,
-        ctx,
-        (reply) => (parentId ? withChildText(reply, parentId, chunk) : undefined) ?? appendText(reply, chunk),
+      return (
+        filedInTurn(messages, parentToolIdOf(update._meta), (reply, id) => withChildText(reply, id, chunk)) ??
+        withOpenReply(messages, ctx, (reply) => appendText(reply, chunk))
       );
     }
     case 'agent_thought_chunk': {
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      const parentId = parentToolIdOf(update._meta);
-      return withOpenReply(
-        messages,
-        ctx,
-        (reply) =>
-          (parentId ? withChildThought(reply, parentId, chunk) : undefined) ?? {
-            ...reply,
-            thinking: (reply.thinking ?? '') + chunk,
-          },
+      return (
+        filedInTurn(messages, parentToolIdOf(update._meta), (reply, id) => withChildThought(reply, id, chunk)) ??
+        withOpenReply(messages, ctx, (reply) => ({ ...reply, thinking: (reply.thinking ?? '') + chunk }))
       );
     }
     case 'tool_call':
