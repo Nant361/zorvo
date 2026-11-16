@@ -454,18 +454,13 @@ pub fn run() {
             });
 
             // Artifact folders of sessions that no longer exist. Skipped when the
-            // state cannot be read: nothing would be known, and all would go.
-            let known_sessions = app
-                .state::<store::AppStore>()
-                .load_state()
-                .ok()
-                .map(|state| {
-                    state
-                        .sessions
-                        .iter()
-                        .map(|session| session.id.clone())
-                        .collect::<std::collections::HashSet<String>>()
-                });
+            // state cannot be read or lists no session: all would look orphaned.
+            let known_sessions = artifacts::commands::sessions_to_keep(
+                app.state::<store::AppStore>()
+                    .load_state()
+                    .ok()
+                    .map(|state| state.sessions.iter().map(|s| s.id.clone()).collect()),
+            );
             if let Some(known_sessions) = known_sessions {
                 let artifacts =
                     Arc::clone(app.state::<Arc<artifacts::store::ArtifactStore>>().inner());

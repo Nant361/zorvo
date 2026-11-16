@@ -12,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 use super::protocol::page_url;
 use super::source::{read_source, temp_roots};
 use super::store::{is_artifact_id, is_session_id, ArtifactRecord, ArtifactStore, Shown, FAILED};
-use super::view::{self, checked_bounds, Bounds};
+use super::view::{self, checked_bounds, Bounds, ShownPage};
 use crate::files::{canonical_root, ensure_known_workspace};
 use crate::store::AppStore;
 
@@ -37,6 +37,16 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// The sessions whose pages the start-up sweep must keep, or `None` when it
+/// must not run: a state that could not be read, or one with no sessions. A
+/// corrupt `state.json` is set aside and read as an empty state, and an empty
+/// list would make every stored page an orphan.
+pub fn sessions_to_keep(loaded: Option<Vec<String>>) -> Option<std::collections::HashSet<String>> {
+    loaded
+        .filter(|sessions| !sessions.is_empty())
+        .map(|sessions| sessions.into_iter().collect())
 }
 
 /// Reads the agent's file under the path rules and keeps it as a new version.
@@ -155,7 +165,7 @@ pub fn artifact_delete(
     session_id: String,
     artifact_id: String,
 ) -> Result<(), String> {
-    view::close(&app);
+    view::close_for(&app, session_id.clone(), Some(artifact_id.clone()));
     artifacts.delete(&session_id, &artifact_id)?;
     changed(&app, &session_id);
     Ok(())
@@ -167,7 +177,7 @@ pub fn artifact_delete_session(
     artifacts: State<'_, Arc<ArtifactStore>>,
     session_id: String,
 ) -> Result<(), String> {
-    view::close(&app);
+    view::close_for(&app, session_id.clone(), None);
     artifacts.delete_session(&session_id)?;
     changed(&app, &session_id);
     Ok(())
@@ -243,6 +253,10 @@ pub fn artifact_view_show(
         (true, Some(bounds)) => view::show(
             &app,
             Arc::clone(&artifacts),
+            ShownPage {
+                session_id: session_id.clone(),
+                artifact_id: artifact_id.clone(),
+            },
             page_url(&session_id, &artifact_id, version),
             bounds,
         ),
@@ -399,6 +413,16 @@ mod tests {
         assert_eq!(listed[0].artifacts.len(), 1);
         assert!(listed[1].artifacts.is_empty());
         assert!(listed[2].artifacts.is_empty());
+    }
+
+    #[test]
+    fn the_sweep_needs_a_state_that_lists_sessions() {
+        let known = sessions_to_keep(Some(vec!["s-1".to_string(), "s-2".to_string()])).unwrap();
+        assert!(known.contains("s-1") && known.contains("s-2"));
+        // A state that could not be read, or one with no sessions (a corrupt file is replaced by an
+        // empty state), says nothing about which pages are orphans: nothing may be swept.
+        assert!(sessions_to_keep(None).is_none());
+        assert!(sessions_to_keep(Some(Vec::new())).is_none());
     }
 
     #[test]

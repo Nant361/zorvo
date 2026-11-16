@@ -19,9 +19,55 @@ use super::store::ArtifactStore;
 const MAIN_WINDOW: &str = "main";
 pub const COULD_NOT_SHOW: &str = "Zorvo could not show that page.";
 
+/// Which stored page the view shows, so deleting another session's pages leaves it alone.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShownPage {
+    pub session_id: String,
+    pub artifact_id: String,
+}
+
 thread_local! {
-    /// The one child webview. `wry::WebView` is not `Send`, so it stays here.
-    static VIEW: RefCell<Option<wry::WebView>> = const { RefCell::new(None) };
+    /// The one child webview and what it shows. `wry::WebView` is not `Send`, so it stays here.
+    static VIEW: RefCell<Option<(wry::WebView, ShownPage)>> = const { RefCell::new(None) };
+}
+
+/// Whether the view shows a page of `session_id` (and, when one is named, of that artifact).
+pub fn is_showing(shown: Option<&ShownPage>, session_id: &str, artifact_id: Option<&str>) -> bool {
+    shown.is_some_and(|page| {
+        page.session_id == session_id && artifact_id.is_none_or(|id| page.artifact_id == id)
+    })
+}
+
+/// Ends a view: its page's process first, then the view.
+///
+/// Dropping a `wry::WebView` only takes it out of the window: wry keeps the
+/// `WKWebView` alive on purpose, so its web content process would go on
+/// running, and a page that loops would hold a core until Zorvo quit (seen in
+/// the spike: 98% of a core, 16 s after the drop). WebKit has no public call
+/// that ends the process of a page that does not yield, so this asks for it by
+/// the name WebKit's own tools use, and only when the view answers to it; on a
+/// macOS where it does not, the page is merely hidden, as before.
+fn end(view: wry::WebView) {
+    use objc2::{msg_send, sel};
+    use wry::WebViewExtMacOS;
+    let webview = view.webview();
+    // SAFETY: both messages go to a live WKWebView on the main thread (every
+    // caller runs there), and the second is sent only when the first says the
+    // object answers it; it takes no arguments and returns nothing.
+    unsafe {
+        let responds: bool = msg_send![&*webview, respondsToSelector: sel!(_killWebContentProcess)];
+        if responds {
+            let _: () = msg_send![&*webview, _killWebContentProcess];
+        }
+    }
+    drop(view);
+}
+
+/// Takes the view out of its slot and ends it. Main thread only.
+fn end_current() {
+    if let Some((view, _)) = VIEW.with(|slot| slot.borrow_mut().take()) {
+        end(view);
+    }
 }
 
 /// A rectangle in the main window, in logical points from its top-left corner.
@@ -70,14 +116,15 @@ fn rect(bounds: Bounds) -> wry::Rect {
 pub fn show(
     app: &AppHandle,
     store: Arc<ArtifactStore>,
+    page: ShownPage,
     url: String,
     bounds: Bounds,
 ) -> Result<(), String> {
     let (sent, received) = std::sync::mpsc::channel();
     let handle = app.clone();
     app.run_on_main_thread(move || {
-        // Dropped first: a stuck page ends here, before its replacement exists.
-        VIEW.with(|view| view.borrow_mut().take());
+        // Ended first: a stuck page stops here, before its replacement exists.
+        end_current();
         let built = handle
             .get_webview_window(MAIN_WINDOW)
             .ok_or(())
@@ -98,7 +145,7 @@ pub fn show(
                     .build_as_child(&window)
                     .map_err(|_| ())
             });
-        let shown = built.map(|view| VIEW.with(|slot| *slot.borrow_mut() = Some(view)));
+        let shown = built.map(|view| VIEW.with(|slot| *slot.borrow_mut() = Some((view, page))));
         let _ = sent.send(shown);
     })
     .map_err(|_| COULD_NOT_SHOW.to_string())?;
@@ -112,7 +159,7 @@ pub fn show(
 fn with_view(app: &AppHandle, act: impl FnOnce(&wry::WebView) + Send + 'static) {
     let _ = app.run_on_main_thread(move || {
         VIEW.with(|view| {
-            if let Some(view) = view.borrow().as_ref() {
+            if let Some((view, _)) = view.borrow().as_ref() {
                 act(view);
             }
         });
@@ -134,8 +181,24 @@ pub fn set_hidden(app: &AppHandle, hidden: bool) {
 }
 
 pub fn close(app: &AppHandle) {
-    let _ = app.run_on_main_thread(|| {
-        VIEW.with(|view| view.borrow_mut().take());
+    let _ = app.run_on_main_thread(end_current);
+}
+
+/// Closes the view only when it shows a page of `session_id` (and of
+/// `artifact_id` when one is named): what is deleted must not stay on screen,
+/// and nothing else may be taken off it.
+pub fn close_for(app: &AppHandle, session_id: String, artifact_id: Option<String>) {
+    let _ = app.run_on_main_thread(move || {
+        let is_shown = VIEW.with(|slot| {
+            is_showing(
+                slot.borrow().as_ref().map(|(_, page)| page),
+                &session_id,
+                artifact_id.as_deref(),
+            )
+        });
+        if is_shown {
+            end_current();
+        }
     });
 }
 
@@ -197,6 +260,23 @@ mod tests {
             checked_bounds(bounds(0.0, -300.0, 100.0, 100.0), 1440.0, 900.0),
             None
         );
+    }
+
+    #[test]
+    fn a_view_is_closed_only_for_what_it_shows() {
+        let page = ShownPage {
+            session_id: "s-1".to_string(),
+            artifact_id: "a-0123456789abcdef".to_string(),
+        };
+
+        // Deleting the session it belongs to, or the artifact it shows, closes it.
+        assert!(is_showing(Some(&page), "s-1", None));
+        assert!(is_showing(Some(&page), "s-1", Some("a-0123456789abcdef")));
+        // Deleting another session, or another artifact of the same session, does not.
+        assert!(!is_showing(Some(&page), "s-2", None));
+        assert!(!is_showing(Some(&page), "s-1", Some("a-ffffffffffffffff")));
+        assert!(!is_showing(Some(&page), "s-2", Some("a-0123456789abcdef")));
+        assert!(!is_showing(None, "s-1", None));
     }
 
     #[test]
