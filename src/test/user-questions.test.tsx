@@ -2,7 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ActionCard } from "../components/ActionCard";
 import { applyPermissionRequest } from "../lib/acp-events";
-import { EMPTY_DRAFT, MAX_OTHER_CHARS, answerOf, answersOf, parseUserQuestions, usableQuestions } from "../lib/user-questions";
+import {
+  EMPTY_DRAFT,
+  MAX_OTHER_CHARS,
+  answerOf,
+  answersOf,
+  parseUserQuestions,
+  shownLabel,
+  submitHint,
+  usableQuestions,
+} from "../lib/user-questions";
 import type { ActionCard as ActionCardType, UserQuestion } from "../types";
 
 const COLOURS = {
@@ -206,35 +215,105 @@ describe("a permission request that asks questions", () => {
   });
 });
 
+describe("shownLabel", () => {
+  it("takes the agent's (Recommended) mark off the label and says it was there", () => {
+    expect(shownLabel("Local dir /data (Recommended)")).toEqual({ text: "Local dir /data", isRecommended: true });
+    expect(shownLabel("Vim (recommended)")).toEqual({ text: "Vim", isRecommended: true });
+  });
+
+  it("leaves any other label as it is", () => {
+    expect(shownLabel("GCS bucket")).toEqual({ text: "GCS bucket", isRecommended: false });
+    expect(shownLabel("(Recommended) first")).toEqual({ text: "(Recommended) first", isRecommended: false });
+    expect(shownLabel("(Recommended)")).toEqual({ text: "(Recommended)", isRecommended: false });
+  });
+});
+
+describe("submitHint", () => {
+  const [colours, editor] = parseUserQuestions(qwenToolCall()) as UserQuestion[];
+  const unnamed = { ...editor, header: "" };
+
+  it("names the questions still open, by header or by number", () => {
+    expect(submitHint([colours, editor], [])).toBe("Answer Colours and Editor to submit.");
+    expect(submitHint([colours, editor], [{ ...EMPTY_DRAFT, picked: ["Blue"] }])).toBe("Answer Editor to submit.");
+    expect(submitHint([colours, unnamed, editor], [])).toBe("Answer Colours, Question 2 and Editor to submit.");
+  });
+
+  it("speaks of the question when there is only one", () => {
+    expect(submitHint([editor], [])).toBe("Answer the question to submit.");
+  });
+
+  it("has nothing to say once every question has an answer", () => {
+    expect(submitHint([editor], [{ ...EMPTY_DRAFT, picked: ["Vim"] }])).toBeUndefined();
+  });
+});
+
 describe("ActionCard with questions", () => {
   const colours = () => screen.getByRole("group", { name: /Which colours/ });
   const editor = () => screen.getByRole("group", { name: /Which editor/ });
   const submit = () => screen.getByRole("button", { name: "Submit" }) as HTMLButtonElement;
+  const next = () => screen.getByRole("button", { name: "Next" });
+  const steps = () => screen.getByRole("list", { name: "Questions" });
+  const step = (name: string | RegExp) => within(steps()).getByRole("button", { name });
 
-  it("shows each question with its header, options and descriptions", () => {
-    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+  it("shows one question at a time, under a step for each question", () => {
+    render(<ActionCard card={questionCard()} agentName="Qwen Code" onChoose={() => {}} />);
 
-    expect(within(colours()).getByText("Colours")).toBeDefined();
-    expect(within(colours()).getAllByRole("checkbox", { name: /Blue|Green|Other/ })).toHaveLength(3);
+    expect(screen.getByRole("heading", { name: "Qwen Code has 2 questions for you" })).toBeDefined();
+    expect(screen.queryByText("Ask user 2 questions")).toBeNull();
+    expect(step("Colours").getAttribute("aria-current")).toBe("step");
+    expect(step("Editor").getAttribute("aria-current")).toBeNull();
+    expect(within(colours()).getAllByRole("checkbox")).toHaveLength(3);
     expect(within(colours()).getByText("Like the sea")).toBeDefined();
     expect(within(colours()).getByText("Pick all that apply.")).toBeDefined();
-    expect(within(editor()).getAllByRole("radio")).toHaveLength(3);
-    expect(within(editor()).getByRole("textbox", { name: "Other answer for Editor" })).toBeDefined();
+    expect(screen.queryByRole("group", { name: /Which editor/ })).toBeNull();
+    expect(screen.getByText("Question 1 of 2")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit" })).toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
   });
 
-  it("holds Submit back until every question has an answer", () => {
+  it("moves between the questions with Next, Back and the steps, and puts focus in the question shown", () => {
     render(<ActionCard card={questionCard()} onChoose={() => {}} />);
-    expect(submit().disabled).toBe(true);
-    expect(screen.getByText("Answer every question to submit.")).toBeDefined();
-    expect(submit().getAttribute("aria-describedby")).not.toBeNull();
 
-    fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+    fireEvent.click(next());
+    expect(within(editor()).getAllByRole("radio")).toHaveLength(3);
+    expect(screen.queryByRole("group", { name: /Which colours/ })).toBeNull();
+    expect(step("Editor").getAttribute("aria-current")).toBe("step");
+    expect(document.activeElement).toBe(within(editor()).getByRole("radio", { name: "Vim" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(colours()).toBeDefined();
+    expect(document.activeElement).toBe(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+
+    fireEvent.click(step("Editor"));
+    expect(editor()).toBeDefined();
+  });
+
+  it("holds Submit back on the last step and names the questions still open", () => {
+    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    fireEvent.click(next());
+
     expect(submit().disabled).toBe(true);
+    const hint = screen.getByText("Answer Colours and Editor to submit.");
+    expect(submit().getAttribute("aria-describedby")).toBe(hint.id);
 
     fireEvent.click(within(editor()).getByRole("radio", { name: /Zed/ }));
+    expect(screen.getByText("Answer Colours to submit.")).toBeDefined();
+    expect(step("Editor (answered)")).toBeDefined();
+    expect(submit().disabled).toBe(true);
+  });
+
+  it("offers Submit on any step once every question has an answer", () => {
+    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    fireEvent.click(next());
+    fireEvent.click(within(editor()).getByRole("radio", { name: /Zed/ }));
+    fireEvent.click(step(/Colours/));
+
+    fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+
     expect(submit().disabled).toBe(false);
-    expect(screen.queryByText("Answer every question to submit.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    expect(screen.getByText("Question 1 of 2")).toBeDefined();
   });
 
   it("sends the answers with Submit", () => {
@@ -243,6 +322,7 @@ describe("ActionCard with questions", () => {
 
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Green/ }));
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+    fireEvent.click(next());
     fireEvent.click(within(editor()).getByRole("radio", { name: /Vim/ }));
     fireEvent.click(within(editor()).getByRole("radio", { name: /Zed/ }));
     fireEvent.click(submit());
@@ -251,34 +331,72 @@ describe("ActionCard with questions", () => {
     expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Blue, Green", "1": "Zed" });
   });
 
-  it("takes a typed answer as Other, which replaces a picked option of a single-choice question", () => {
+  it("opens a box for Other only once Other is picked, and puts focus in it", () => {
     const onChoose = vi.fn();
     render(<ActionCard card={questionCard()} onChoose={onChoose} />);
+    expect(within(colours()).queryByRole("textbox")).toBeNull();
 
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
-    fireEvent.change(within(colours()).getByRole("textbox"), { target: { value: "Red" } });
+    fireEvent.click(within(colours()).getByRole("checkbox", { name: "Other" }));
+    const box = within(colours()).getByRole("textbox", { name: "Other answer for Colours" });
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute("maxlength")).toBe(String(MAX_OTHER_CHARS));
+    fireEvent.change(box, { target: { value: "Red" } });
+
+    fireEvent.click(next());
     fireEvent.click(within(editor()).getByRole("radio", { name: /Vim/ }));
-    fireEvent.change(within(editor()).getByRole("textbox"), { target: { value: "Helix" } });
+    fireEvent.click(within(editor()).getByRole("radio", { name: "Other" }));
+    fireEvent.change(within(editor()).getByRole("textbox", { name: "Other answer for Editor" }), { target: { value: "Helix" } });
     expect((within(editor()).getByRole("radio", { name: /Vim/ }) as HTMLInputElement).checked).toBe(false);
-    expect((within(editor()).getByRole("radio", { name: "Other" }) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(submit());
 
     expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Blue, Red", "1": "Helix" });
+  });
+
+  it("keeps what was typed for Other when you leave the question and come back", () => {
+    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    fireEvent.click(within(colours()).getByRole("checkbox", { name: "Other" }));
+    fireEvent.change(within(colours()).getByRole("textbox"), { target: { value: "Red" } });
+
+    fireEvent.click(next());
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect((within(colours()).getByRole("textbox") as HTMLInputElement).value).toBe("Red");
   });
 
   it("needs words for Other: an empty one is no answer", () => {
     render(<ActionCard card={questionCard()} onChoose={() => {}} />);
 
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+    fireEvent.click(next());
     fireEvent.click(within(editor()).getByRole("radio", { name: "Other" }));
 
     expect(submit().disabled).toBe(true);
+    expect(screen.getByText("Answer Editor to submit.")).toBeDefined();
   });
 
-  it("limits a typed answer", () => {
-    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+  it("shows the agent's recommendation as a badge, and still sends the label as the agent wrote it", () => {
+    const onChoose = vi.fn();
+    const questions = parseUserQuestions(qwenToolCall([{ ...EDITOR, options: [{ label: "Vim (Recommended)" }, { label: "Zed" }] }]));
+    render(<ActionCard card={questionCard({ questions })} onChoose={onChoose} />);
 
-    expect(within(editor()).getByRole("textbox").getAttribute("maxlength")).toBe(String(MAX_OTHER_CHARS));
+    expect(within(editor()).getByText("Recommended")).toBeDefined();
+    expect(within(editor()).queryByText(/\(Recommended\)/)).toBeNull();
+    fireEvent.click(within(editor()).getByRole("radio", { name: /Vim/ }));
+    fireEvent.click(submit());
+
+    expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Vim (Recommended)" });
+  });
+
+  it("asks a single question without steps, with its header above it", () => {
+    render(<ActionCard card={questionCard({ questions: parseUserQuestions(qwenToolCall([EDITOR])) })} agentName="Qwen Code" onChoose={() => {}} />);
+
+    expect(screen.getByRole("heading", { name: "Qwen Code has a question for you" })).toBeDefined();
+    expect(screen.queryByRole("list", { name: "Questions" })).toBeNull();
+    expect(within(editor()).getByText("Editor")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    expect(submit().disabled).toBe(true);
+    expect(screen.getByText("Answer the question to submit.")).toBeDefined();
   });
 
   it("declines with Cancel, without answers, even when nothing is answered", () => {
@@ -291,31 +409,38 @@ describe("ActionCard with questions", () => {
   });
 
   it("keeps what was picked when the answer did not go through and the card is asked again", () => {
-    const { rerender } = render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    const { rerender } = render(<ActionCard card={questionCard()} agentName="Qwen Code" onChoose={() => {}} />);
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
+    fireEvent.click(next());
     fireEvent.click(within(editor()).getByRole("radio", { name: /Zed/ }));
 
-    rerender(<ActionCard card={questionCard({ status: "approved", chosenOptionId: "proceed_once" })} onChoose={() => {}} />);
+    rerender(<ActionCard card={questionCard({ status: "approved", chosenOptionId: "proceed_once" })} agentName="Qwen Code" onChoose={() => {}} />);
     expect(screen.queryByRole("group")).toBeNull();
-    expect(screen.getByText("You chose: Submit")).toBeDefined();
+    expect(screen.getByText("You answered Qwen Code's questions.")).toBeDefined();
 
-    rerender(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    rerender(<ActionCard card={questionCard()} agentName="Qwen Code" onChoose={() => {}} />);
     expect((within(colours()).getByRole("checkbox", { name: /Blue/ }) as HTMLInputElement).checked).toBe(true);
     expect(submit().disabled).toBe(false);
   });
 
-  it("disables the form while the card is disabled", () => {
+  it("disables the answers while the card is disabled, and still lets you read every question", () => {
     render(<ActionCard card={questionCard()} onChoose={() => {}} disabled />);
 
     expect((within(colours()).getByRole("checkbox", { name: /Blue/ }) as HTMLInputElement).disabled).toBe(true);
-    expect((within(editor()).getByRole("textbox") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(next());
+    expect((within(editor()).getByRole("radio", { name: /Vim/ }) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it("shows an answered card as a plain line, with none of the answers", () => {
-    render(<ActionCard card={questionCard({ status: "rejected", chosenOptionId: "cancel" })} />);
+  it("says how a settled card ended, with none of the answers", () => {
+    const { rerender } = render(<ActionCard card={questionCard({ status: "rejected", chosenOptionId: "cancel" })} agentName="Qwen Code" />);
 
     expect(screen.queryByRole("group")).toBeNull();
-    expect(screen.getByText("You chose: Cancel")).toBeDefined();
+    expect(screen.queryByText("Waiting for you")).toBeNull();
+    expect(screen.getByText("You cancelled the questions.")).toBeDefined();
+
+    rerender(<ActionCard card={questionCard({ status: "rejected" })} agentName="Qwen Code" />);
+    expect(screen.getByText("This request was not answered.")).toBeDefined();
   });
 
   it("is a plain card when it has no allowing option to send the answers with", () => {

@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **Qwen Code's questions read one at a time.** The card is a calm form with the agent's logo instead of a warning, shows one question per step with a step for each, and has Back and Next. Submit names the questions still unanswered, each option is a row you can click anywhere on, the agent's "(Recommended)" pick shows as a badge, and Other opens its text box only once you pick it.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added

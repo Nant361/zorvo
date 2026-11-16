@@ -129,6 +129,46 @@ export function answerOf(question: UserQuestion, draft: QuestionDraft): string |
   return parts.length === 0 ? undefined : parts.join(', ');
 }
 
+/** An option's label as shown: the agent's "(Recommended)" at its end becomes a badge. */
+export interface ShownLabel {
+  text: string;
+  isRecommended: boolean;
+}
+
+/** Qwen Code marks its own pick by ending the label so, as Claude Code's question tool does. */
+const RECOMMENDED_MARK = /\s*\(recommended\)$/i;
+
+/**
+ * The label without the agent's "(Recommended)" mark, and whether it had one. Only what is shown
+ * changes: the label is the answer, so the agent still gets it back as it wrote it.
+ */
+export function shownLabel(label: string): ShownLabel {
+  const text = label.replace(RECOMMENDED_MARK, '');
+  return text === label || text === '' ? { text: label, isRecommended: false } : { text, isRecommended: true };
+}
+
+/** What names a question in its step and in the hint: its header, else its number. */
+export function questionName(question: UserQuestion, index: number): string {
+  return question.header || `Question ${index + 1}`;
+}
+
+/** "A", "A and B", "A, B and C". */
+function listOf(names: readonly string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Why Submit is held back: the questions still without an answer, named. Undefined once
+ * every question has one.
+ */
+export function submitHint(questions: readonly UserQuestion[], drafts: readonly QuestionDraft[]): string | undefined {
+  const open = questions.flatMap((question, index) =>
+    answerOf(question, drafts[index] ?? EMPTY_DRAFT) === undefined ? [questionName(question, index)] : [],
+  );
+  if (open.length === 0) return undefined;
+  return questions.length === 1 ? 'Answer the question to submit.' : `Answer ${listOf(open)} to submit.`;
+}
+
 /**
  * The `answers` of a response: question number to text. Undefined until every
  * question has an answer.
