@@ -27,7 +27,7 @@ const FRAME = "flex w-full items-center gap-2.5 rounded-lg border bg-surface-2 p
 /** A subagent as one row in the reply: what it is for, how far it is, and a way to follow it. */
 export function TaskRow({ task, secondLine, isOpen, onOpen }: TaskRowProps) {
   const isLive = task.status === "Working" || task.status === "Needs you";
-  const now = useNow(isLive && task.startedAt !== undefined);
+  const now = useNow(1000, isLive && task.startedAt !== undefined);
   const elapsed = isLive && task.startedAt !== undefined ? formatElapsed(now - task.startedAt) : undefined;
   const canOpen = Boolean(onOpen) && task.hasSteps;
 
