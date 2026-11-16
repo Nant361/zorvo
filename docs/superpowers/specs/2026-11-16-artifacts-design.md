@@ -194,8 +194,11 @@ day old.
 ## 4. Screens
 
 Copy is sentence case. No keyboard shortcuts. Look follows the v2 surfaces and
-`components/ui/` primitives; the canvas has no artboards for these screens yet,
-and artboards added before implementation win on look and wording.
+`components/ui/` primitives. The canvas "Zorvo redesign v2" has four artboards
+for these screens (section 10: `ArtifactsMain`, `ArtifactsGallery`,
+`ArtifactsInspector`, `ArtifactsStates`), with local copies in
+`2026-11-16-artifacts-artboards/`. They decide look and wording; this spec
+decides behaviour. The page inside the frame is a stand-in drawn as markup.
 
 ### Artifacts tab
 
