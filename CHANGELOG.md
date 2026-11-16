@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **Agents that come as npm packages are downloaded when you install or update them.** Zorvo now installs the package into its own folder and starts the agent from there, instead of letting `npx` fetch it when the first session starts. Starting a session no longer waits on a download or asks the npm registry anything, and two sessions starting at once can no longer leave a broken download behind. After this update Zorvo installs the agents you use once, in the background; until an agent's row stops saying Installing, it cannot start a session.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added

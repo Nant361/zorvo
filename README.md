@@ -198,9 +198,11 @@ sooner, and never one the registry has withdrawn.
 ## Requirements
 
 - **A Mac** with Apple Silicon or Intel.
-- **Node.js 22 or newer** for the agents that run with `npx` (Claude Code,
-  Codex, Qwen Code and many others). If yours is missing or older, Zorvo
-  installs its own when you install such an agent.
+- **Node.js 22 or newer** for the agents that come as npm packages (Claude
+  Code, Codex, Qwen Code and many others). If yours is missing or older, Zorvo
+  installs its own when you install such an agent. Zorvo installs the agent's
+  package into its own folder with `npm` and starts it from there, so starting
+  a session downloads nothing.
 - **An account with at least one agent.** Each agent signs in with its own
   tools; Zorvo never asks for your API keys.
 
@@ -377,14 +379,18 @@ before it edits files or runs commands. Pick another mode in the composer.
     today `release-assets.githubusercontent.com`. The check sends no
     information about you or your work.
 
-  No agent, runtime or Zorvo update downloads until you click **Install** or
-  **Update & restart**. Agent and runtime downloads are checked against a
-  SHA-256 hash pinned in advance. A Zorvo update must come from this
+  No agent, runtime or Zorvo update downloads until you click **Install**,
+  **Update** or **Update & restart**, with one exception: when Zorvo opens, an
+  agent you already use whose npm package is not in Zorvo's folder yet is
+  installed without a click, once (this is how agents from before this version
+  move over). Runtime and binary agent downloads are checked against a SHA-256
+  hash pinned in advance; an agent that comes as an npm package is installed by
+  `npm` at the exact version the registry pins, with npm's own integrity check. A Zorvo update must come from this
   repository's releases and is installed only if its signature matches the key
   built into Zorvo.
 
-  Your agents, and the `npm`, `npx` and `uvx` they run with, make their own
-  requests to their own services, and so does your `gh`, which Zorvo runs to
+  Your agents, the `npm` that installs them and the `uvx` some run with, make
+  their own requests to their own services, and so does your `gh`, which Zorvo runs to
   read your pull requests and your GitHub sign-in.
 - **Your data stays on your Mac.** Sessions and transcripts are stored in
   `~/Library/Application Support/xyz.zorvo.desktop/`, and session worktrees in
