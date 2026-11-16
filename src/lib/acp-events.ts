@@ -8,6 +8,7 @@ import type {
   ToolExecution,
 } from '../types';
 import { fileNameOf } from './attachments';
+import { agentTypeOf, parentToolIdOf, withChildText, withChildThought, withChildTool } from './acp-subagents';
 import { countChanges, diffDetail } from './diff-rows';
 import { parseUserQuestions } from './user-questions';
 
@@ -217,7 +218,11 @@ function addToolCall(messages: readonly ChatMessage[], update: Json, ctx: AcpRed
     locations: toLocations(update.locations),
     command: commandOf(update.rawInput),
   };
-  return withOpenReply(messages, ctx, (reply) => appendTool(reply, tool));
+  const parentId = parentToolIdOf(update._meta);
+  const agentType = agentTypeOf(update._meta);
+  return withOpenReply(messages, ctx, (reply) =>
+    (parentId ? withChildTool(reply, parentId, tool, agentType) : undefined) ?? appendTool(reply, tool),
+  );
 }
 
 /** Applies a tool_call_update: fields it carries replace the old ones (content as a whole), the rest stay. */
@@ -273,12 +278,26 @@ export function applyAcpUpdate(
       // Agents send stray empty chunks (Qwen Code does after a turn); they must not open a blank reply.
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      return withOpenReply(messages, ctx, (reply) => appendText(reply, chunk));
+      const parentId = parentToolIdOf(update._meta);
+      return withOpenReply(
+        messages,
+        ctx,
+        (reply) => (parentId ? withChildText(reply, parentId, chunk) : undefined) ?? appendText(reply, chunk),
+      );
     }
     case 'agent_thought_chunk': {
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      return withOpenReply(messages, ctx, (reply) => ({ ...reply, thinking: (reply.thinking ?? '') + chunk }));
+      const parentId = parentToolIdOf(update._meta);
+      return withOpenReply(
+        messages,
+        ctx,
+        (reply) =>
+          (parentId ? withChildThought(reply, parentId, chunk) : undefined) ?? {
+            ...reply,
+            thinking: (reply.thinking ?? '') + chunk,
+          },
+      );
     }
     case 'tool_call':
       return addToolCall(messages, update, ctx);

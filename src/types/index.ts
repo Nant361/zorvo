@@ -333,6 +333,16 @@ export interface ToolExecution {
   locations?: string[];
   /** The command it runs, when the agent gives one in its input. */
   command?: string;
+  /** The tool call that started the subagent this tool belongs to, when the agent says so. */
+  parentId?: string;
+  /** On a subagent's own tool call: its type as the agent names it ("Explore"), when reported. */
+  agentType?: string;
+  /** On a subagent's own tool call: what the subagent did, in the order it arrived. */
+  steps?: ChatMessagePart[];
+  /** On a subagent's own tool call: the subagent's visible reasoning. */
+  thinking?: string;
+  /** The subagent wrote more text than is kept. */
+  isTextCut?: boolean;
 }
 
 export type DiffRowKind = 'added' | 'removed' | 'context' | 'skipped';
