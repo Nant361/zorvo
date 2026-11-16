@@ -62,6 +62,7 @@ export function TasksPanel({ tabs, sessionId, messages, tasks, agentName, isBusy
           {...stepsOf(subagent.tool, subagent.message)}
           thinking={subagent.tool.thinking}
           isTextCut={subagent.tool.isTextCut}
+          details={subagent.tool.details}
           agentName={agentName}
         />
       )}

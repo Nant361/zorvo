@@ -80,6 +80,12 @@ describe("the Tasks tab", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("shows what the subagent's own tool call returned", () => {
+    renderPanel(SUB, { isBusy: false }, subagent({ status: "completed", details: [{ kind: "text", text: "Final result from the tool." }] }));
+
+    expect(screen.getByText("Final result from the tool.")).toBeInTheDocument();
+  });
+
   it("says when a subagent's text was cut", () => {
     renderPanel(SUB, {}, subagent({ isTextCut: true }));
 

@@ -52,4 +52,25 @@ describe("a subagent's steps in a saved transcript", () => {
 
     expect(normalizeTranscript([saved])).toEqual([saved]);
   });
+
+  it("shows both tools of a pair that name each other as parent", () => {
+    const saved = reply({
+      tools: [
+        tool("a", { parentId: "b", steps: [{ kind: "tools", toolIds: ["b"] }] }),
+        tool("b", { parentId: "a", steps: [{ kind: "tools", toolIds: ["a"] }] }),
+      ],
+      parts: [{ kind: "text", text: "hi" }],
+    });
+
+    const [message] = normalizeTranscript([saved]);
+
+    expect(message.tools).toEqual([tool("a"), tool("b")]);
+    expect(message.parts!.at(-1)).toEqual({ kind: "tools", toolIds: ["a", "b"] });
+  });
+
+  it("loads a transcript whose tools hold something that is not a tool", () => {
+    const saved = reply({ tools: [null, 7, tool("p", { steps: [] })], parts: [{ kind: "tools", toolIds: ["p"] }] });
+
+    expect(() => normalizeTranscript([saved])).not.toThrow();
+  });
 });

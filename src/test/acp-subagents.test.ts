@@ -83,4 +83,15 @@ describe("a subagent's updates", () => {
       expect(parentToolIdOf(meta)).toBeUndefined();
     }
   });
+
+  it("files a subagent's own subagent under the nearest ancestor the reply lists", () => {
+    const nested = { ...qwen.updates[2], toolCallId: "g1", _meta: { ...qwen.updates[2]._meta, parentToolCallId: "c1" } };
+
+    const reply = fold([...qwen.updates.slice(0, 3), nested]).at(-1)!;
+
+    const parent = reply.tools!.find((t) => t.id === qwen.parentId)!;
+    expect(reply.tools!.find((t) => t.id === "g1")!.parentId).toBe(qwen.parentId);
+    expect(parent.steps).toEqual([{ kind: "tools", toolIds: ["c1", "g1"] }]);
+    expect(reply.tools!.find((t) => t.id === "c1")!.steps).toBeUndefined();
+  });
 });

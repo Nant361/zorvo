@@ -121,3 +121,7 @@ Where the code differs from the text above:
 - A shell tab with no known tool call says "{Agent} reported no output for this command."
 - Closing the last task tab leaves the inspector closed.
 - A finished subagent's steps stay listed, not folded into a summary line; its last text is shown apart under "What it told {Agent}".
+- A subagent of an agent that marks nothing stays a plain tool in the reply, with no row of its own: a row would have hidden what the tool call returned.
+- A subagent's own subagent is filed under the ancestor the reply lists, never under another child.
+- In a popout a subagent's steps show under its row, since no tab can open there.
+- The tab also shows what the subagent's own tool call returned, under "Result".

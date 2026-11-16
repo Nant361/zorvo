@@ -78,7 +78,7 @@ describe("a subagent in a reply", () => {
   });
 
   it("counts only the reply's own tools in the summary", () => {
-    renderMessage();
+    renderMessage({ onOpenTask: vi.fn() });
 
     expect(screen.getByRole("button", { name: "Read a file" })).toBeInTheDocument();
   });
@@ -93,7 +93,7 @@ describe("a subagent in a reply", () => {
 describe("a reply saved without parts", () => {
   it("leaves a subagent's own tools out of the reply's list", () => {
     const { parts: _parts, ...withoutParts } = reply;
-    renderMessage({ message: withoutParts });
+    renderMessage({ message: withoutParts, onOpenTask: vi.fn() });
 
     fireEvent.click(screen.getByRole("button", { name: "Read a file" }));
 
@@ -114,5 +114,41 @@ describe("ShellTaskRow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open pnpm tauri dev. Running." }));
 
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a subagent that cannot be opened", () => {
+  const withSteps: ChatMessage = {
+    ...reply,
+    tools: [
+      tool("p", { name: "Explore the tests", steps: [{ kind: "tools", toolIds: ["c1"] }, { kind: "text", text: "Child says hi." }] }),
+      tool("c1", { name: "Read child.txt", kind: "read", locations: ["child.txt"], parentId: "p" }),
+    ],
+    parts: [{ kind: "tools", toolIds: ["p"] }],
+  };
+
+  it("keeps an unmarked subagent's own output in the reply's tools", () => {
+    const bare: ChatMessage = {
+      ...reply,
+      tools: [tool("t", { name: "Task: summarize", providerToolName: "Task", details: [{ kind: "text", text: "The summary." }] })],
+      parts: [{ kind: "tools", toolIds: ["t"] }],
+    };
+    renderMessage({ message: bare, onOpenTask: vi.fn() });
+
+    expect(screen.queryByText(/doesn't report this subagent's steps/)).toBeNull();
+    expect(screen.getAllByRole("button", { expanded: false }).length).toBeGreaterThan(0);
+  });
+
+  it("shows a subagent's steps under its row where no tab can open", () => {
+    renderMessage({ message: withSteps });
+
+    expect(screen.getByText("Child says hi.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read a file" })).toBeInTheDocument();
+  });
+
+  it("keeps a subagent's steps out of the reply where its tab can open", () => {
+    renderMessage({ message: withSteps, onOpenTask: vi.fn() });
+
+    expect(screen.queryByText("Child says hi.")).toBeNull();
   });
 });

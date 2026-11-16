@@ -3,11 +3,12 @@ import { Users } from "lucide-react";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 import { ThinkingBlock } from "../chat/ReplyExtras";
 import { ToolCallList } from "../chat/ToolCallList";
+import { ToolDetails } from "../chat/ToolDetails";
 import { useNow } from "../../hooks/useNow";
 import { formatElapsed } from "../../lib/background-tasks";
 import { formatRelativeTime } from "../../lib/relative-time";
 import type { SubagentTask } from "../../lib/task-view";
-import type { ChatMessagePart, ToolExecution } from "../../types";
+import type { ChatMessagePart, ToolDetail, ToolExecution } from "../../types";
 import { TaskHeader, TaskNote } from "./TaskHeader";
 
 export interface SubagentTaskPanelProps {
@@ -16,6 +17,8 @@ export interface SubagentTaskPanelProps {
   tools: readonly ToolExecution[];
   thinking?: string;
   isTextCut?: boolean;
+  /** What the subagent's own tool call returned to the agent, when the agent sends it. */
+  details?: readonly ToolDetail[];
   agentName: string;
 }
 
@@ -29,7 +32,7 @@ function detailOf(task: SubagentTask, agentName: string, isLive: boolean): strin
 }
 
 /** What a subagent did, as its agent reported it: its steps in order, followed live while it works. */
-export function SubagentTaskPanel({ task, parts, tools, thinking, isTextCut, agentName }: SubagentTaskPanelProps) {
+export function SubagentTaskPanel({ task, parts, tools, thinking, isTextCut, details, agentName }: SubagentTaskPanelProps) {
   const isLive = task.status === "Working" || task.status === "Needs you";
   const now = useNow(1000, isLive && task.startedAt !== undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -73,6 +76,12 @@ export function SubagentTaskPanel({ task, parts, tools, thinking, isTextCut, age
             <div className="rounded-lg border border-border bg-surface-2 px-3.5 py-3 text-ui text-fg-secondary">
               <MarkdownRenderer content={task.lastText ?? ""} />
             </div>
+          </section>
+        )}
+        {details && details.length > 0 && (
+          <section aria-label="Result" className="flex flex-col gap-2">
+            <p className="text-caption font-medium text-fg-muted">Result</p>
+            <ToolDetails details={[...details]} />
           </section>
         )}
         {!isLive && (

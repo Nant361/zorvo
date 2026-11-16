@@ -716,8 +716,6 @@ export default function App() {
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
   /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
   const openTask = (sessionId: string, tab: TaskTab) => {
-    // A compare run's panel and a removed agent's panel have no inspector for the session.
-    if (isComposerHidden) return;
     taskTabs.open(sessionId, tab);
     inspector.show("tasks");
   };

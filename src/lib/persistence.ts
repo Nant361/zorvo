@@ -441,10 +441,14 @@ function withValidSubagentFields(message: ChatMessage): ChatMessage {
   const marked = ['parentId', 'steps', 'agentType', 'thinking', 'isTextCut'];
   if (!raws.some((tool) => isObject(tool) && marked.some((key) => key in tool))) return message;
 
-  const byId = new Map(raws.filter(isObject).map((tool) => [String(tool.id), tool]));
-  const parents = new Set(raws.filter((tool) => isObject(tool) && hasValidSteps(tool, byId)).map((tool) => tool.id));
+  const objects = raws.filter(isObject);
+  const byId = new Map(objects.map((tool) => [String(tool.id), tool]));
+  // A parent is never a child itself: one level, so two tools cannot hide each other.
+  const parents = new Set(
+    objects.filter((tool) => tool.parentId === undefined && hasValidSteps(tool, byId)).map((tool) => tool.id),
+  );
   const listed = new Set(
-    raws.flatMap((tool) =>
+    objects.flatMap((tool) =>
       parents.has(tool.id) ? (tool.steps as ChatMessagePart[]).flatMap((step) => (step.kind === 'tools' ? step.toolIds : [])) : [],
     ),
   );
@@ -470,10 +474,18 @@ function withValidSubagentFields(message: ChatMessage): ChatMessage {
   return { ...message, tools, ...(parts ? { parts } : {}) };
 }
 
+/** A message's tools without anything that is not a tool with an id: the rest of the app reads their fields. */
+function withOnlyTools(message: ChatMessage): ChatMessage {
+  if (!Array.isArray(message.tools)) return message;
+  const tools = message.tools.filter((tool) => isObject(tool) && typeof tool.id === 'string');
+  return tools.length === message.tools.length ? message : { ...message, tools };
+}
+
 export function normalizeTranscript(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
-  return raw.flatMap((raw): ChatMessage[] => {
-    if (!isMessage(raw)) return [];
+  return raw.flatMap((entry): ChatMessage[] => {
+    if (!isMessage(entry)) return [];
+    const raw = withOnlyTools(entry);
     const message = withValidSubagentFields(
       withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw)))),
     );

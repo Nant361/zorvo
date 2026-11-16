@@ -42,8 +42,30 @@ function withParent(
   added: readonly ToolExecution[] = [],
 ): ChatMessage | undefined {
   const tools = reply.tools ?? [];
-  if (!tools.some((tool) => tool.id === parentId)) return undefined;
-  return { ...reply, tools: [...tools.map((tool) => (tool.id === parentId ? change(tool) : tool)), ...added] };
+  const rootId = rootOf(tools, parentId);
+  if (rootId === undefined) return undefined;
+  return {
+    ...reply,
+    tools: [
+      ...tools.map((tool) => (tool.id === rootId ? change(tool) : tool)),
+      ...added.map((tool) => ({ ...tool, parentId: rootId })),
+    ],
+  };
+}
+
+/**
+ * The tool that lists `parentId`'s work: itself, or for a subagent's own subagent the ancestor the
+ * reply lists. One level is kept, so a tool is never hidden under a parent that is hidden too.
+ */
+function rootOf(tools: readonly ToolExecution[], parentId: string): string | undefined {
+  const seen = new Set<string>();
+  let current = tools.find((tool) => tool.id === parentId);
+  while (current?.parentId !== undefined && !seen.has(current.id)) {
+    seen.add(current.id);
+    const next = current.parentId;
+    current = tools.find((tool) => tool.id === next);
+  }
+  return current?.parentId === undefined ? current?.id : undefined;
 }
 
 function withStepTool(steps: readonly ChatMessagePart[], toolId: string): ChatMessagePart[] {
@@ -81,7 +103,7 @@ export function withChildTool(
       steps: withStepTool(parent.steps ?? [], tool.id),
       ...(agentType && !parent.agentType ? { agentType } : {}),
     }),
-    [{ ...tool, parentId }],
+    [tool],
   );
 }
 

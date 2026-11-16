@@ -8,13 +8,13 @@ import { UserMessageBar } from "./UserMessageBar";
 import { AttachmentChips } from "../composer/AttachmentChips";
 import { ToolsPart } from "./ToolsPart";
 import { TaskRow } from "./TaskRow";
-import { isTaskTool, secondLine, shownTools, subagentTaskOf } from "../../lib/task-view";
+import { secondLine, shownTools, stepsOf, subagentTaskOf } from "../../lib/task-view";
 import { PlanUpdatedRow, ThinkingBlock } from "./ReplyExtras";
 import { VerificationBadge } from "../private/VerificationBadge";
 import type { ModelPrice } from "../../lib/private-credits";
 import { partsOf } from "../../lib/acp-events";
 import { formatRelativeTime } from "../../lib/relative-time";
-import type { ChatMessage, ElicitationAnswer } from "../../types";
+import type { ChatMessage, ElicitationAnswer, ToolExecution } from "../../types";
 import { SELECTABLE_TEXT_ATTRIBUTE } from "../../hooks/useChatSelection";
 
 /** No label for a message replayed from the agent's history, which gives no per-message time. */
@@ -53,6 +53,23 @@ export interface MessageRowProps {
   onOpenTask?: (messageId: string, toolId: string) => void;
   /** The subagent whose task tab is on screen. */
   openTaskId?: string;
+}
+
+/** A subagent's steps in the reply itself, for a window that has no inspector to open them in. */
+function SubagentSteps({ tool, message, isTurnOver }: { tool: ToolExecution; message: ChatMessage; isTurnOver: boolean }) {
+  const { parts, tools } = stepsOf(tool, message);
+  const byId = new Map(tools.map((child) => [child.id, child]));
+  return (
+    <div className="ml-[7px] flex flex-col gap-2 border-l border-border pl-3">
+      {parts.map((part, index) =>
+        part.kind === "text" ? (
+          <MarkdownRenderer key={index} content={part.text} />
+        ) : (
+          <ToolsPart key={index} tools={part.toolIds.flatMap((id) => byId.get(id) ?? [])} isCurrentTurn={false} isTurnOver={isTurnOver} />
+        ),
+      )}
+    </div>
+  );
 }
 
 /**
@@ -121,22 +138,26 @@ export const MessageRow = memo(function MessageRow({
             if (part.kind === "text") return <MarkdownRenderer key={index} content={part.text} />;
             const listed = shownTools(part.toolIds.flatMap((id) => toolsById.get(id) ?? []));
             if (listed.length === 0) return null;
-            // A subagent is one row that opens its task; its own steps are not the reply's.
-            const tasks = listed.filter(isTaskTool);
-            const tools = listed.filter((tool) => !isTaskTool(tool));
+            // A subagent whose steps are known is one row that opens its task. One the agent does not
+            // mark stays a plain tool, so what it returned can still be read.
+            const tasks = listed.filter((tool) => tool.steps !== undefined);
+            const tools = listed.filter((tool) => tool.steps === undefined);
             return (
               <div key={index} className="flex flex-col gap-2">
                 {tools.length > 0 && <ToolsPart tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />}
                 {tasks.map((tool) => {
                   const task = subagentTaskOf(tool, message, { isTurnOver: showActions });
                   return (
-                    <TaskRow
-                      key={tool.id}
-                      task={task}
-                      secondLine={secondLine(task, agentName)}
-                      isOpen={openTaskId === tool.id}
-                      onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
-                    />
+                    <div key={tool.id} className="flex flex-col gap-2">
+                      <TaskRow
+                        task={task}
+                        secondLine={secondLine(task, agentName)}
+                        isOpen={openTaskId === tool.id}
+                        onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
+                      />
+                      {/* Where no tab can open (a popout), the steps show here. */}
+                      {!onOpenTask && <SubagentSteps tool={tool} message={message} isTurnOver={showActions} />}
+                    </div>
                   );
                 })}
               </div>
