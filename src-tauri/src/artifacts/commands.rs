@@ -107,6 +107,18 @@ pub fn stored_page(
         .ok_or_else(|| FAILED.to_string())
 }
 
+/// Deletes, and closes the page that showed what was deleted only when the
+/// deletion worked: after a failed one the artifact is still stored, and the
+/// viewer still counts its page as shown, so closing it would leave an empty box.
+pub fn delete_then_close(
+    delete: impl FnOnce() -> Result<(), String>,
+    close: impl FnOnce(),
+) -> Result<(), String> {
+    delete()?;
+    close();
+    Ok(())
+}
+
 fn changed(app: &AppHandle, session_id: &str) {
     let _ = app.emit(
         ARTIFACTS_CHANGED,
@@ -165,8 +177,10 @@ pub fn artifact_delete(
     session_id: String,
     artifact_id: String,
 ) -> Result<(), String> {
-    view::close_for(&app, session_id.clone(), Some(artifact_id.clone()));
-    artifacts.delete(&session_id, &artifact_id)?;
+    delete_then_close(
+        || artifacts.delete(&session_id, &artifact_id),
+        || view::close_for(&app, session_id.clone(), Some(artifact_id.clone())),
+    )?;
     changed(&app, &session_id);
     Ok(())
 }
@@ -177,8 +191,10 @@ pub fn artifact_delete_session(
     artifacts: State<'_, Arc<ArtifactStore>>,
     session_id: String,
 ) -> Result<(), String> {
-    view::close_for(&app, session_id.clone(), None);
-    artifacts.delete_session(&session_id)?;
+    delete_then_close(
+        || artifacts.delete_session(&session_id),
+        || view::close_for(&app, session_id.clone(), None),
+    )?;
     changed(&app, &session_id);
     Ok(())
 }
@@ -423,6 +439,20 @@ mod tests {
         // empty state), says nothing about which pages are orphans: nothing may be swept.
         assert!(sessions_to_keep(None).is_none());
         assert!(sessions_to_keep(Some(Vec::new())).is_none());
+    }
+
+    #[test]
+    fn the_page_is_closed_only_once_its_artifact_is_deleted() {
+        let closed = std::cell::Cell::new(0);
+
+        let failed = delete_then_close(|| Err("no".to_string()), || closed.set(closed.get() + 1));
+        assert_eq!(failed, Err("no".to_string()));
+        // The artifact is still stored, so the page showing it must stay.
+        assert_eq!(closed.get(), 0);
+
+        let deleted = delete_then_close(|| Ok(()), || closed.set(closed.get() + 1));
+        assert_eq!(deleted, Ok(()));
+        assert_eq!(closed.get(), 1);
     }
 
     #[test]
