@@ -37,12 +37,12 @@ function enqueue(call: () => Promise<unknown>, onError?: (error: unknown) => voi
 
 /**
  * The one page view is shared by every box that shows a page, so what it shows is kept here, not in a box.
- * `claimed` is the page a mounted box wants; `live` is the page the backend's view holds. A box that leaves
+ * `claimed` is the page a mounted box wants, and which box; `live` is the page the backend's view holds. A box that leaves
  * gives up its claim, and the view is closed only if nothing claimed it by the time the close's turn comes:
  * Expand and Shrink take the page from one box to another in one step, and the same view then only moves,
  * so what was typed or scrolled in the page stays.
  */
-let claimed: string | null = null;
+let claimed: { page: string; owner: object } | null = null;
 let live: string | null = null;
 
 /**
@@ -71,6 +71,8 @@ export function useArtifactView(
   const pageKey = target === null ? null : `${target.sessionId}/${target.artifactId}/${target.version}`;
   // The reload number this box last showed; a new one in the same box asks for a new view.
   const lastReload = useRef<number | null>(null);
+  // Names this box in the shared claim, so a box that leaves gives up its own claim only.
+  const owner = useRef<object>({}).current;
   const targetRef = useLatest(target);
 
   useEffect(() => {
@@ -88,14 +90,14 @@ export function useArtifactView(
       if (shownKey.current !== targetKey) {
         shownKey.current = targetKey;
         lastRect.current = rect;
-        claimed = pageKey;
+        claimed = { page: pageKey, owner };
         const isReload = lastReload.current !== null && lastReload.current !== shown.reload;
         lastReload.current = shown.reload;
         const place = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
         enqueue(
           async () => {
             // A newer box took the view meanwhile: its own call follows.
-            if (claimed !== pageKey) return;
+            if (claimed?.owner !== owner || claimed.page !== pageKey) return;
             if (live === pageKey && !isReload) {
               await invoke('artifact_view_bounds', { x: place.x, y: place.y, width: place.width, height: place.height });
             } else {
@@ -147,14 +149,14 @@ export function useArtifactView(
       window.removeEventListener('resize', follow);
       if (shownKey.current === null) return;
       shownKey.current = null;
-      if (claimed === pageKey) claimed = null;
+      if (claimed?.owner === owner) claimed = null;
       enqueue(() => {
         if (claimed !== null || live === null) return Promise.resolve();
         live = null;
         return invoke('artifact_view_close');
       });
     };
-  }, [targetKey, pageKey, boxRef, targetRef, isCoveredRef, onErrorRef]);
+  }, [targetKey, pageKey, owner, boxRef, targetRef, isCoveredRef, onErrorRef]);
 
   useEffect(() => {
     if (shownKey.current === null || wasCovered.current === isCovered) return;

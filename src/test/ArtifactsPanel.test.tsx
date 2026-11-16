@@ -247,6 +247,23 @@ describe("one viewer leaving as another arrives", () => {
     expect(calls("artifact_view_hide").at(-1)).toEqual({ hidden: false });
   });
 
+  it("keeps the page for the box that is still there when an earlier box of the same page leaves", async () => {
+    const first = show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+    // The second box arrives in a step of its own, before the first one leaves.
+    show({ ...viewingReport, isExpanded: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    first.unmount();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(calls("artifact_view_close")).toEqual([]);
+  });
+
   it("shows the new page without closing first, whatever the old one still had in flight", async () => {
     // A call that takes a while (the hide for the open menu): the next show must still go out after it, and it replaces the old page itself.
     let release: () => void = () => undefined;

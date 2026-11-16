@@ -108,7 +108,12 @@ fn draws_nothing(c: char) -> bool {
 /// A title as it is stored: without what reorders or breaks its line, trimmed,
 /// at most 60 characters; `None` when nothing of it could be read.
 fn clean_title(title: &str) -> Option<String> {
-    let kept: String = title.chars().filter(|c| !reshapes_a_line(*c)).collect();
+    let kept: String = title
+        .chars()
+        // A break between words stays a gap, so the words do not run together.
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| !reshapes_a_line(*c))
+        .collect();
     let cut: String = kept.trim().chars().take(MAX_TITLE_CHARS).collect();
     let cut = cut.trim_end().to_string();
     cut.chars().any(|c| !draws_nothing(c)).then_some(cut)
@@ -577,7 +582,8 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(shown.artifact.title, "Q3 reportfinal");
+        // A break between words becomes a space, so the words do not run together.
+        assert_eq!(shown.artifact.title, "Q3 report final");
     }
 
     #[test]
