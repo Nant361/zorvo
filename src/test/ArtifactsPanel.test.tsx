@@ -229,8 +229,26 @@ describe("a box that has no size yet", () => {
 });
 
 describe("one viewer leaving as another arrives", () => {
-  it("closes the old page before it shows the new one, whatever the old one still had in flight", async () => {
-    // A call that takes a while (the hide for the open menu): the leaving viewer's close must still go out before the next show.
+  it("keeps the page when the same one moves to another box, as Expand and Shrink do", async () => {
+    const first = show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+
+    // Expand: the viewer beside the chat leaves and the one in the chat's place arrives, in one step.
+    first.unmount();
+    show({ ...viewingReport, isExpanded: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // The page is moved, not made again: what was typed or scrolled in it stays.
+    expect(calls("artifact_view_show")).toHaveLength(1);
+    expect(calls("artifact_view_close")).toEqual([]);
+    expect(calls("artifact_view_bounds")).toContainEqual(RECT);
+    expect(calls("artifact_view_hide").at(-1)).toEqual({ hidden: false });
+  });
+
+  it("shows the new page without closing first, whatever the old one still had in flight", async () => {
+    // A call that takes a while (the hide for the open menu): the next show must still go out after it, and it replaces the old page itself.
     let release: () => void = () => undefined;
     let isHeld = false;
     spy.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
@@ -252,7 +270,7 @@ describe("one viewer leaving as another arrives", () => {
 
     await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(2));
     const order = spy.mock.calls.map(([cmd]: unknown[]) => cmd).filter((cmd: unknown) => cmd === "artifact_view_show" || cmd === "artifact_view_close");
-    expect(order).toEqual(["artifact_view_show", "artifact_view_close", "artifact_view_show"]);
+    expect(order).toEqual(["artifact_view_show", "artifact_view_show"]);
   });
 });
 

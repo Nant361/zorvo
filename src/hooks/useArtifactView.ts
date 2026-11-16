@@ -36,6 +36,16 @@ function enqueue(call: () => Promise<unknown>, onError?: (error: unknown) => voi
 }
 
 /**
+ * The one page view is shared by every box that shows a page, so what it shows is kept here, not in a box.
+ * `claimed` is the page a mounted box wants; `live` is the page the backend's view holds. A box that leaves
+ * gives up its claim, and the view is closed only if nothing claimed it by the time the close's turn comes:
+ * Expand and Shrink take the page from one box to another in one step, and the same view then only moves,
+ * so what was typed or scrolled in the page stays.
+ */
+let claimed: string | null = null;
+let live: string | null = null;
+
+/**
  * Shows an artifact's page over `boxRef`. The page lives in a webview of its
  * own, which the backend places: this hook only says which page, where the
  * box is, and when something of Zorvo's covers it. The webview sends ids and a
@@ -57,10 +67,14 @@ export function useArtifactView(
   const wasCovered = useRef(false);
 
   const targetKey = target === null ? null : `${target.sessionId}/${target.artifactId}/${target.version}/${target.reload}`;
+  // The page itself, whatever its reload number: a box that arrives with the page another just left keeps the view.
+  const pageKey = target === null ? null : `${target.sessionId}/${target.artifactId}/${target.version}`;
+  // The reload number this box last showed; a new one in the same box asks for a new view.
+  const lastReload = useRef<number | null>(null);
   const targetRef = useLatest(target);
 
   useEffect(() => {
-    if (targetKey === null) return;
+    if (targetKey === null || pageKey === null) return;
 
     /** Brings the backend's view in step with the box: shows the page once the box has a size, then follows it. */
     const sync = () => {
@@ -74,21 +88,38 @@ export function useArtifactView(
       if (shownKey.current !== targetKey) {
         shownKey.current = targetKey;
         lastRect.current = rect;
+        claimed = pageKey;
+        const isReload = lastReload.current !== null && lastReload.current !== shown.reload;
+        lastReload.current = shown.reload;
+        const place = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
         enqueue(
-          () =>
-            invoke('artifact_view_show', {
-              sessionId: shown.sessionId,
-              artifactId: shown.artifactId,
-              version: shown.version,
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-            }).then(() => {
-              // A new view is visible: hide it at once if something is over its box.
-              wasCovered.current = isCoveredRef.current;
-              return isCoveredRef.current ? invoke('artifact_view_hide', { hidden: true }) : undefined;
-            }),
+          async () => {
+            // A newer box took the view meanwhile: its own call follows.
+            if (claimed !== pageKey) return;
+            if (live === pageKey && !isReload) {
+              await invoke('artifact_view_bounds', { x: place.x, y: place.y, width: place.width, height: place.height });
+            } else {
+              live = pageKey;
+              try {
+                await invoke('artifact_view_show', {
+                  sessionId: shown.sessionId,
+                  artifactId: shown.artifactId,
+                  version: shown.version,
+                  x: place.x,
+                  y: place.y,
+                  width: place.width,
+                  height: place.height,
+                });
+              } catch (error) {
+                // The backend closes the view when it cannot show the page.
+                if (live === pageKey) live = null;
+                throw error;
+              }
+            }
+            // The view is in step with this box now: a new one is visible, a kept one is as its last box left it.
+            wasCovered.current = isCoveredRef.current;
+            await invoke('artifact_view_hide', { hidden: isCoveredRef.current });
+          },
           (error) => onErrorRef.current(typeof error === 'string' ? error : 'Zorvo could not show that page.'),
         );
         return;
@@ -116,9 +147,14 @@ export function useArtifactView(
       window.removeEventListener('resize', follow);
       if (shownKey.current === null) return;
       shownKey.current = null;
-      enqueue(() => invoke('artifact_view_close'));
+      if (claimed === pageKey) claimed = null;
+      enqueue(() => {
+        if (claimed !== null || live === null) return Promise.resolve();
+        live = null;
+        return invoke('artifact_view_close');
+      });
     };
-  }, [targetKey, boxRef, targetRef, isCoveredRef, onErrorRef]);
+  }, [targetKey, pageKey, boxRef, targetRef, isCoveredRef, onErrorRef]);
 
   useEffect(() => {
     if (shownKey.current === null || wasCovered.current === isCovered) return;

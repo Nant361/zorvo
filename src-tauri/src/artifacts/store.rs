@@ -75,11 +75,43 @@ pub fn is_artifact_id(id: &str) -> bool {
     })
 }
 
-/// A title as it is stored: trimmed, at most 60 characters; `None` when blank.
+/// Characters that reorder a line or break it: a title is one row of plain text.
+fn reshapes_a_line(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+}
+
+/// Characters that draw nothing by themselves. They stay inside a title (a
+/// joined emoji needs them) but a title made only of them reads as empty.
+fn draws_nothing(c: char) -> bool {
+    c.is_whitespace()
+        || matches!(
+            c,
+            '\u{00AD}'
+                | '\u{034F}'
+                | '\u{115F}'
+                | '\u{1160}'
+                | '\u{17B4}'
+                | '\u{17B5}'
+                | '\u{180B}'..='\u{180F}'
+                | '\u{200B}'..='\u{200D}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{206A}'..='\u{206F}'
+                | '\u{3164}'
+                | '\u{FE00}'..='\u{FE0F}'
+                | '\u{FEFF}'
+                | '\u{FFA0}'
+                | '\u{E0000}'..='\u{E0FFF}'
+        )
+}
+
+/// A title as it is stored: without what reorders or breaks its line, trimmed,
+/// at most 60 characters; `None` when nothing of it could be read.
 fn clean_title(title: &str) -> Option<String> {
-    let cut: String = title.trim().chars().take(MAX_TITLE_CHARS).collect();
+    let kept: String = title.chars().filter(|c| !reshapes_a_line(*c)).collect();
+    let cut: String = kept.trim().chars().take(MAX_TITLE_CHARS).collect();
     let cut = cut.trim_end().to_string();
-    (!cut.is_empty()).then_some(cut)
+    cut.chars().any(|c| !draws_nothing(c)).then_some(cut)
 }
 
 fn new_artifact_id() -> Result<String, String> {
@@ -504,6 +536,59 @@ mod tests {
         assert_eq!(listed[0].title, "Two");
         assert_ne!(listed[0].id, listed[1].id);
         assert!(is_artifact_id(&listed[0].id));
+    }
+
+    #[test]
+    fn a_title_nobody_could_read_is_no_title() {
+        let temp = Temp::new("unseen");
+        let store = temp.store();
+
+        // Zero-width and filler characters only: the list would show an empty row.
+        for unseen in [
+            "\u{200B}\u{200B}",
+            "\u{2060}\u{FEFF}",
+            "\u{3164}",
+            " \u{00AD}\u{200D} ",
+        ] {
+            assert_eq!(
+                store
+                    .show(SESSION, PATH, Some(unseen), b"<p>a</p>", 1)
+                    .unwrap_err(),
+                NEEDS_TITLE,
+                "title: {unseen:?}"
+            );
+        }
+        assert!(store.list(SESSION).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_title_loses_what_reorders_or_breaks_its_line() {
+        let temp = Temp::new("reorder");
+        let store = temp.store();
+
+        // A right-to-left override would show "lmth.troper" as "report.html"; a line break would split the row.
+        let shown = store
+            .show(
+                SESSION,
+                PATH,
+                Some("Q3\u{202E} report\nfinal\u{2028}\u{0007}"),
+                b"a",
+                1,
+            )
+            .unwrap();
+
+        assert_eq!(shown.artifact.title, "Q3 reportfinal");
+    }
+
+    #[test]
+    fn a_title_keeps_joined_emoji() {
+        let temp = Temp::new("emoji");
+        let store = temp.store();
+        let family = "Team \u{1F469}\u{200D}\u{1F4BB} \u{2764}\u{FE0F}";
+
+        let shown = store.show(SESSION, PATH, Some(family), b"a", 1).unwrap();
+
+        assert_eq!(shown.artifact.title, family);
     }
 
     #[test]

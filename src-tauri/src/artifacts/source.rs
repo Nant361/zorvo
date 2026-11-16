@@ -36,6 +36,40 @@ fn has_html_name(path: &Path) -> bool {
         })
 }
 
+/// Reads the regular file at `path`, which must already be canonical.
+///
+/// The file is opened first and judged afterwards, from the open file itself:
+/// a path can name another thing between a check and the open that follows it.
+/// A link in the last place is not followed, and the open does not wait, since
+/// a pipe nobody writes to would otherwise hold the call forever.
+fn read_checked(path: &Path) -> Result<Vec<u8>, String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let refused = || NOT_ALLOWED.to_string();
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|_| refused())?;
+    let metadata = file.metadata().map_err(|_| refused())?;
+    if !metadata.is_file() {
+        return Err(refused());
+    }
+    if metadata.len() > MAX_PAGE_BYTES {
+        return Err(TOO_LARGE.to_string());
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_PAGE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| refused())?;
+    if bytes.len() as u64 > MAX_PAGE_BYTES {
+        return Err(TOO_LARGE.to_string());
+    }
+    if std::str::from_utf8(&bytes).is_err() {
+        return Err(NOT_TEXT.to_string());
+    }
+    Ok(bytes)
+}
+
 /// Reads the page at `path`, relative to `session_folder` (already canonical)
 /// when it is not absolute. Returns the canonical path, which is the artifact's
 /// identity, and the bytes.
@@ -54,24 +88,7 @@ pub fn read_source(
     if !is_inside || !has_html_name(&canonical) {
         return Err(refused());
     }
-    // Judged from metadata: opening a pipe would block.
-    let metadata = fs::metadata(&canonical).map_err(|_| refused())?;
-    if !metadata.is_file() {
-        return Err(refused());
-    }
-    if metadata.len() > MAX_PAGE_BYTES {
-        return Err(TOO_LARGE.to_string());
-    }
-    let mut bytes = Vec::new();
-    fs::File::open(&canonical)
-        .and_then(|file| file.take(MAX_PAGE_BYTES + 1).read_to_end(&mut bytes))
-        .map_err(|_| refused())?;
-    if bytes.len() as u64 > MAX_PAGE_BYTES {
-        return Err(TOO_LARGE.to_string());
-    }
-    if std::str::from_utf8(&bytes).is_err() {
-        return Err(NOT_TEXT.to_string());
-    }
+    let bytes = read_checked(&canonical)?;
     let canonical = canonical.to_str().ok_or_else(refused)?.to_string();
     Ok((canonical, bytes))
 }
@@ -195,6 +212,27 @@ mod tests {
             read_source(&session.0, &[], "page.html").unwrap_err(),
             NOT_ALLOWED
         );
+    }
+
+    #[test]
+    fn a_file_swapped_for_a_link_or_a_pipe_after_the_check_is_not_read() {
+        let session = Temp::new("swap");
+        let outside = Temp::new("swap-out");
+        let secret = outside.file("secret.html", b"secret");
+        let link = session.0.join("page.html");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        let fifo = session.0.join("pipe.html");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(made.success());
+
+        // What is opened is judged, not what the path named a moment earlier.
+        assert_eq!(read_checked(&link).unwrap_err(), NOT_ALLOWED);
+        // Returns at once: a pipe nobody writes to would otherwise hold the call forever.
+        assert_eq!(read_checked(&fifo).unwrap_err(), NOT_ALLOWED);
+        assert_eq!(read_checked(&session.0).unwrap_err(), NOT_ALLOWED);
     }
 
     #[test]

@@ -34,10 +34,21 @@ pub struct Display {
     pub is_loaded: bool,
     /// Something of Zorvo's is drawn where the page is.
     pub is_hidden: bool,
+    /// The page's box is nowhere in the window. The view is kept, so the page
+    /// is the same one when its box comes back.
+    pub is_outside: bool,
 }
 
 pub fn is_visible(display: Display) -> bool {
-    display.is_loaded && !display.is_hidden
+    display.is_loaded && !display.is_hidden && !display.is_outside
+}
+
+/// `display` once the page's box is at `bounds`, or nowhere in the window.
+pub fn with_place(display: Display, bounds: Option<Bounds>) -> Display {
+    Display {
+        is_outside: bounds.is_none(),
+        ..display
+    }
 }
 
 /// A page that has not said it loaded is shown anyway after this long, so one
@@ -47,7 +58,7 @@ const SHOW_ANYWAY_AFTER: std::time::Duration = std::time::Duration::from_secs(3)
 thread_local! {
     /// The one child webview and what it shows. `wry::WebView` is not `Send`, so it stays here.
     static VIEW: RefCell<Option<(wry::WebView, ShownPage)>> = const { RefCell::new(None) };
-    static DISPLAY: Cell<Display> = const { Cell::new(Display { is_loaded: false, is_hidden: false }) };
+    static DISPLAY: Cell<Display> = const { Cell::new(Display { is_loaded: false, is_hidden: false, is_outside: false }) };
     /// Counts the views made, so a late "loaded" for an earlier view changes nothing.
     static GENERATION: Cell<u64> = const { Cell::new(0) };
 }
@@ -214,19 +225,18 @@ pub fn show(
         .map_err(|()| COULD_NOT_SHOW.to_string())
 }
 
-fn with_view(app: &AppHandle, act: impl FnOnce(&wry::WebView) + Send + 'static) {
+/// Moves the view to `bounds`; with none (the box is outside the window) the
+/// view stays where it was and is not drawn.
+pub fn set_bounds(app: &AppHandle, bounds: Option<Bounds>) {
     let _ = app.run_on_main_thread(move || {
-        VIEW.with(|view| {
-            if let Some((view, _)) = view.borrow().as_ref() {
-                act(view);
-            }
-        });
-    });
-}
-
-pub fn set_bounds(app: &AppHandle, bounds: Bounds) {
-    with_view(app, move |view| {
-        let _ = view.set_bounds(rect(bounds));
+        if let Some(bounds) = bounds {
+            VIEW.with(|slot| {
+                if let Some((view, _)) = slot.borrow().as_ref() {
+                    let _ = view.set_bounds(rect(bounds));
+                }
+            });
+        }
+        update_display(|display| with_place(display, bounds));
     });
 }
 
@@ -345,20 +355,43 @@ mod tests {
         // Made invisible, so a dark window never flashes the webview's white before the page paints.
         assert!(!is_visible(Display {
             is_loaded: false,
-            is_hidden: false
+            is_hidden: false,
+            is_outside: false
         }));
         assert!(is_visible(Display {
             is_loaded: true,
-            is_hidden: false
+            is_hidden: false,
+            is_outside: false
         }));
         assert!(!is_visible(Display {
             is_loaded: true,
-            is_hidden: true
+            is_hidden: true,
+            is_outside: false
         }));
         assert!(!is_visible(Display {
             is_loaded: false,
-            is_hidden: true
+            is_hidden: true,
+            is_outside: false
         }));
+    }
+
+    #[test]
+    fn a_page_whose_box_left_the_window_is_kept_but_not_drawn() {
+        let outside = with_place(
+            Display {
+                is_loaded: true,
+                is_hidden: false,
+                is_outside: false,
+            },
+            None,
+        );
+
+        assert!(!is_visible(outside));
+        // The box coming back shows the same page again.
+        assert!(is_visible(with_place(
+            outside,
+            Some(bounds(0.0, 0.0, 10.0, 10.0))
+        )));
     }
 
     #[test]

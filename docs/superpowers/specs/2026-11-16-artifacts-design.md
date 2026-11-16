@@ -204,8 +204,14 @@ rounded bottom corners (the box now ends a panel radius above the sheet's
 edge); and the version menu cut "Version 2" short beside a long date (short
 dates, a wider menu). Not seen: a 2× / 1× display change, the inspector's own
 resize handle (the drag did not take), and a toast over the page. A page's own
-state (a typed field, a scroll position) is lost on Expand and Shrink, since
-each makes a new view.
+state (a typed field, a scroll position) was lost on Expand and Shrink at
+first, since each made a new view. It is kept now: the one view is shared by
+every box (`claimed` and `live` in `useArtifactView.ts`), a box that leaves
+only gives up its claim, and the view is closed only when no box claimed the
+page by the time the close's turn comes in the queue. The box that arrives
+with the same session, artifact and version moves the view to itself
+(`artifact_view_bounds`). Reload still makes a new view. Checked by test, not
+yet seen on screen.
 
 Also learned: a window behind another has its page timers throttled, so a
 real-app test must not time anything with timers in the page.

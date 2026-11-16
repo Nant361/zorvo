@@ -285,7 +285,7 @@ pub fn artifact_view_show(
 
 #[tauri::command(async)]
 pub fn artifact_view_bounds(app: AppHandle, x: f64, y: f64, width: f64, height: f64) {
-    match bounds_in_window(
+    let bounds = bounds_in_window(
         &app,
         Bounds {
             x,
@@ -293,10 +293,8 @@ pub fn artifact_view_bounds(app: AppHandle, x: f64, y: f64, width: f64, height: 
             width,
             height,
         },
-    ) {
-        Some(bounds) => view::set_bounds(&app, bounds),
-        None => view::close(&app),
-    }
+    );
+    view::set_bounds(&app, bounds);
 }
 
 #[tauri::command(async)]
