@@ -4,9 +4,9 @@
 
 **Goal:** An agent hands Zorvo an HTML file with `show_artifact`; Zorvo keeps versioned copies, shows the page sandboxed in an Artifacts tab, lists every session's pages in a gallery and exports one as a file.
 
-**Architecture:** A Rust module `artifacts/` owns storage (`<data dir>/artifacts/<sessionId>/`), the path checks and a custom `zorvo-artifact` protocol that serves a stored copy with its own CSP. Two tools join the agent tool server and are answered by the webview through the existing `agent-tool-call` path. The frontend reads through commands and an `artifacts-changed` event; nothing is added to `state.json`.
+**Architecture:** A Rust module `artifacts/` owns storage (`<data dir>/artifacts/<sessionId>/`), the path checks, and the page's own webview: a wry child webview of the main window, with no Tauri IPC, that loads a stored copy over a `zorvo-artifact` protocol with its own CSP. The main webview only draws an empty box and tells the backend where it is. Two tools join the agent tool server and are answered by the webview through the existing `agent-tool-call` path. The frontend reads through commands and an `artifacts-changed` event; nothing is added to `state.json`.
 
-**Tech Stack:** Tauri 2.12 / wry 0.57 (custom URI scheme, plugin `on_navigation`, `tauri-plugin-dialog` from Rust), React 19, Vitest, the fake ACP agent.
+**Tech Stack:** Tauri 2.12 / wry 0.57 (wry used directly for a child webview, `tauri-plugin-dialog` from Rust), React 19, Vitest, the fake ACP agent.
 
 **Spec:** `docs/superpowers/specs/2026-11-16-artifacts-design.md`. Read it first; this plan argues from it.
 
@@ -33,6 +33,8 @@
 ---
 
 ### Task 0: Sandbox spike (gate, throwaway)
+
+**Done 2026-11-16.** Two rounds ran; the results are in the spec ("Spike results" and "Second spike"). The frame design below failed question 4, and the user chose a separate webview, which the second round tested. The steps are kept as the record of what was asked; Tasks 3, 4, 8 and 11 already follow the outcome. The spike's code is on the local branch `spike/artifacts-sandbox`.
 
 Nothing from this task is merged. Work in a scratch worktree and report.
 
@@ -133,30 +135,41 @@ pub fn read_source(session_folder: &Path, temp_roots: &[PathBuf], path: &str) ->
 
 ---
 
-### Task 3: The protocol, its CSP and navigation
+### Task 3: The page's webview, its protocol and CSP
 
-**Files:** Create `src-tauri/src/artifacts/protocol.rs`. Modify `src-tauri/src/lib.rs` (register the scheme and the plugin), `src-tauri/tauri.conf.json` (append `; frame-src zorvo-artifact:` to `csp`).
+**Files:** Create `src-tauri/src/artifacts/protocol.rs`, `src-tauri/src/artifacts/view.rs`. Modify `src-tauri/Cargo.toml` (`wry = { version = "=0.57.0", default-features = false }`, the version in `Cargo.lock` that Tauri uses). `tauri.conf.json` and the capabilities do not change. Read the spec's "How a page loads" and both spike result tables first; the throwaway branch `spike/artifacts-sandbox` (`src-tauri/src/spike.rs`) has a working child webview to read, not to copy.
 
 **Interfaces — produces:**
 
 ```rust
+// protocol.rs — pure, no webview
 pub const SCHEME: &str = "zorvo-artifact";
-pub const PAGE_CSP: &str = /* the spec's policy on one line, as fixed by the spike */;
-pub fn parse_url(uri: &str) -> Option<(String, String, u32)>;        // zorvo-artifact://localhost/<session>/<artifact>/<version>[?query]
+pub const PAGE_CSP: &str = /* the spec's policy on one line, ending "; sandbox allow-scripts" */;
+pub fn page_url(session_id: &str, artifact_id: &str, version: u32) -> String;   // zorvo-artifact://localhost/s/a/3
+pub fn parse_url(uri: &str) -> Option<(String, String, u32)>;                   // ignores a query
+pub fn served_body(stored: Vec<u8>) -> Vec<u8>;                                 // unchanged today
 pub fn respond(store: &ArtifactStore, method: &str, uri: &str) -> tauri::http::Response<Vec<u8>>;
-pub fn is_allowed_navigation(url: &tauri::Url) -> bool;              // the URLs the spike recorded, and zorvo-artifact://localhost/
-pub fn navigation_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R>;
+pub fn is_allowed_navigation(url: &str) -> bool;                                // only zorvo-artifact://localhost/…
+
+// view.rs — the one child webview; every function runs its work on the main thread
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bounds { pub x: f64, pub y: f64, pub width: f64, pub height: f64 }
+pub fn checked_bounds(bounds: Bounds, window_width: f64, window_height: f64) -> Option<Bounds>; // finite, positive size, clipped to the window; None when nothing is left
+pub fn show(app: &tauri::AppHandle, store: Arc<ArtifactStore>, url: String, bounds: Bounds) -> Result<(), String>; // replaces any earlier view
+pub fn set_bounds(app: &tauri::AppHandle, bounds: Bounds);
+pub fn set_hidden(app: &tauri::AppHandle, hidden: bool);
+pub fn close(app: &tauri::AppHandle);
 ```
 
-The body goes through `pub fn served_body(stored: Vec<u8>) -> Vec<u8>`, which returns it unchanged today (the spec's "Room for comments later"); a test `served_body_is_the_stored_page` pins that.
+`respond`: 200 with the page and headers `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy: PAGE_CSP`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`; 404 with an empty body for a method other than GET, a URL that does not parse, another host, or a version `version_path` does not give.
 
-`respond`: 200 with the page and headers `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy: PAGE_CSP`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`; 404 with an empty body for a method other than GET, a URL that does not parse, or a version `version_path` does not give. `lib.rs` registers `SCHEME` with a handler that takes `ArtifactStore` from `try_state` (404 before setup has managed it).
+`view::show` builds with `wry::WebViewBuilder`: `with_incognito(true)`, `with_bounds`, `with_custom_protocol(SCHEME, …respond…)`, `with_navigation_handler(is_allowed_navigation)`, `with_url`, `build_as_child(&main_window)`; **never** `with_ipc_handler` or an initialization script. The `wry::WebView` is not `Send`: keep it in a `thread_local!` on the main thread, as the spike does. `ArtifactStore` is managed as `Arc<ArtifactStore>` so the protocol closure can hold it (Task 4 manages it that way).
 
-- [ ] **Step 1: Failing tests:** `serves_a_stored_version_with_its_headers` (all four headers, body equal); `the_page_csp_is_exactly` (asserts the full `PAGE_CSP` string, so a change to it is a visible diff); `refuses_post`, `refuses_a_bad_session_id`, `refuses_an_unlisted_version`, `refuses_another_host` → 404; `parse_url_ignores_the_query`; `navigation_allows_the_app_and_artifacts` and `navigation_refuses_websites` (`https://example.com`, `http://example.com`, `file:///etc/hosts`). Extend the existing test that reads `tauri.conf.json`'s CSP, or add one, asserting it contains `frame-src zorvo-artifact:` and still `script-src 'self'`.
-- [ ] **Step 2:** `cargo test artifacts::protocol` → fails.
-- [ ] **Step 3:** Implement and wire into `lib.rs`.
-- [ ] **Step 4:** Tests pass; clippy clean; `pnpm tauri dev` still opens the main window and a popout (navigation not broken).
-- [ ] **Step 5:** Commit `feat: serve artifact pages on a sandboxed protocol`.
+- [ ] **Step 1: Failing tests** (`protocol.rs`): `serves_a_stored_version_with_its_headers` (all four headers, body equal); `the_page_csp_is_exactly` (asserts the full `PAGE_CSP` string, so a change to it is a visible diff); `the_csp_sandboxes_the_page` (contains `sandbox allow-scripts`, not `allow-same-origin`); `served_body_is_the_stored_page`; `refuses_post`, `refuses_a_bad_session_id`, `refuses_an_unlisted_version`, `refuses_another_host` → 404; `parse_url_ignores_the_query`; `page_url_round_trips_through_parse_url`; `navigation_allows_only_artifact_pages` (`https://example.com`, `http://localhost:1420`, `file:///etc/hosts`, `tauri://localhost`, `zorvo-artifact://evil/` all refused). (`view.rs`): `bounds_must_be_finite_and_positive` (NaN, infinity, zero or negative size → `None`), `bounds_are_clipped_to_the_window`, `bounds_outside_the_window_are_refused`. One test reads `Cargo.lock` and asserts exactly one `wry` version.
+- [ ] **Step 2:** `cargo test artifacts::protocol artifacts::view` → fails.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Tests pass; clippy clean; `pnpm tauri dev` still opens the main window and a popout.
+- [ ] **Step 5:** Commit `feat: show an artifact page in a webview of its own`.
 
 ---
 
@@ -173,9 +186,13 @@ artifact_rename(app, artifacts, session_id: String, artifact_id: String, title: 
 artifact_delete(app, artifacts, session_id: String, artifact_id: String) -> Result<(), String>
 artifact_delete_session(app, artifacts, session_id: String) -> Result<(), String>
 artifact_export(app, artifacts, session_id: String, artifact_id: String, version: u32) -> Result<bool, String>  // false: the user cancelled
+artifact_view_show(app, artifacts, session_id: String, artifact_id: String, version: u32, x: f64, y: f64, width: f64, height: f64) -> Result<(), String>
+artifact_view_bounds(app, x: f64, y: f64, width: f64, height: f64)
+artifact_view_hide(app, hidden: bool)
+artifact_view_close(app)
 ```
 
-`artifact_show`: `ensure_known_workspace(cwd)`, `is_session_id`, `read_source`, `store.show`. Every changing command emits `artifacts-changed` with `{ "sessionId": … }`. `artifact_export` uses `tauri_plugin_dialog::DialogExt` (`app.dialog().file().set_file_name(<title cleaned to a file name>.html).add_filter("HTML", &["html"]).blocking_save_file()`), then copies the stored bytes; no capability changes. Keep the logic in plain functions the commands call, so it is testable without Tauri. `SWEEP_MIN_AGE` is one day.
+`artifact_show`: `ensure_known_workspace(cwd)`, `is_session_id`, `read_source`, `store.show`. Every changing command emits `artifacts-changed` with `{ "sessionId": … }`. `artifact_export` uses `tauri_plugin_dialog::DialogExt` (`app.dialog().file().set_file_name(<title cleaned to a file name>.html).add_filter("HTML", &["html"]).blocking_save_file()`), then copies the stored bytes; no capability changes. Keep the logic in plain functions the commands call, so it is testable without Tauri. `SWEEP_MIN_AGE` is one day. `ArtifactStore` is managed as `Arc<ArtifactStore>`. The four `artifact_view_*` commands call Task 3's `view` functions after `checked_bounds` against the main window's inner size in logical points (a refused rectangle closes the view); `artifact_view_show` checks the ids and that `version_path` gives a file. `artifact_delete`, `artifact_delete_session` and `RunEvent::Exit` close the view.
 
 - [ ] **Step 1: Failing tests** for the plain functions: `show_refuses_an_unknown_workspace`, `show_refuses_a_bad_session_id`, `show_stores_what_the_file_held`, `list_returns_each_session_asked_for`, `export_name_is_safe` (`"Q3 / report: final"` → `Q3 report final.html`; blank → `Artifact.html`).
 - [ ] **Step 2:** `cargo test artifacts::commands` → fails.
@@ -224,7 +241,6 @@ export interface ShownArtifact { artifact: Artifact; version: number; isNewArtif
 export interface ViewedArtifact { artifactId: string; version: number | null }   // null follows the newest
 export function parseArtifacts(value: unknown): Artifact[];           // lenient: drops what does not fit
 export function parseShown(value: unknown): ShownArtifact | null;
-export function artifactUrl(sessionId: string, artifactId: string, version: number, reload = 0): string; // zorvo-artifact://localhost/s/a/3?r=0
 export function newestVersion(artifact: Artifact): number;
 export function versionLabel(version: number, artifact: Artifact): string;   // "Version 3 of 5", 5 = newest n
 export function hasVersion(artifact: Artifact | undefined, version: number): boolean;
@@ -276,13 +292,13 @@ The guide, first version, under 6,000 characters, plain instructions: one file; 
 
 ### Task 8: The Artifacts tab and viewer
 
-**Files:** Create `src/components/artifacts/ArtifactsPanel.tsx`, `ArtifactViewer.tsx`, `ArtifactFrame.tsx`. Modify `src/lib/inspector.ts` (`InspectorTab` gains `"artifacts"`), `src/components/inspector/Inspector.tsx` (label "Artifacts", order after `files`, count), `src/hooks/useInspector.ts`, `src/App.tsx` (offer the tab while the session has an artifact; `onArtifactShown` applies `openingFor`; Expand shows the viewer in the chat's place as the full review does). Test: `src/test/ArtifactsPanel.test.tsx`, `src/test/useInspector.artifacts.test.tsx`.
+**Files:** Create `src/components/artifacts/ArtifactsPanel.tsx`, `ArtifactViewer.tsx`, `ArtifactPageBox.tsx`, `src/hooks/useArtifactView.ts`. Modify `src/lib/inspector.ts` (`InspectorTab` gains `"artifacts"`), `src/components/inspector/Inspector.tsx` (label "Artifacts", order after `files`, count), `src/hooks/useInspector.ts`, `src/App.tsx` (offer the tab while the session has an artifact; `onArtifactShown` applies `openingFor`; Expand shows the viewer in the chat's place as the full review does). Test: `src/test/ArtifactsPanel.test.tsx`, `src/test/useInspector.artifacts.test.tsx`.
 
 **Interfaces — produces** on `InspectorState`: `viewedArtifact: ViewedArtifact | null`, `viewArtifact(view: ViewedArtifact | null): void` (widens the inspector as `viewFile` does; another session clears it), `isArtifactExpanded: boolean`, `setArtifactExpanded(v: boolean)`.
 
-`ArtifactFrame` renders `<iframe sandbox="allow-scripts" title={artifact.title} src={artifactUrl(...)}>`; Reload bumps the `reload` number. Before rendering the frame the viewer checks `hasVersion`; when false it shows "This version is no longer on this Mac." Copy: tab "Artifacts"; "Version 3 of 5"; "Older version"; buttons "Reload", "Expand", "Shrink", "Export"; menu "Rename", "Delete artifact"; confirm "Delete this artifact and its versions? This cannot be undone." with "Delete" and "Cancel"; Export opens a panel under its button: heading "Export this page", text "Saves Version {n} as one HTML file. An exported page opens in a browser without Zorvo's limits.", buttons "Cancel" and "Choose where to save" (only this one invokes `artifact_export`). The tab strip's tabs get 8 px side padding and the strip scrolls sideways when it does not fit; look and wording follow the artboards in `docs/superpowers/specs/2026-11-16-artifacts-artboards/`. If spike question 4 required a mitigation, it is implemented here and tested.
+`ArtifactPageBox` is an empty `div` with the sheet's fill and `role="img"` named by the artifact's title. `useArtifactView(box, target, isCovered)` measures it (`getBoundingClientRect`, a `ResizeObserver`, window `resize`, and after layout changes such as Expand) and invokes `artifact_view_show` when the target (session, artifact, version, reload count) changes, `artifact_view_bounds` when only the rectangle does, `artifact_view_hide` with `isCovered`, and `artifact_view_close` on unmount. `isCovered` is true while the viewer's version menu, ⋯ menu, export panel or delete question is open, or any app dialog, popover or toast is (one shared signal in `App.tsx`; no overlay may show over the page without it). Reload bumps the reload count, which makes a new view. No `<iframe>` anywhere. Before showing the page the viewer checks `hasVersion`; when false it shows "This version is no longer on this Mac." Copy: tab "Artifacts"; "Version 3 of 5"; "Older version"; buttons "Reload", "Expand", "Shrink", "Export"; menu "Rename", "Delete artifact"; confirm "Delete this artifact and its versions? This cannot be undone." with "Delete" and "Cancel"; Export opens a panel under its button: heading "Export this page", text "Saves Version {n} as one HTML file. An exported page opens in a browser without Zorvo's limits.", buttons "Cancel" and "Choose where to save" (only this one invokes `artifact_export`). The tab strip's tabs get 8 px side padding and the strip scrolls sideways when it does not fit; look and wording follow the artboards in `docs/superpowers/specs/2026-11-16-artifacts-artboards/`. If spike question 4 required a mitigation, it is implemented here and tested.
 
-- [ ] **Step 1: Failing tests:** the tab is offered only with an artifact; one artifact opens straight on the viewer, two show the list; the frame has `sandbox="allow-scripts"` exactly and the expected `src`; the version menu switches `src` and marks an older version; a new version replaces the page when following the newest and not when an older one is pinned; a pruned version shows the sentence and no iframe; Delete asks first, then invokes `artifact_delete`; Export invokes `artifact_export` with ids and version only; a new artifact in the session on screen shows the tab and leaves focus in the composer; one in another session changes nothing.
+- [ ] **Step 1: Failing tests:** the tab is offered only with an artifact; one artifact opens straight on the viewer, two show the list; showing the viewer invokes `artifact_view_show` with the ids, the version and the box's rectangle, and nothing else; a resize invokes `artifact_view_bounds`; opening the version menu invokes `artifact_view_hide` with true and closing it with false; unmounting invokes `artifact_view_close`; the rendered tree holds no `iframe`; the version menu shows another version and marks an older one; a new version replaces the page when following the newest and not when an older one is pinned; a pruned version shows the sentence and invokes no `artifact_view_show`; Delete asks first, then invokes `artifact_delete`; Export invokes `artifact_export` with ids and version only; a new artifact in the session on screen shows the tab and leaves focus in the composer; one in another session changes nothing.
 - [ ] **Step 2:** Run both files → fail.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Tests pass, plus `src/test/design-tokens.test.ts`, `sheet-fills.test.ts`; `pnpm lint`.
@@ -320,7 +336,8 @@ Copy: heading "Artifacts"; search placeholder "Search artifacts"; row: title, "{
 
 **Files:** Modify `README.md` (privacy section), `CLAUDE.md` (an **Artifacts** paragraph in Architecture; the Project rules' network sentence), `CHANGELOG.md` (`Unreleased`), `src/lib/artifact-guide.md`.
 
-- [ ] **Step 1:** Rebuild the real-app harness (a scratch HOME, a fake agent on PATH; the fake agent writes a page with `FAKE_ACP_WRITE_FILES` and calls the tool with `FAKE_ACP_MCP_CALL`). Show, with what the page prints and a screenshot: the page loads in the tab; a CDN script ran; `fetch('https://example.com')` was blocked; the three IPC attempts of the spike fail; a second call shows version 2; Export writes the same bytes (`cmp`). Keep the harness script in the session scratchpad and say where in the PR.
+- [ ] **Step 0:** This step needs the app in front and a look at the screen, so ask the user first. In a review build (`--config` with its own identifier, as the redesign checks did), check what the second spike could not see: the page draws exactly in its box at 1× and 2×, follows a window resize, the inspector's resize handle and Expand / Shrink, hides under each menu and dialog, scrolls, and takes and gives back keyboard focus. Fix what is wrong in Tasks 3 and 8 before going on.
+- [ ] **Step 1:** Rebuild the real-app harness (a scratch HOME, a fake agent on PATH; the fake agent writes a page with `FAKE_ACP_WRITE_FILES` and calls the tool with `FAKE_ACP_MCP_CALL`). Show, with what the page prints and a screenshot: the page loads in the tab; a CDN script ran; `fetch('https://example.com')` was blocked; the IPC attempts of the spike find nothing to call; a looping page leaves the main page answering a ping sent from Rust (never a page timer), and Reload ends it; a second call shows version 2; Export writes the same bytes (`cmp`). Keep the harness script in the session scratchpad and say where in the PR.
 - [ ] **Step 2:** With Claude Code, Codex and Antigravity, ask each for the same three pages (a report with a chart, a diagram, a small dashboard). Note what looks wrong in light and dark and at the inspector's narrow width; revise the guide; repeat once. Put before/after screenshots in the PR.
 - [ ] **Step 3:** Write the documents. The privacy sentence: the artifact frame loads scripts from cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, cdn.tailwindcss.com and code.jquery.com and fonts from Google Fonts when a page asks for them; Zorvo's own interface still makes no request. Run `pnpm vitest run src/test/public-docs` if a docs test covers the README.
 - [ ] **Step 4:** Commit `docs: describe artifacts and what their pages may load`.

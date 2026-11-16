@@ -48,15 +48,22 @@ runs with no sandbox at all.
 
 ### How a page loads
 
-1. **A custom protocol.** The backend registers the scheme `zorvo-artifact`.
-   A URL is `zorvo-artifact://localhost/<sessionId>/<artifactId>/<version>`.
-   The handler checks the shape of all three parts, answers only GET, and reads
-   the stored copy from the data dir. Anything else is 404. The webview never
-   sends a path.
-2. **A sandboxed frame.** The tab loads that URL in
-   `<iframe sandbox="allow-scripts">`. Without `allow-same-origin` the page has
-   an opaque origin: no cookies, no `localStorage`, and not an origin Tauri's
-   IPC accepts. The frame has a `title` for assistive technology.
+The page runs in a webview of its own, a child of the main window, placed over
+the Artifacts tab's page area. The first spike showed that a frame inside the
+main webview shares its process, so a page that loops freezes Zorvo; a second
+webview has its own process. (The first design, a sandboxed `<iframe>`, is
+kept below in the spike results only.)
+
+1. **A child webview made with wry directly**, not through Tauri
+   (`wry::WebViewBuilder … build_as_child(&main_window)`, the crate pinned to
+   the version Tauri uses). Tauri never sees it, so it gets no IPC script, no
+   invoke key and no message handler: there is nothing in it to call.
+   It is made with a non-persistent data store (`with_incognito(true)`).
+2. **A custom protocol on that webview only.** `zorvo-artifact` is registered
+   on the child, not on the main webview. A URL is
+   `zorvo-artifact://localhost/<sessionId>/<artifactId>/<version>`. The handler
+   checks the shape of all three parts, answers only GET, and reads the stored
+   copy from the data dir. Anything else is 404.
 3. **The page's own CSP**, sent by the handler as a response header, with
    `X-Content-Type-Options: nosniff`, `Cache-Control: no-store` and
    `Content-Type: text/html; charset=utf-8`:
@@ -69,25 +76,43 @@ runs with no sandbox at all.
    img-src data: blob:;
    media-src data: blob:;
    connect-src 'none'; frame-src 'none'; object-src 'none';
-   form-action 'none'; base-uri 'none'
+   form-action 'none'; base-uri 'none';
+   sandbox allow-scripts
    ```
 
-   No `'unsafe-eval'` unless the spike shows a library on the list needs it;
-   that is then a decision for the user, not the implementer.
-4. **One change to Zorvo's CSP**: add `frame-src zorvo-artifact:`. `script-src
-   'self'` and `connect-src` of the main webview do not change.
-5. **Navigation.** The window gets a navigation handler that allows only the
-   app's own origin and `zorvo-artifact://localhost/`. A page that sets
-   `location` to a website, or a link to one, goes nowhere. Links inside the
-   page (`#section`) work.
+   `sandbox allow-scripts` gives the top-level page an opaque origin, so
+   `localStorage` throws and two artifacts share nothing. No `'unsafe-eval'`.
+4. **Navigation.** The child's navigation handler allows only
+   `zorvo-artifact://localhost/`. It is the only barrier here (there is no
+   parent CSP over a top-level page), and the spike showed it refuses
+   `location`, a clicked link and a meta refresh. Links inside the page
+   (`#section`) work.
+5. **Zorvo's own CSP and `tauri.conf.json` do not change.**
+
+**Placing it.** The main webview draws the tab and leaves an empty box where
+the page goes. It measures that box and tells the backend, which moves the
+child webview: `artifact_view_show(sessionId, artifactId, version, x, y, width,
+height)`, `artifact_view_bounds(x, y, width, height)`, `artifact_view_hide`,
+`artifact_view_close`. The numbers are window points; the backend refuses
+anything not finite or outside the window. There is one child webview at a
+time, in the main window only. **Reload** closes it and makes a new one, which
+is also how a stuck page is ended; leaving the tab, the session, or closing
+the inspector closes it.
+
+**A native layer.** The child webview draws above the main webview's HTML, so
+nothing of Zorvo's can be drawn over the page. While a menu, a popover, a
+dialog or a toast would overlap the page's box, the child is hidden
+(`artifact_view_hide`) and the box shows the sheet's own fill; it comes back
+when the overlay closes. The viewer's own version menu, ⋯ menu, export panel
+and delete question all do this.
 
 **Room for comments later.** Comments on a page are a separate spec, after this
 one. They will need a small script of Zorvo's own added to each served page,
-which reports the selected text and the clicked element with `postMessage`.
-So the handler builds the body it serves in one function (today it returns the
-stored bytes unchanged), `script-src` in the page's CSP is the only directive
-that would change, and export always writes the stored bytes, never the served
-body.
+which reports the selected text and the clicked element through a message
+handler given to the child webview for that purpose alone (it carries text,
+never a command). So the handler builds the body it serves in one function
+(today it returns the stored bytes unchanged), and export always writes the
+stored bytes, never the served body.
 
 A page cannot open a window, download a file, show an `alert`, or keep anything
 between two openings.
@@ -137,9 +162,26 @@ What follows from them:
   real-app test of 1 is permanent.
 - Navigation URLs seen on a normal start: `tauri://localhost`, `about:blank`,
   `zorvo-artifact://localhost/…`.
-- Result 4 stops this design as written: a sandboxed frame cannot protect
-  Zorvo's interface from a page that loops. The frame must move out of the main
-  webview's process. **Sections 1 and 4 are on hold until the user chooses how.**
+- Result 4 stopped the frame design: a sandboxed frame cannot protect Zorvo's
+  interface from a page that loops. The user chose a separate webview inside
+  the window; the second spike below tested it.
+
+### Second spike: the child webview (2026-11-16)
+
+Same build and pages, with the page in a wry child webview and a ping from
+Rust to the main page every 500 ms.
+
+| Question | Result | Evidence |
+| --- | --- | --- |
+| IPC out of reach | **Pass** | `__TAURI_INTERNALS__`, `window.ipc` and `window.webkit` are all undefined in the child; there is no handler to post to. |
+| Navigation out refused | **Pass** | The handler was asked for each of the three ways and refused; the page was still there 3.5 s later. |
+| Libraries | **Pass** | As in the first spike, also with `sandbox allow-scripts` in the CSP. |
+| Storage | **Pass after a fix** | Without the `sandbox` directive the page's origin was `zorvo-artifact://localhost` and `localStorage` worked. With it the origin is `null` and it throws `SecurityError`. |
+| A page that never yields | **Pass** | The main page answered all 16 pings during 8 s of `while(true){}` in the child. Closing the child and opening another worked. |
+| Moving it | **Partly** | `set_bounds` succeeded and reported the new rectangle. **Not seen on screen**: the spike window was behind another window, so where it draws, how it follows a resize, the native layer over HTML, focus and scrolling are unverified until Task 8 checks them in a build in front. |
+
+Also learned: a window behind another has its page timers throttled, so a
+real-app test must not time anything with timers in the page.
 
 ## 2. Tools
 
@@ -231,7 +273,9 @@ Copy is sentence case. No keyboard shortcuts. Look follows the v2 surfaces and
 for these screens (section 10: `ArtifactsMain`, `ArtifactsGallery`,
 `ArtifactsInspector`, `ArtifactsStates`), with local copies in
 `2026-11-16-artifacts-artboards/`. They decide look and wording; this spec
-decides behaviour. The page inside the frame is a stand-in drawn as markup.
+decides behaviour. The page inside the viewer is a stand-in drawn as markup, and a board that
+shows a menu or a question over the page's box shows that box empty, as the
+app does (see "A native layer").
 
 ### Artifacts tab
 
@@ -243,7 +287,7 @@ Offered only while the session has an artifact, main window only.
   strip scrolls sideways; no tab is hidden or cut.
 - **List**: title, version, time. A click opens the viewer in the list's place,
   as the file viewer does. A session with one artifact opens straight on it.
-- **Viewer**: the frame fills the tab and the inspector widens like the
+- **Viewer**: the page's box fills the tab and the inspector widens like the
   Terminal tab. Its header has Back, the title, a version menu ("Version 3 of
   5"; an older version is marked as older), **Reload**, **Expand** / **Shrink**
   (the page takes the chat's place and comes back), **Export**, and a ⋯ menu
@@ -312,9 +356,11 @@ notice in plain words, never a path or an error from the backend.
   a new version does not change tabs, another session is never selected); the
   card; the gallery. The Tauri contract test covers the new commands and the
   `artifacts-changed` event.
-- **Real app**: with the existing harness, a page loads in the frame, a CDN
-  script runs, `fetch` is blocked, and the three IPC attempts of the spike
-  fail.
+- **Real app**: with the existing harness and the build in front, a page shows
+  in its box and follows a resize and Expand, a CDN script runs, `fetch` is
+  blocked, the IPC attempts of the spike find nothing to call, a looping page
+  leaves Zorvo usable and Reload ends it, and a menu over the box hides the
+  page. Nothing in it is timed by a timer in a page.
 
 ## 7. Order of work
 
@@ -328,6 +374,6 @@ notice in plain words, never a path or an error from the backend.
 
 ## 8. Documents that change
 
-`tauri.conf.json` (`frame-src`), the README's privacy section and CLAUDE.md
-(the artifact frame loads scripts and fonts from the listed hosts; the main
+`src-tauri/Cargo.toml` (wry as a direct dependency, pinned), the README's privacy section and CLAUDE.md
+(the artifact's own webview loads scripts and fonts from the listed hosts; the main
 webview still makes no request), `CHANGELOG.md` under `Unreleased`.
