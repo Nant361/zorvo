@@ -14,9 +14,10 @@ import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
 import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
 import { ArtifactGallery } from "./components/artifacts/ArtifactGallery";
+import { useArtifactComments, useArtifactCommentSweep } from "./hooks/useArtifactComments";
 import { useArtifacts } from "./hooks/useArtifacts";
 import { useArtifactOpening } from "./hooks/useArtifactOpening";
-import { galleryRows, newestVersion } from "./lib/artifacts";
+import { galleryRows, hasVersion, newestVersion, shownArtifactOf } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -747,6 +748,26 @@ export default function App() {
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
   // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
   const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
+  // The artifact page on screen, for its comments: the Artifacts tab's viewer shows it, expanded or not.
+  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact) : undefined;
+  const viewedVersion = inspector.viewedArtifact?.artifactId === shownArtifact?.id ? inspector.viewedArtifact?.version : null;
+  const shownVersion = shownArtifact ? (viewedVersion ?? newestVersion(shownArtifact)) : 0;
+  const shownPage =
+    activeSession && shownArtifact && hasVersion(shownArtifact, shownVersion)
+      ? { sessionId: activeSession.id, artifactId: shownArtifact.id, version: shownVersion }
+      : null;
+  // The review wiring is built further down; its `forget` reaches the comments through this ref.
+  const forgetReviewRef = useRef<((ids: readonly string[]) => void) | null>(null);
+  const forgetInMessage = useCallback((ids: readonly string[]) => forgetReviewRef.current?.(ids), []);
+  useArtifactComments({
+    sessionId: activeSession?.id,
+    comments: activeSession?.artifactComments,
+    update: updateArtifactComments,
+    shownPage,
+    forget: forgetInMessage,
+    onError: reportError,
+  });
+  useArtifactCommentSweep(sessions, artifacts.bySession, artifacts.readSessions, updateArtifactComments, forgetInMessage);
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -1298,6 +1319,7 @@ export default function App() {
     agentNameOf: (profileId) => agents.find((a) => a.id === profileId)?.name ?? profileId,
   });
   rearmReviewRef.current = review.rearm;
+  forgetReviewRef.current = review.forget;
 
   /** What a delegation to an agent starts with: the picks, and the agent's remembered model and effort. */
   const delegationChoicesFor = (agentId: string): AcpChoices =>
