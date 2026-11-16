@@ -148,6 +148,8 @@ pub fn is_allowed_navigation(url: &tauri::Url) -> bool;              // the URLs
 pub fn navigation_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R>;
 ```
 
+The body goes through `pub fn served_body(stored: Vec<u8>) -> Vec<u8>`, which returns it unchanged today (the spec's "Room for comments later"); a test `served_body_is_the_stored_page` pins that.
+
 `respond`: 200 with the page and headers `Content-Type: text/html; charset=utf-8`, `Content-Security-Policy: PAGE_CSP`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`; 404 with an empty body for a method other than GET, a URL that does not parse, or a version `version_path` does not give. `lib.rs` registers `SCHEME` with a handler that takes `ArtifactStore` from `try_state` (404 before setup has managed it).
 
 - [ ] **Step 1: Failing tests:** `serves_a_stored_version_with_its_headers` (all four headers, body equal); `the_page_csp_is_exactly` (asserts the full `PAGE_CSP` string, so a change to it is a visible diff); `refuses_post`, `refuses_a_bad_session_id`, `refuses_an_unlisted_version`, `refuses_another_host` → 404; `parse_url_ignores_the_query`; `navigation_allows_the_app_and_artifacts` and `navigation_refuses_websites` (`https://example.com`, `http://example.com`, `file:///etc/hosts`). Extend the existing test that reads `tauri.conf.json`'s CSP, or add one, asserting it contains `frame-src zorvo-artifact:` and still `script-src 'self'`.

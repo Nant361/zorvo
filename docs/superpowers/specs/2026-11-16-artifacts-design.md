@@ -81,6 +81,14 @@ runs with no sandbox at all.
    `location` to a website, or a link to one, goes nowhere. Links inside the
    page (`#section`) work.
 
+**Room for comments later.** Comments on a page are a separate spec, after this
+one. They will need a small script of Zorvo's own added to each served page,
+which reports the selected text and the clicked element with `postMessage`.
+So the handler builds the body it serves in one function (today it returns the
+stored bytes unchanged), `script-src` in the page's CSP is the only directive
+that would change, and export always writes the stored bytes, never the served
+body.
+
 A page cannot open a window, download a file, show an `alert`, or keep anything
 between two openings.
 
