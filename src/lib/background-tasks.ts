@@ -173,6 +173,48 @@ export function backgroundTasksOf(input: BackgroundTasksInput): BackgroundTask[]
   return [...sessionTasks, ...processTasks, ...toolTasks].sort((a, b) => a.startedAt - b.startedAt);
 }
 
+const TOOL_TASK_PREFIX = 'tool:';
+
+/** The tool call a tool row stands for, from its id (`tool:<session>:<tool>`). */
+function toolIdOf(task: BackgroundTask): string | undefined {
+  const prefix = `${TOOL_TASK_PREFIX}${task.sessionId}:`;
+  return task.id.startsWith(prefix) ? task.id.slice(prefix.length) : undefined;
+}
+
+/**
+ * The tool call a shell task's output comes from: a tool row's own, or for a process the newest
+ * command of its session that names the same work. A process nothing matches has none.
+ */
+export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessage[]): ToolExecution | undefined {
+  const tools = messages.flatMap((message) => message.tools ?? []);
+  const ownId = toolIdOf(task);
+  if (ownId !== undefined) return tools.find((tool) => tool.id === ownId);
+  const command = normalized(task.name);
+  return [...tools].reverse().find((tool) => {
+    if (tool.kind !== 'execute') return false;
+    const title = normalized(tool.command ?? tool.name);
+    return title !== '' && (title.includes(command) || command.includes(title));
+  });
+}
+
+/**
+ * The shell task a tab was opened for. A command first shows as its running tool call and then as
+ * its process, under another id, so a tab opened on the tool row follows it to the process.
+ */
+export function findShellTask(
+  tasks: readonly BackgroundTask[],
+  taskId: string,
+  transcripts: Readonly<Record<string, readonly ChatMessage[]>>,
+): BackgroundTask | undefined {
+  const shells = tasks.filter((task) => task.kind === 'shell');
+  const exact = shells.find((task) => task.id === taskId);
+  if (exact || !taskId.startsWith(TOOL_TASK_PREFIX)) return exact;
+  return shells.find((task) => {
+    const tool = task.pid === undefined ? undefined : shellToolFor(task, transcripts[task.sessionId] ?? []);
+    return tool !== undefined && `${TOOL_TASK_PREFIX}${task.sessionId}:${tool.id}` === taskId;
+  });
+}
+
 /** "45s", "2m 13s" or "1h 04m". */
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));

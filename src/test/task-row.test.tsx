@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TaskRow } from "../components/chat/TaskRow";
 import { MessageRow, type MessageRowProps } from "../components/chat/MessageRow";
-import { ToolCallList } from "../components/chat/ToolCallList";
 import type { SubagentTask, TaskStatus } from "../lib/task-view";
 import type { ChatMessage, ToolExecution } from "../types";
 
@@ -91,9 +90,12 @@ describe("a subagent in a reply", () => {
   });
 });
 
-describe("ToolCallList", () => {
-  it("leaves a subagent's own tools out of the list", () => {
-    render(<ToolCallList tools={[tool("r", { name: "Read notes.txt", kind: "read", locations: ["notes.txt"] }), tool("c1", { name: "Read child.txt", kind: "read", locations: ["child.txt"], parentId: "p" })]} defaultOpenDiffs={false} isTurnOver />);
+describe("a reply saved without parts", () => {
+  it("leaves a subagent's own tools out of the reply's list", () => {
+    const { parts: _parts, ...withoutParts } = reply;
+    renderMessage({ message: withoutParts });
+
+    fireEvent.click(screen.getByRole("button", { name: "Read a file" }));
 
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(screen.queryByText("child.txt")).toBeNull();

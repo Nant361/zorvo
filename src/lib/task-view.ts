@@ -79,3 +79,15 @@ export function secondLine(task: SubagentTask, agentName: string): string {
   const steps = task.stepCount === 1 ? '1 step' : `${task.stepCount} steps`;
   return task.agentType ? `${task.agentType} · ${steps}` : steps;
 }
+
+/** The subagent tool call a task tab is for, with the reply that holds it; undefined once a rewind removed it. */
+export function findTaskTool(
+  messages: readonly ChatMessage[],
+  toolId: string,
+): { tool: ToolExecution; message: ChatMessage } | undefined {
+  for (const message of messages) {
+    const tool = message.tools?.find((candidate) => candidate.id === toolId);
+    if (tool) return tool.steps === undefined ? undefined : { tool, message };
+  }
+  return undefined;
+}
