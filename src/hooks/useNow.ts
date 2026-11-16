@@ -1,18 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
-const MINUTE_MS = 60_000;
+const TICK_MS = 1000;
 
-/**
- * `Date.now()`, read again every `intervalMs` while `isRunning`, for words that say how long ago.
- * Stopped, it keeps its last value and runs no timer; started again, it reads the clock at once.
- */
-export function useNow(intervalMs: number = MINUTE_MS, isRunning = true): number {
+/** The current time, refreshed every second while `isActive`. */
+export function useNow(isActive: boolean): number {
   const [now, setNow] = useState(() => Date.now());
+  const [wasActive, setWasActive] = useState(isActive);
+  // Refreshed while rendering, so the first frame after it turns on is not stale.
+  if (isActive !== wasActive) {
+    setWasActive(isActive);
+    if (isActive) setNow(Date.now());
+  }
   useEffect(() => {
-    if (!isRunning) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    if (!isActive) return;
+    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(timer);
-  }, [intervalMs, isRunning]);
+  }, [isActive]);
   return now;
 }

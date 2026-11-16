@@ -7,6 +7,8 @@ import { MessageActionBar } from "../MessageActionBar";
 import { UserMessageBar } from "./UserMessageBar";
 import { AttachmentChips } from "../composer/AttachmentChips";
 import { ToolsPart } from "./ToolsPart";
+import { TaskRow } from "./TaskRow";
+import { isTaskTool, secondLine, shownTools, subagentTaskOf } from "../../lib/task-view";
 import { PlanUpdatedRow, ThinkingBlock } from "./ReplyExtras";
 import { VerificationBadge } from "../private/VerificationBadge";
 import type { ModelPrice } from "../../lib/private-credits";
@@ -47,6 +49,10 @@ export interface MessageRowProps {
   privateModelId?: string;
   /** That model's listed price, for a reply's credits. */
   privateModel?: ModelPrice | null;
+  /** Opens a subagent's task beside the chat; without it a task row is not a button. */
+  onOpenTask?: (messageId: string, toolId: string) => void;
+  /** The subagent whose task tab is on screen. */
+  openTaskId?: string;
 }
 
 /**
@@ -75,6 +81,8 @@ export const MessageRow = memo(function MessageRow({
   onOpenUrl,
   privateModelId,
   privateModel,
+  onOpenTask,
+  openTaskId,
 }: MessageRowProps) {
   const isUser = message.role === "user";
   const timeLabel = timeLabelOf(message);
@@ -111,9 +119,28 @@ export const MessageRow = memo(function MessageRow({
         <div className="space-y-4">
           {parts.map((part, index) => {
             if (part.kind === "text") return <MarkdownRenderer key={index} content={part.text} />;
-            const tools = part.toolIds.flatMap((id) => toolsById.get(id) ?? []);
-            if (tools.length === 0) return null;
-            return <ToolsPart key={index} tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />;
+            const listed = shownTools(part.toolIds.flatMap((id) => toolsById.get(id) ?? []));
+            if (listed.length === 0) return null;
+            // A subagent is one row that opens its task; its own steps are not the reply's.
+            const tasks = listed.filter(isTaskTool);
+            const tools = listed.filter((tool) => !isTaskTool(tool));
+            return (
+              <div key={index} className="flex flex-col gap-2">
+                {tools.length > 0 && <ToolsPart tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />}
+                {tasks.map((tool) => {
+                  const task = subagentTaskOf(tool, message, { isTurnOver: showActions });
+                  return (
+                    <TaskRow
+                      key={tool.id}
+                      task={task}
+                      secondLine={secondLine(task, agentName)}
+                      isOpen={openTaskId === tool.id}
+                      onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
+                    />
+                  );
+                })}
+              </div>
+            );
           })}
         </div>
       )}

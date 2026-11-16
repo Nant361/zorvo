@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNow } from "../../hooks/useNow";
 import { Bot, LoaderCircle, Terminal, Users, type LucideIcon } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
@@ -13,8 +14,6 @@ export interface BackgroundTasksMenuProps {
   onStopTask: (task: BackgroundTask) => Promise<boolean>;
 }
 
-const TICK_MS = 1000;
-
 const KIND_ICONS: Record<BackgroundTaskKind, LucideIcon> = {
   agent: Bot,
   shell: Terminal,
@@ -26,23 +25,6 @@ const STATUS_CLASSES: Record<BackgroundTask["status"], string> = {
   Running: "text-status-running",
   "Needs approval": "text-status-attention",
 };
-
-/** The current time, refreshed every second while `isActive`. */
-function useNow(isActive: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  const [wasActive, setWasActive] = useState(isActive);
-  // Refreshed while rendering, so the first frame after opening is not stale.
-  if (isActive !== wasActive) {
-    setWasActive(isActive);
-    if (isActive) setNow(Date.now());
-  }
-  useEffect(() => {
-    if (!isActive) return;
-    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(timer);
-  }, [isActive]);
-  return now;
-}
 
 /**
  * What runs in the background, as a top bar chip ("2 background tasks") that

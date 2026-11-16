@@ -16,6 +16,7 @@ import {
 import type { ToolExecution } from "../../types";
 import { countChanges } from "../../lib/diff-rows";
 import { formatLineCount, MINUS } from "../../lib/diff-stats";
+import { shownTools } from "../../lib/task-view";
 import { toolRow, toolStatusWord } from "../../lib/tool-summary";
 import { PathText } from "../ui/PathText";
 import { ToolDetails } from "./ToolDetails";
@@ -181,7 +182,7 @@ export const ToolCallList = memo(function ToolCallList({
 }) {
   return (
     <div>
-      {tools.map((tool) =>
+      {shownTools(tools).map((tool) =>
         tool.details?.length ? (
           <ToolCallRow key={tool.id} tool={tool} defaultOpenDiffs={defaultOpenDiffs} isTurnOver={isTurnOver} />
         ) : (
