@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ArtifactsPanel, type ArtifactsPanelProps } from "../components/artifacts/ArtifactsPanel";
 import { fakeTauriInvoke } from "./setup";
+import { formatShortTime } from "../lib/relative-time";
 import type { Artifact } from "../types";
 
 type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
@@ -98,6 +99,14 @@ describe("the viewer", () => {
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Version 1/ }));
     expect(props.onView).toHaveBeenCalledWith({ artifactId: REPORT.id, version: 1 });
     await waitFor(() => expect(calls("artifact_view_hide").at(-1)).toEqual({ hidden: false }));
+  });
+
+  it("dates each version in the short form, so its name is never cut", () => {
+    show(viewingReport);
+    fireEvent.click(screen.getByRole("button", { name: "Version 3 of 3" }));
+    const rows = within(screen.getByRole("menu", { name: "Versions" })).getAllByRole("menuitemradio");
+    expect(rows[0].textContent).toBe(`Version 3${formatShortTime(3_000)} · newest`);
+    expect(rows[2].textContent).toBe(`Version 1${formatShortTime(1_000)}`);
   });
 
   it("picking the newest version follows it again", () => {

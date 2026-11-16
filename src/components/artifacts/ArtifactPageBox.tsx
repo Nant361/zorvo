@@ -20,5 +20,11 @@ export function ArtifactPageBox({ target, title, isCovered, onError }: ArtifactP
   const boxRef = useRef<HTMLDivElement>(null);
   const isOverlaid = useBoxCovered(boxRef, true);
   useArtifactView(boxRef, target, isCovered || isOverlaid, onError);
-  return <div ref={boxRef} role="img" aria-label={title} data-artifact-box="" className="min-h-0 flex-1 bg-surface-2" />;
+  return (
+    // The page is a rectangle drawn above the sheet, so it ends where the sheet's rounded bottom corners
+    // begin (the panel radius): otherwise its square corners would cover them.
+    <div className="flex min-h-0 flex-1 flex-col bg-surface-2 pb-2.5">
+      <div ref={boxRef} role="img" aria-label={title} data-artifact-box="" className="min-h-0 flex-1" />
+    </div>
+  );
 }

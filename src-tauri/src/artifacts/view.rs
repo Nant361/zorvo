@@ -8,7 +8,7 @@
 //! There is one at a time, and it lives on the main thread.
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
@@ -26,9 +26,51 @@ pub struct ShownPage {
     pub artifact_id: String,
 }
 
+/// What decides whether the view is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Display {
+    /// The page has finished loading. Until then the view is not drawn: a new
+    /// webview is white, which flashes in a dark window before the page paints.
+    pub is_loaded: bool,
+    /// Something of Zorvo's is drawn where the page is.
+    pub is_hidden: bool,
+}
+
+pub fn is_visible(display: Display) -> bool {
+    display.is_loaded && !display.is_hidden
+}
+
+/// A page that has not said it loaded is shown anyway after this long, so one
+/// that never finishes loading is still seen (and can be reloaded).
+const SHOW_ANYWAY_AFTER: std::time::Duration = std::time::Duration::from_secs(3);
+
 thread_local! {
     /// The one child webview and what it shows. `wry::WebView` is not `Send`, so it stays here.
     static VIEW: RefCell<Option<(wry::WebView, ShownPage)>> = const { RefCell::new(None) };
+    static DISPLAY: Cell<Display> = const { Cell::new(Display { is_loaded: false, is_hidden: false }) };
+    /// Counts the views made, so a late "loaded" for an earlier view changes nothing.
+    static GENERATION: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Changes what decides the view's visibility and applies it. Main thread only.
+fn update_display(change: impl FnOnce(Display) -> Display) {
+    let display = change(DISPLAY.get());
+    DISPLAY.set(display);
+    VIEW.with(|slot| {
+        if let Some((view, _)) = slot.borrow().as_ref() {
+            let _ = view.set_visible(is_visible(display));
+        }
+    });
+}
+
+/// Marks the view of `generation` as loaded, if it is still the one shown. Main thread only.
+fn mark_loaded(generation: u64) {
+    if GENERATION.get() == generation {
+        update_display(|display| Display {
+            is_loaded: true,
+            ..display
+        });
+    }
 }
 
 /// Whether the view shows a page of `session_id` (and, when one is named, of that artifact).
@@ -125,12 +167,21 @@ pub fn show(
     app.run_on_main_thread(move || {
         // Ended first: a stuck page stops here, before its replacement exists.
         end_current();
+        let generation = GENERATION.get() + 1;
+        GENERATION.set(generation);
+        DISPLAY.set(Display::default());
         let built = handle
             .get_webview_window(MAIN_WINDOW)
             .ok_or(())
             .and_then(|window| {
                 wry::WebViewBuilder::new()
                     .with_incognito(true)
+                    .with_visible(false)
+                    .with_on_page_load_handler(move |event, _url| {
+                        if matches!(event, wry::PageLoadEvent::Finished) {
+                            mark_loaded(generation);
+                        }
+                    })
                     .with_bounds(rect(bounds))
                     .with_custom_protocol(SCHEME.to_string(), move |_id, request| {
                         respond(
@@ -146,6 +197,13 @@ pub fn show(
                     .map_err(|_| ())
             });
         let shown = built.map(|view| VIEW.with(|slot| *slot.borrow_mut() = Some((view, page))));
+        if shown.is_ok() {
+            let later = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(SHOW_ANYWAY_AFTER);
+                let _ = later.run_on_main_thread(move || mark_loaded(generation));
+            });
+        }
         let _ = sent.send(shown);
     })
     .map_err(|_| COULD_NOT_SHOW.to_string())?;
@@ -175,8 +233,11 @@ pub fn set_bounds(app: &AppHandle, bounds: Bounds) {
 /// Hides the page while something of Zorvo's must draw where it is: a native
 /// webview is above the main webview's HTML.
 pub fn set_hidden(app: &AppHandle, hidden: bool) {
-    with_view(app, move |view| {
-        let _ = view.set_visible(!hidden);
+    let _ = app.run_on_main_thread(move || {
+        update_display(|display| Display {
+            is_hidden: hidden,
+            ..display
+        });
     });
 }
 
@@ -277,6 +338,27 @@ mod tests {
         assert!(!is_showing(Some(&page), "s-1", Some("a-ffffffffffffffff")));
         assert!(!is_showing(Some(&page), "s-2", Some("a-0123456789abcdef")));
         assert!(!is_showing(None, "s-1", None));
+    }
+
+    #[test]
+    fn a_page_shows_once_it_has_loaded_and_nothing_covers_it() {
+        // Made invisible, so a dark window never flashes the webview's white before the page paints.
+        assert!(!is_visible(Display {
+            is_loaded: false,
+            is_hidden: false
+        }));
+        assert!(is_visible(Display {
+            is_loaded: true,
+            is_hidden: false
+        }));
+        assert!(!is_visible(Display {
+            is_loaded: true,
+            is_hidden: true
+        }));
+        assert!(!is_visible(Display {
+            is_loaded: false,
+            is_hidden: true
+        }));
     }
 
     #[test]

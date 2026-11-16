@@ -7,7 +7,7 @@ import { IconButton } from "../ui/IconButton";
 import { Popover, PopoverOption } from "../ui/Popover";
 import { RenameField } from "../ui/RenameField";
 import { hasVersion, newestVersion, versionLabel, type ViewedArtifact } from "../../lib/artifacts";
-import { formatRelativeTime } from "../../lib/relative-time";
+import { formatShortTime } from "../../lib/relative-time";
 import type { Artifact } from "../../types";
 import { ArtifactPageBox } from "./ArtifactPageBox";
 
@@ -87,7 +87,7 @@ export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, i
           onClose={() => setOpen(null)}
           label="Versions"
           align="end"
-          className="w-56"
+          className="w-64"
           trigger={
             <Chip label={label} aria-haspopup="menu" aria-expanded={open === "versions"} onClick={() => toggle("versions")} className="shrink-0 whitespace-nowrap">
               {label}
@@ -100,7 +100,7 @@ export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, i
               key={listed.n}
               isRadio
               selected={listed.n === shown}
-              trailing={listed.n === newest ? `${formatRelativeTime(listed.at)} · newest` : formatRelativeTime(listed.at)}
+              trailing={listed.n === newest ? `${formatShortTime(listed.at)} · newest` : formatShortTime(listed.at)}
               onSelect={() => {
                 setOpen(null);
                 onView({ artifactId: artifact.id, version: listed.n === newest ? null : listed.n });
