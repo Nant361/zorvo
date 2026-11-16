@@ -6,6 +6,8 @@ export interface PrivateSessionUsage {
   credits: number;
   estimated: boolean;
   calls: number;
+  /** The session these calls are counted for right now, when it is another one (a native fork's source). */
+  countedFor?: string;
 }
 
 /** A per-model row in Settings' "Used by N models" list. */
@@ -32,6 +34,9 @@ export function parsePrivateSessionUsage(value: unknown): PrivateSessionUsage | 
     credits: candidate.credits,
     estimated: candidate.estimated,
     calls: typeof candidate.calls === "number" && Number.isFinite(candidate.calls) ? candidate.calls : 0,
+    ...(typeof candidate.countedFor === "string" && candidate.countedFor !== ""
+      ? { countedFor: candidate.countedFor }
+      : {}),
   };
 }
 

@@ -969,8 +969,16 @@ impl PrivateMode {
         // Prices are only used to estimate a call billing has not priced, so an old list is
         // better than none: without one the call would be left out of the total.
         let models = self.known_models();
-        self.usage
-            .usage(&records, &models, key.as_deref(), self.billing.as_ref())
+        let usage = self
+            .usage
+            .usage(&records, &models, key.as_deref(), self.billing.as_ref());
+        PrivateSessionUsage {
+            counted_for: self
+                .proxy
+                .token_owner(session_id)
+                .filter(|owner| owner != session_id),
+            ..usage
+        }
     }
 
     /// The newest catalog this Mac has, however old: the one read in this run, else the saved

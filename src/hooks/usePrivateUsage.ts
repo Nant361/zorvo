@@ -49,8 +49,16 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
   deps.current = { sessions, updateSession };
   const bases = useRef(new Map<string, NonNullable<Session["privateUsage"]>>());
   const runs = useRef(new Map<string, number>());
+  const refreshRef = useRef<(sessionId: string, isOwnerRead?: boolean) => void>(() => {});
 
-  const refreshOne = useCallback((sessionId: string) => {
+  /**
+   * Reads the session's total. A native fork runs in its source's process on its source's proxy
+   * token, so the backend counts the fork's calls for the session that token names and says which
+   * (`countedFor`): that session's total is read too, or what the fork spent would be in no total
+   * until that session ran again. The backend names the owner, not the fork's ancestry here: a
+   * deleted fork in between, or a deleted source, would break that chain.
+   */
+  const refresh = useCallback((sessionId: string, isOwnerRead = false) => {
     const { sessions, updateSession } = deps.current;
     const session = sessions.find((candidate) => candidate.id === sessionId);
     if (!session?.privateMode) return;
@@ -61,6 +69,8 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
         if (runs.current.get(sessionId) !== run) return;
         const usage = parsePrivateSessionUsage(answer);
         if (!usage) return;
+        // One step only: the owner's own answer names nobody.
+        if (!isOwnerRead && usage.countedFor && usage.countedFor !== sessionId) refreshRef.current(usage.countedFor, true);
         const known = bases.current.get(sessionId);
         const base = known ?? readBase(sessionId) ?? session.privateUsage ?? { credits: 0, estimated: false };
         if (!known) {
@@ -77,25 +87,7 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
       });
   }, []);
 
-  /**
-   * Reads the session's total and that of every session it was forked from. A native fork runs in
-   * its source's process on its source's proxy token, so the backend counts the fork's calls on
-   * the source: without this the source's total would stay as it was at its own last turn, and
-   * what the fork spent would be in no total until the source ran again.
-   */
-  const refresh = useCallback(
-    (sessionId: string) => {
-      const seen = new Set<string>();
-      let current: string | null | undefined = sessionId;
-      while (current && !seen.has(current)) {
-        seen.add(current);
-        refreshOne(current);
-        const id: string = current;
-        current = deps.current.sessions.find((candidate) => candidate.id === id)?.forkedFrom;
-      }
-    },
-    [refreshOne],
-  );
+  refreshRef.current = refresh;
 
-  return { refresh };
+  return { refresh: useCallback((sessionId: string) => refreshRef.current(sessionId), []) };
 }

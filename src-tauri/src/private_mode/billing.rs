@@ -55,6 +55,11 @@ pub struct PrivateSessionUsage {
     pub credits: f64,
     pub estimated: bool,
     pub calls: u32,
+    /// The session this one's calls are counted for right now, when that is another one: a
+    /// native fork spends on a token made for its source. The UI reads that session's total
+    /// too, so the fork's spending is in a total at once. Set by the service, not here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counted_for: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -167,6 +172,7 @@ impl UsageTracker {
             credits,
             estimated,
             calls,
+            counted_for: None,
         }
     }
 

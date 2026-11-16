@@ -67,17 +67,18 @@ describe("usePrivateUsage", () => {
     await waitFor(() => expect(second).toHaveBeenLastCalledWith("s-1", { credits: 30, estimated: false }));
   });
 
-  it("reads the source's total too when a fork's turn ends, since a native fork spends on its source's token", async () => {
-    // The backend counts a shared token's calls on the session the token was made for.
+  it("reads the total of the session the backend counts a fork's calls for", async () => {
+    // A native fork spends on its source's token; the fork in between was deleted, so only the
+    // backend still knows whose token it is.
     const spy = vi.spyOn(tauriInternals(), "invoke").mockImplementation((_cmd, args) =>
       Promise.resolve(
         args?.sessionId === "s-1"
           ? { credits: 50, estimated: false, calls: 0 }
-          : { credits: 0, estimated: false, calls: 0 },
+          : { credits: 0, estimated: false, calls: 0, countedFor: "s-1" },
       ),
     );
     const updateSession = vi.fn();
-    const fork: Session = { ...session(), id: "s-fork", forkedFrom: "s-1" };
+    const fork: Session = { ...session(), id: "s-fork", forkedFrom: "s-deleted" };
     const sessions = [session(), fork];
     const { result } = renderHook(() => usePrivateUsage({ sessions, updateSession }));
 
