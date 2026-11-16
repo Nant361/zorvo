@@ -82,6 +82,7 @@ import { usePrivateVerification } from "./hooks/usePrivateVerification";
 import { lowBalanceNote, privateErrorText } from "./lib/private-credits";
 import { useAgentProfiles, useSuggestedFolders } from "./hooks/useDiscovery";
 import { useAutoInstall } from "./hooks/useAutoInstall";
+import { usedAgentIds } from "./lib/agent-catalog";
 import { useDraftInstall } from "./hooks/useDraftInstall";
 import { useWorkspaceSelection } from "./hooks/useWorkspaceSelection";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding";
@@ -277,8 +278,12 @@ export default function App() {
   const isActiveRunning = activeSession?.status === "running";
   // Only the agents in use are offered: the defaults and installed ones.
   const agentsInUse = agents.filter((agent) => isInUse(agent, state.settings));
-  // After an update of Zorvo, the npm packages of the agents in use are installed without a click.
-  useAutoInstall({ agentsInUse, isReady: isLoaded && areAgentsLoaded && state.settings.onboardingCompleted });
+  // After an update of Zorvo, the npm packages of the agents you have used are installed without a click.
+  useAutoInstall({
+    agentsInUse,
+    usedIds: usedAgentIds(state.settings, state.sessions),
+    isReady: isLoaded && areAgentsLoaded && state.settings.onboardingCompleted,
+  });
   // A saved session of a removed agent stays readable; once it stops, its composer offers to add the agent again.
   const activeAgentRemoved = removedAgentNameFor(activeSession, agents, state.settings);
   // Hidden, not unmounted: a look at either must not cost the message being written.

@@ -1,4 +1,4 @@
-import type { AgentProfile, CatalogAgent, CatalogStatus, InstallStep, Settings, UnavailableAgent, UnavailableReason } from '../types';
+import type { AgentProfile, CatalogAgent, CatalogStatus, InstallStep, Session, Settings, UnavailableAgent, UnavailableReason } from '../types';
 import { describePlan } from './install-plan';
 import type { InstallStatus } from './agent-installs';
 
@@ -239,14 +239,29 @@ export function availableLine(agent: CatalogAgent, plan: readonly InstallStep[] 
 }
 
 /**
- * The agents in use that Zorvo installs by itself when it opens: npm-package agents whose
- * only missing part is that package. One that also needs Node.js or another program was
- * not ready before either, and keeps its Install button.
+ * The agents you have used: one with a session (archived ones count), your default agent,
+ * and one Zorvo has seen signed in. An agent that is only in use by default, or was put in
+ * use because its package was found on this Mac, is not among them.
  */
-export function autoInstallTargets(agentsInUse: readonly AgentProfile[]): string[] {
+export function usedAgentIds(
+  settings: Pick<Settings, 'defaultAgentId' | 'signedInAgents'>,
+  sessions: readonly Pick<Session, 'profileId'>[],
+): ReadonlySet<string> {
+  const ids = [...sessions.map((session) => session.profileId), ...(settings.signedInAgents ?? []), settings.defaultAgentId];
+  return new Set(ids.filter((id): id is string => typeof id === 'string'));
+}
+
+/**
+ * The agents in use that Zorvo installs by itself when it opens: npm-package agents you have
+ * used (`usedIds`) whose only missing part is that package. One that also needs Node.js or
+ * another program was not ready before either, and one you never used was never picked;
+ * both keep their Install button.
+ */
+export function autoInstallTargets(agentsInUse: readonly AgentProfile[], usedIds: ReadonlySet<string>): string[] {
   return agentsInUse
     .filter(
       (agent) =>
+        usedIds.has(agent.id) &&
         agent.distribution === 'npx' &&
         agent.availability === 'not_installed' &&
         agent.install_plan?.length === 1 &&

@@ -143,8 +143,10 @@ not be cancelled.
 A hook mounted by `App` (main window only), `useAutoInstall`, runs once per app
 run when the catalog has loaded:
 
-- It takes the agents in use whose status is `not_installed` and whose plan is
-  exactly one npm-agent step. An agent that also needs a runtime or a
+- It takes the agents in use that the user has used (a session, the default
+  agent, or seen signed in; decided after review, so an agent that is only in
+  use by default is never downloaded without a click) whose status is
+  `not_installed` and whose plan is exactly one npm-agent step. An agent that also needs a runtime or a
   prerequisite was not ready before this change either and keeps its Install
   button. The selection is a pure function in `lib/agent-catalog.ts`.
 - It installs them one at a time with `startInstall`, the Install button's own

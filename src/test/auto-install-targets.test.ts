@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { autoInstallTargets } from "../lib/agent-catalog";
+import { autoInstallTargets, usedAgentIds } from "../lib/agent-catalog";
 import { makeProfile } from "./fixtures/agents";
 import type { AgentProfile, InstallStep } from "../types";
 
@@ -16,9 +16,12 @@ function npxAgent(id: string, overrides: Partial<AgentProfile> = {}): AgentProfi
   });
 }
 
+/** Every agent counts as used, for the tests about the other rules. */
+const all = (agents: readonly AgentProfile[]) => autoInstallTargets(agents, usedAgentIds({ defaultAgentId: null }, agents.map((agent) => ({ profileId: agent.id }))));
+
 describe("autoInstallTargets", () => {
   it("takes an npx agent whose only missing part is its own package", () => {
-    expect(autoInstallTargets([npxAgent("qwen-code")])).toEqual(["qwen-code"]);
+    expect(all([npxAgent("qwen-code")])).toEqual(["qwen-code"]);
   });
 
   it("leaves out an agent that also needs a runtime or a prerequisite", () => {
@@ -30,7 +33,7 @@ describe("autoInstallTargets", () => {
       npxAgent("no-plan", { install_plan: null }),
       npxAgent("empty-plan", { install_plan: [] }),
     ];
-    expect(autoInstallTargets(agents)).toEqual([]);
+    expect(all(agents)).toEqual([]);
   });
 
   it("leaves out an agent that is ready, and binary and uvx agents", () => {
@@ -40,10 +43,18 @@ describe("autoInstallTargets", () => {
       npxAgent("uvx", { distribution: "uvx" }),
       npxAgent("unknown", { distribution: null }),
     ];
-    expect(autoInstallTargets(agents)).toEqual([]);
+    expect(all(agents)).toEqual([]);
   });
 
   it("keeps the order it was given", () => {
-    expect(autoInstallTargets([npxAgent("b"), npxAgent("ready", { availability: "ready" }), npxAgent("a")])).toEqual(["b", "a"]);
+    expect(all([npxAgent("b"), npxAgent("ready", { availability: "ready" }), npxAgent("a")])).toEqual(["b", "a"]);
+  });
+
+  it("leaves out an agent in use that you have never used", () => {
+    const agents = [npxAgent("claude-acp"), npxAgent("codex-acp"), npxAgent("qwen-code"), npxAgent("gemini")];
+    const used = usedAgentIds({ defaultAgentId: "codex-acp", signedInAgents: ["qwen-code"] }, [{ profileId: "claude-acp" }]);
+
+    expect(autoInstallTargets(agents, used)).toEqual(["claude-acp", "codex-acp", "qwen-code"]);
+    expect(autoInstallTargets(agents, usedAgentIds({ defaultAgentId: null }, []))).toEqual([]);
   });
 });

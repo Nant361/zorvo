@@ -34,6 +34,13 @@ describe("enabled agents", () => {
     expect(isInUse(gemini, next)).toBe(true);
   });
 
+  it("does not enable an npm-package agent for a global package, which Zorvo does not run", () => {
+    const codex = makeProfile({ id: "codex-acp", name: "Codex", distribution: "npx", version: "1.0.0", installed_on_system: true });
+    const settings = { ...BASE, enabledAgents: ["claude-acp"], agentVersions: { "claude-acp": "1.0.0" } };
+
+    expect(withAutoEnabled(settings, [codex])).toBe(settings);
+  });
+
   it("does not re-enable an agent the user removed", () => {
     const settings = { ...BASE, enabledAgents: ["claude-acp"], removedAgents: ["gemini"] };
 

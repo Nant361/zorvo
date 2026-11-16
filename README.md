@@ -381,9 +381,10 @@ before it edits files or runs commands. Pick another mode in the composer.
 
   No agent, runtime or Zorvo update downloads until you click **Install**,
   **Update** or **Update & restart**, with one exception: when Zorvo opens, an
-  agent you already use whose npm package is not in Zorvo's folder yet is
-  installed without a click, once (this is how agents from before this version
-  move over). Runtime and binary agent downloads are checked against a SHA-256
+  agent you have used (it has a session, is your default, or was seen signed
+  in) whose npm package is not in Zorvo's folder yet is installed without a
+  click, once (this is how agents from before this version move over). An agent
+  you never used is not downloaded until you click **Install**. Runtime and binary agent downloads are checked against a SHA-256
   hash pinned in advance; an agent that comes as an npm package is installed by
   `npm` at the exact version the registry pins, with npm's own integrity check. A Zorvo update must come from this
   repository's releases and is installed only if its signature matches the key
