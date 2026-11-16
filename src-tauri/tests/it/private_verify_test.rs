@@ -146,9 +146,13 @@ fn address_of(key: &SigningKey) -> String {
 }
 
 fn sign(text: &str) -> String {
+    sign_with(&signing_key(), text)
+}
+
+fn sign_with(key: &SigningKey, text: &str) -> String {
     let prefixed = format!("\x19Ethereum Signed Message:\n{}{}", text.len(), text);
     let digest = Keccak256::digest(prefixed.as_bytes());
-    let (signature, recovery) = signing_key().sign_prehash_recoverable(&digest);
+    let (signature, recovery) = key.sign_prehash_recoverable(&digest);
     let mut bytes = signature.to_bytes().to_vec();
     bytes.push(recovery.to_byte());
     hex(&bytes)
@@ -522,6 +526,73 @@ fn the_report_is_fetched_once_per_model() {
             .count(),
         1
     );
+}
+
+#[test]
+fn a_new_signer_is_checked_against_a_fresh_report_and_a_failed_read_keeps_the_old_one() {
+    // NEAR AI restarts the model's TEE while Zorvo runs: answers are now signed by a new key.
+    let old_key = signing_key();
+    let new_key = SigningKey::from_slice(&[7u8; 32]).expect("a valid scalar");
+    let (old_address, new_address) = (address_of(&old_key), address_of(&new_key));
+    let old_signature = sign_with(&old_key, &provider_text());
+    let new_signature = sign_with(&new_key, &provider_text());
+    let report_reads = Arc::new(Mutex::new(0u32));
+    let reads = Arc::clone(&report_reads);
+    let fake = FakeServer::start(move |request, stream| {
+        if request.path.starts_with("/v1/signature/") {
+            let is_new = request.path.contains("chat-new");
+            respond(
+                stream,
+                "200 OK",
+                &json!({
+                    "text": provider_text(),
+                    "signature": if is_new { &new_signature } else { &old_signature },
+                    "signing_address": if is_new { &new_address } else { &old_address },
+                    "signature_kind": "provider_tee"
+                })
+                .to_string(),
+            );
+            return;
+        }
+        let read = {
+            let mut reads = reads.lock().expect("report reads");
+            *reads += 1;
+            *reads
+        };
+        // The first read lists the old signer, the second fails, later ones list the new one.
+        if read == 2 {
+            respond(stream, "500 Internal Server Error", "{}");
+            return;
+        }
+        let listed = if read == 1 {
+            &old_address
+        } else {
+            &new_address
+        };
+        respond(
+            stream,
+            "200 OK",
+            &json!({
+                "model_attestations": [{
+                    "signing_address": listed,
+                    "request_nonce": nonce_of(&request.query)
+                }]
+            })
+            .to_string(),
+        );
+    });
+    let verifier = PrivateVerifier::with_retry(&fake.base(), Duration::ZERO);
+    let first = verifier.verify(vec![record("chat-old-1")], KEY);
+    assert_eq!(first[0].state, VerificationState::Verified);
+
+    // The re-read fails: the new signer waits, and the old report still vouches for its signer.
+    let during = verifier.verify(vec![record("chat-new-1"), record("chat-old-2")], KEY);
+    assert_eq!(during[0].state, VerificationState::Checking);
+    assert_eq!(during[1].state, VerificationState::Verified);
+
+    let after = verifier.verify(vec![record("chat-new-1")], KEY);
+    assert_eq!(after[0].state, VerificationState::Verified);
+    assert_eq!(*report_reads.lock().expect("report reads"), 3);
 }
 
 #[test]

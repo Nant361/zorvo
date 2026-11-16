@@ -171,10 +171,14 @@ impl PrivateMode {
             return Err(PrivateError::HasOwnCredits);
         }
         // The capped sessions' keys belong to the device's workspace; once the
-        // state file is reset nothing would name them, so they go first.
+        // state file is reset nothing would name them, so they go first. This is
+        // a clean-up: a key that cannot be deleted must not stop the device from
+        // being forgotten half-way, with some keys gone and the state untouched.
         for cap in self.load_state().session_caps {
             if let Ok(account) = self.session_account(&cap.app_session_id) {
-                self.store.delete(&account)?;
+                if self.store.delete(&account).is_err() {
+                    eprintln!("private mode: a capped session's key could not be deleted from the Keychain");
+                }
             }
         }
         for account in [NEARAI_KEY, DEVICE_SECRET_NEXT, DEVICE_SECRET] {

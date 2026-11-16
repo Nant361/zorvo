@@ -155,29 +155,45 @@ function hasRoomFor(ctx: FulfilmentContext, reserve: number): boolean {
 /**
  * Asks PingPay about checkouts whose webhook may never come: `created` top-ups older than 2 minutes
  * and `expired` ones, whose payment may still arrive late, for 7 days after they were created. At
- * most `POLLS_PER_TICK` sessions a tick (3 by default): checkouts that can still be paid first, so a
- * pile of abandoned ones cannot hold up a payment whose webhook was lost, then the ones due longest;
- * each is then not asked again until its `next_poll_at` (`nextPoll`). Stops starting sessions once the next poll's
- * two fetches would pass the tick's budget, leaving the rest due for the next tick.
+ * most `POLLS_PER_TICK` sessions a tick (3 by default), each then not asked again until its
+ * `next_poll_at` (`nextPoll`). Neither kind may shut the other out: a checkout that can still be
+ * paid is due every minute, so three open ones would take every place and a late payment on an
+ * expired one would never be found, while a pile of abandoned ones must not hold up a payment whose
+ * webhook was lost. So one place a tick goes to the longest-due of the checkouts that can no longer
+ * be paid, and the others to the payable ones; places one kind leaves free go to the other. Stops
+ * starting sessions once the next poll's two fetches would pass the tick's budget, leaving the rest
+ * due for the next tick.
  */
 async function pollSessions(ctx: FulfilmentContext, now: number): Promise<void> {
-  const due = ctx.sql
-    .exec<{ id: string; ping_session_id: string }>(
-      `SELECT id, ping_session_id FROM topups
-       WHERE ping_session_id IS NOT NULL
-         AND status IN ('created', 'expired')
-         AND created_at > ?
-         AND (status = 'expired' OR created_at < ?)
-         AND COALESCE(next_poll_at, 0) <= ?
-       ORDER BY (status = 'created' AND COALESCE(reserved_until, 0) > ?) DESC, COALESCE(next_poll_at, 0), id
-       LIMIT ?`,
-      now - POLL_FOR_MS,
-      now - POLL_CREATED_AFTER_MS,
-      now,
-      now,
-      ctx.config().pollsPerTick,
-    )
-    .toArray();
+  type Due = { id: string; ping_session_id: string };
+  const dueSessions = (payable: boolean, limit: number): Due[] =>
+    limit <= 0
+      ? []
+      : ctx.sql
+          .exec<Due>(
+            `SELECT id, ping_session_id FROM topups
+             WHERE ping_session_id IS NOT NULL
+               AND status IN ('created', 'expired')
+               AND created_at > ?
+               AND (status = 'expired' OR created_at < ?)
+               AND COALESCE(next_poll_at, 0) <= ?
+               AND (status = 'created' AND COALESCE(reserved_until, 0) > ?) = ?
+             ORDER BY COALESCE(next_poll_at, 0), id
+             LIMIT ?`,
+            now - POLL_FOR_MS,
+            now - POLL_CREATED_AFTER_MS,
+            now,
+            now,
+            payable ? 1 : 0,
+            limit,
+          )
+          .toArray();
+  const limit = ctx.config().pollsPerTick;
+  const unpayable = dueSessions(false, limit);
+  const kept = limit > 1 ? unpayable.slice(0, 1) : [];
+  const payable = dueSessions(true, limit - kept.length);
+  // The kept one goes first, so a tick whose budget ends early still reaches it.
+  const due = [...kept, ...payable, ...unpayable.slice(kept.length)].slice(0, limit);
   for (const topup of due) {
     if (!hasRoomFor(ctx, POLL_RESERVE)) break;
     let outcome: SessionOutcome | "failed" = "failed";

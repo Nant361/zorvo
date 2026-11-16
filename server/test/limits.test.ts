@@ -122,8 +122,10 @@ describe("top-ups from one address", () => {
     const ip = "198.51.100.85";
     const topUp = (secret: string, from = ip) =>
       call("/v1/topups", { method: "POST", ip: from, secret, body: JSON.stringify({ packageUsd: 5 }) });
+    // No stock snapshot here, so each is refused for stock before PingPay is asked: a refused
+    // top-up still counts, and the test makes no call out.
     for (let d = 0; d < 20; d += 1) {
-      expect((await topUp(await registered())).status).not.toBe(429);
+      expect((await topUp(await registered())).status).toBe(409);
     }
 
     const fresh = await registered();
@@ -131,7 +133,7 @@ describe("top-ups from one address", () => {
 
     expect(limited.status).toBe(429);
     expect(await limited.json()).toEqual({ error: "rate_limited" });
-    expect((await topUp(await registered(), "198.51.100.86")).status).not.toBe(429);
+    expect((await topUp(await registered(), "198.51.100.86")).status).toBe(409);
   });
 });
 

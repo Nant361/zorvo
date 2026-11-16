@@ -33,6 +33,11 @@ export type ActionResult = { ok: true } | { ok: false; text: string };
 /** `code` is the backend's plain error code (`not_found`: no checkout address is kept, as after a restart). */
 export type OpenCheckoutResult = { ok: true } | { ok: false; code: string };
 
+export interface MarkCreditsOutOptions {
+  onBalanceLagging?: () => void;
+  isOwnKey?: boolean;
+}
+
 export interface PrivateCredits {
   /** null until the first read answers. */
   status: PrivateStatus | null;
@@ -70,12 +75,7 @@ export interface PrivateCredits {
    * `isOwnKey` says the session pays with the user's own NEAR AI key: its mark does not depend on
    * Zorvo's balance or key, and stays until that key changes or the user comes back to the window.
    */
-  markCreditsOut: (
-    sessionId: string,
-    reason: CreditsOutReason,
-    onBalanceLagging?: () => void,
-    isOwnKey?: boolean,
-  ) => void;
+  markCreditsOut: (sessionId: string, reason: CreditsOutReason, options?: MarkCreditsOutOptions) => void;
   /** Clears a mark after the user chooses another payment source. */
   clearCreditsOut: (sessionId: string) => void;
   /** True once this Mac holds credits and the user has not yet been asked to save the recovery code. */
@@ -146,27 +146,28 @@ function giveUpAt(topup: PendingTopup, startedAt: number): number {
 }
 
 /** What the status says about the user's own NEAR AI key, as one comparable string. */
-function ownKeyStamp(status: PrivateStatus | null): string {
-  const key = status?.ownKey;
+function ownKeyStamp(status: PrivateStatus): string {
+  const key = status.ownKey;
   return `${key?.saved === true}|${key?.addedAt ?? ''}|${key?.noCredits === true}`;
 }
 
 /**
  * `ownKeyMarks` holds the sessions marked on the user's own key, each with that key's stamp when it
  * was marked. Zorvo's balance and device key say nothing about such a refusal, so its mark stays
- * until the own key itself changes (added again, checked again, removed).
+ * until the own key itself changes (added again, checked again, removed). A null stamp is a mark
+ * made before any status was read: nothing is known to compare it with yet, so it stays.
  */
 function pruneCreditsOut(
   marks: CreditsOut,
   status: PrivateStatus,
-  ownKeyMarks: ReadonlyMap<string, string>,
+  ownKeyMarks: ReadonlyMap<string, string | null>,
 ): CreditsOut {
   const hasCredits = freshCreditsOf(status) > 0;
   const keyFixed = status.keyReady && status.keyError === null;
   const kept = Object.entries(marks).filter(([sessionId, reason]) => {
     if (reason === 'session_limit') return true;
     const stampWhenMarked = ownKeyMarks.get(sessionId);
-    if (stampWhenMarked !== undefined) return stampWhenMarked === ownKeyStamp(status);
+    if (stampWhenMarked !== undefined) return stampWhenMarked === null || stampWhenMarked === ownKeyStamp(status);
     return !(reason === 'empty' ? hasCredits : keyFixed);
   });
   return kept.length === Object.keys(marks).length ? marks : Object.fromEntries(kept);
@@ -208,7 +209,7 @@ export function usePrivateCredits(): PrivateCredits {
   const isResumed = useRef(false);
   const statusRef = useRef<PrivateStatus | null>(null);
   // Sessions marked on the user's own key: see `pruneCreditsOut`.
-  const ownKeyMarks = useRef<Map<string, string>>(new Map());
+  const ownKeyMarks = useRef<Map<string, string | null>>(new Map());
   // A promo redeem is on its way: it will make the pending top-up, so no buy or second redeem may start.
   const isRedeeming = useRef(false);
 
@@ -230,6 +231,10 @@ export function usePrivateCredits(): PrivateCredits {
       statusRef.current = next;
       setStatus(next);
       setCreditsOut((prev) => pruneCreditsOut(prev, next, ownKeyMarks.current));
+      // A mark made before the first status takes this one as its stamp: the first read is not a change.
+      ownKeyMarks.current.forEach((stamp, sessionId) => {
+        if (stamp === null) ownKeyMarks.current.set(sessionId, ownKeyStamp(next));
+      });
       // After a restart, or after polling gave up, a top-up the backend still holds is followed from where it was left.
       if (!isResumed.current) {
         isResumed.current = true;
@@ -564,8 +569,9 @@ export function usePrivateCredits(): PrivateCredits {
   }, []);
 
   const markCreditsOut = useCallback(
-    (sessionId: string, reason: CreditsOutReason, onBalanceLagging?: () => void, isOwnKey = false) => {
-      if (isOwnKey && reason !== 'session_limit') ownKeyMarks.current.set(sessionId, ownKeyStamp(statusRef.current));
+    (sessionId: string, reason: CreditsOutReason, { onBalanceLagging, isOwnKey = false }: MarkCreditsOutOptions = {}) => {
+      const known = statusRef.current;
+      if (isOwnKey && reason !== 'session_limit') ownKeyMarks.current.set(sessionId, known ? ownKeyStamp(known) : null);
       else ownKeyMarks.current.delete(sessionId);
       setCreditsOut((prev) => (prev[sessionId] === reason ? prev : { ...prev, [sessionId]: reason }));
       // The user's own key was refused: Zorvo's balance has no say, so nothing is read or compared.

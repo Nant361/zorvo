@@ -341,6 +341,18 @@ impl PrivateVerifier {
         if let Some(answer) = local.get(model) {
             return answer.clone();
         }
+        self.fetch_attestation(model, key, local)
+    }
+
+    /// Reads the model's report from NEAR AI, whatever the cache holds. The answer is noted for
+    /// this `verify` call, and a good one replaces the cached report; a failed read leaves the
+    /// cached one in place, since it still vouches for the signers it lists.
+    fn fetch_attestation(
+        &self,
+        model: &str,
+        key: &str,
+        local: &mut HashMap<String, Result<Attestation, ()>>,
+    ) -> Result<Attestation, ()> {
         let answer = (|| {
             let nonce = random_nonce().ok_or(())?;
             let (status, body) = self.get(
@@ -365,18 +377,20 @@ impl PrivateVerifier {
     }
 
     /// The model's report read again, once per `verify` call, when the one just used came from
-    /// this app run's cache. `None` when this call already fetched it, so it cannot be newer.
+    /// this app run's cache. `None` when this call already fetched it, so it cannot be newer; an
+    /// error when this call already tried and failed, so every record it leaves open is asked
+    /// about again later, not only the first.
     fn refetched_attestation(
         &self,
         model: &str,
         key: &str,
         local: &mut HashMap<String, Result<Attestation, ()>>,
     ) -> Result<Option<Attestation>, ()> {
-        if local.contains_key(model) {
-            return Ok(None);
+        match local.get(model) {
+            Some(Ok(_)) => Ok(None),
+            Some(Err(())) => Err(()),
+            None => self.fetch_attestation(model, key, local).map(Some),
         }
-        lock(&self.attestations).remove(model);
-        self.attestation(model, key, local).map(Some)
     }
 
     fn get(

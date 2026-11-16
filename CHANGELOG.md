@@ -24,7 +24,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 - **Errors raising a cap or starting a private session say what failed**, not that a checkout could not open.
 - **The secret check no longer holds up other sessions.** A message nothing scans goes out at once, and a draft cannot be sent twice while its first message is checked.
 - **Private model names show on older macOS**: a pattern Safari 13 cannot read is gone.
-- **The credits server limits top-ups per address** and asks about checkouts that can still be paid first, so unpaid checkouts cannot hold the stock or delay a real payment.
+- **The credits server limits top-ups per address** and shares each round of payment checks between open and expired checkouts, so unpaid checkouts cannot hold the stock, and neither kind can delay a real payment on the other.
 
 ## [0.12.0] - 2026-11-14
 

@@ -63,7 +63,10 @@ export function usePrivateWiring({
     isPrivateLaunch: draft.isOn || Boolean(activeSession?.privateMode),
     /** A balance read that already shows credits clears the panel at once: say why the message came back. */
     onCreditsOut: (sessionId: string, reason: CreditsOutReason, isOwnKey = false) =>
-      credits.markCreditsOut(sessionId, reason, () => setNotice(CREDITS_MAY_BE_UPDATING, 'warning'), isOwnKey),
+      credits.markCreditsOut(sessionId, reason, {
+        onBalanceLagging: () => setNotice(CREDITS_MAY_BE_UPDATING, 'warning'),
+        isOwnKey,
+      }),
     /** The popout's Send waits too; one that raced the refusal is not sent into a refusal again. */
     refusesSend: (sessionId: string): boolean => {
       const reason = credits.creditsOut[sessionId];

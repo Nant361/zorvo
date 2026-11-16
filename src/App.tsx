@@ -1226,8 +1226,6 @@ export default function App() {
   const canStartSession = Boolean(activeWorkspacePath && newSessionAgent);
   const isComposerDisabled =
     isCreatingWorktree ||
-    // A draft's message is still being checked for secrets: a second Send would start a second session.
-    (isNewSessionDraft && secretGuard.isCheckingDraft) ||
     (!isActiveRunning && ((!isDraftAgentReady && !draftNeedsInstall) || (!isResumable && !canStartSession)));
   const review = useReviewWiring({
     session: activeSession,
@@ -1487,7 +1485,10 @@ export default function App() {
   const isSendWaiting = compare.isCompare
     ? !canUseWorktree
     : draftNeedsInstall || draftNeedsSignIn || privateDraft.blocksSend || creditsOutReason !== undefined;
-  const isSendBlocked = isSendWaiting || review.blocksSend || delegationBlock !== undefined;
+  // A draft's message is still being checked for secrets: a second Send would start a second session.
+  // Only Send waits; disabling the box would take the focus away from what the user types next.
+  const isCheckingDraftSecrets = isNewSessionDraft && secretGuard.isCheckingDraft;
+  const isSendBlocked = isSendWaiting || isCheckingDraftSecrets || review.blocksSend || delegationBlock !== undefined;
   const privateModelId = activeSession?.privateMode?.modelId ?? privateDraft.privateMode?.modelId;
   const privateModel = privateCredits.models?.find((model) => model.id === privateModelId);
   const privateSessionCap = activeSession?.privateMode?.sessionCap;

@@ -15,7 +15,7 @@ use url::{Host, Url};
 use super::client::ModelPrice;
 use super::launch::NEAR_AI_BASE_URL;
 use super::proxy::ProxyRecord;
-use super::{PrivateError, CREDITS_PER_USD_COST as CREDITS_PER_USD};
+use super::{PrivateError, CREDITS_PER_USD_COST};
 
 /// `/v1/billing/costs` takes at most this many ids in one call.
 pub const MAX_COST_IDS: usize = 100;
@@ -198,7 +198,7 @@ impl UsageTracker {
         lock(&self.cache).insert(
             id.to_string(),
             CachedCost {
-                credits: cost_nano_usd as f64 / 1e9 * CREDITS_PER_USD,
+                credits: cost_nano_usd as f64 / 1e9 * CREDITS_PER_USD_COST,
                 estimated: false,
                 attempts: MAX_COST_ASKS,
                 settled: true,
@@ -245,7 +245,7 @@ fn token_credits(record: &ProxyRecord, model: &ModelPrice) -> f64 {
             (usage.prompt_tokens as f64 * model.input_per_m
                 + usage.completion_tokens as f64 * model.output_per_m)
                 / 1e6
-                * CREDITS_PER_USD
+                * CREDITS_PER_USD_COST
         })
         .unwrap_or(0.0)
 }
