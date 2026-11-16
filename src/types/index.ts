@@ -385,6 +385,31 @@ export interface ChatMessage {
   delegationTask?: { agentName: string; agentId?: string };
   /** A question the agent asked the user (ACP elicitation); never holds the answer. */
   elicitation?: ElicitationCard;
+  /** Marks where the agent showed a page: Zorvo's own row, with the version shown then. */
+  artifactCard?: ArtifactCard;
+}
+
+/** One stored copy of an artifact's page. */
+export interface ArtifactVersion {
+  n: number;
+  /** When it was shown, in ms. */
+  at: number;
+  bytes: number;
+}
+
+/** A page an agent made, with its versions (oldest first). The backend owns it. */
+export interface Artifact {
+  id: string;
+  title: string;
+  /** The agent's file, which is the artifact's identity within its session. */
+  sourcePath: string;
+  versions: ArtifactVersion[];
+}
+
+export interface ArtifactCard {
+  artifactId: string;
+  title: string;
+  version: number;
 }
 
 export interface ElicitationChoice {

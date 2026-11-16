@@ -1,0 +1,151 @@
+import type { Artifact, ArtifactCard, ArtifactVersion, Session } from '../types';
+import { isArchived } from './session-helpers';
+
+/** What `artifact_show` answers: the artifact as it now is and the version to display. */
+export interface ShownArtifact {
+  artifact: Artifact;
+  version: number;
+  isNewArtifact: boolean;
+  isNewVersion: boolean;
+}
+
+/** The artifact the viewer shows; a `version` of null follows the newest. */
+export interface ViewedArtifact {
+  artifactId: string;
+  version: number | null;
+}
+
+const ARTIFACT_ID = /^a-[0-9a-f]{16}$/;
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+export function isArtifactId(value: unknown): value is string {
+  return typeof value === 'string' && ARTIFACT_ID.test(value);
+}
+
+function toVersion(value: unknown): ArtifactVersion | null {
+  if (!isObject(value)) return null;
+  const { n, at, bytes } = value;
+  if (!isCount(n) || n === 0 || !isCount(at) || !isCount(bytes)) return null;
+  return { n, at, bytes };
+}
+
+function toArtifact(value: unknown): Artifact | null {
+  if (!isObject(value)) return null;
+  const { id, title, sourcePath, versions } = value;
+  if (!isArtifactId(id) || typeof title !== 'string' || typeof sourcePath !== 'string' || !Array.isArray(versions)) return null;
+  const parsed = versions.map(toVersion);
+  if (parsed.length === 0 || parsed.some((version) => version === null)) return null;
+  return { id, title, sourcePath, versions: parsed as ArtifactVersion[] };
+}
+
+/** The artifacts in a backend answer; anything that does not fit is dropped. */
+export function parseArtifacts(value: unknown): Artifact[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const artifact = toArtifact(entry);
+    return artifact === null ? [] : [artifact];
+  });
+}
+
+export function parseShown(value: unknown): ShownArtifact | null {
+  if (!isObject(value)) return null;
+  const artifact = toArtifact(value.artifact);
+  const { version, isNewArtifact, isNewVersion } = value;
+  if (artifact === null || typeof isNewArtifact !== 'boolean' || typeof isNewVersion !== 'boolean') return null;
+  if (!isCount(version) || !hasVersion(artifact, version)) return null;
+  return { artifact, version, isNewArtifact, isNewVersion };
+}
+
+/** A card saved in a transcript, or null when it does not fit. */
+export function parseArtifactCard(value: unknown): ArtifactCard | null {
+  if (!isObject(value)) return null;
+  const { artifactId, title, version } = value;
+  if (!isArtifactId(artifactId) || typeof title !== 'string' || !isCount(version) || version === 0) return null;
+  return { artifactId, title, version };
+}
+
+export function newestVersion(artifact: Artifact): number {
+  return artifact.versions.reduce((newest, version) => Math.max(newest, version.n), 0);
+}
+
+function newestAt(artifact: Artifact): number {
+  return artifact.versions.reduce((newest, version) => Math.max(newest, version.at), 0);
+}
+
+/** "Version 3 of 5": the second number is the newest, since older versions are pruned. */
+export function versionLabel(version: number, artifact: Artifact): string {
+  return `Version ${version} of ${newestVersion(artifact)}`;
+}
+
+export function hasVersion(artifact: Artifact | undefined, version: number): boolean {
+  return artifact !== undefined && artifact.versions.some((listed) => listed.n === version);
+}
+
+/** What the agent is told after a page was shown. */
+export function shownResultText(shown: ShownArtifact): string {
+  return JSON.stringify({ title: shown.artifact.title, version: shown.version, shown: true });
+}
+
+/**
+ * What the window does when an agent shows a page: a new artifact in the
+ * session on screen shows the tab, a new version replaces the page only while
+ * the viewer follows that artifact's newest, and nothing else moves.
+ */
+export function openingFor(input: {
+  isOnScreen: boolean;
+  shown: ShownArtifact;
+  viewed: ViewedArtifact | null;
+}): 'show-tab' | 'replace' | 'none' {
+  if (!input.isOnScreen) return 'none';
+  if (input.shown.isNewArtifact) return 'show-tab';
+  const followsNewest = input.viewed?.artifactId === input.shown.artifact.id && input.viewed.version === null;
+  return followsNewest ? 'replace' : 'none';
+}
+
+export function cardState(card: ArtifactCard, artifacts: readonly Artifact[]): 'open' | 'removed' {
+  return artifacts.some((artifact) => artifact.id === card.artifactId) ? 'open' : 'removed';
+}
+
+/** One line of the gallery: an artifact with the session it belongs to. */
+export interface GalleryRow {
+  sessionId: string;
+  sessionName: string;
+  agentName: string;
+  isArchived: boolean;
+  artifact: Artifact;
+  /** When its newest version was shown. */
+  at: number;
+}
+
+/** Every listed session's artifacts, the most recently changed first. */
+export function galleryRows(
+  sessions: readonly Session[],
+  bySession: ReadonlyMap<string, readonly Artifact[]>,
+  agentNameOf: (profileId: string) => string,
+): GalleryRow[] {
+  return sessions
+    .flatMap((session) =>
+      (bySession.get(session.id) ?? []).map((artifact) => ({
+        sessionId: session.id,
+        sessionName: session.name,
+        agentName: agentNameOf(session.profileId),
+        isArchived: isArchived(session),
+        artifact,
+        at: newestAt(artifact),
+      })),
+    )
+    .sort((a, b) => b.at - a.at);
+}
+
+export function filterGallery(rows: readonly GalleryRow[], query: string): GalleryRow[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return [...rows];
+  return rows.filter((row) => row.artifact.title.toLowerCase().includes(needle));
+}
