@@ -50,7 +50,7 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
   const bases = useRef(new Map<string, NonNullable<Session["privateUsage"]>>());
   const runs = useRef(new Map<string, number>());
 
-  const refresh = useCallback((sessionId: string) => {
+  const refreshOne = useCallback((sessionId: string) => {
     const { sessions, updateSession } = deps.current;
     const session = sessions.find((candidate) => candidate.id === sessionId);
     if (!session?.privateMode) return;
@@ -76,6 +76,26 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
         // A failed read leaves the last saved total in place; the next turn end asks again.
       });
   }, []);
+
+  /**
+   * Reads the session's total and that of every session it was forked from. A native fork runs in
+   * its source's process on its source's proxy token, so the backend counts the fork's calls on
+   * the source: without this the source's total would stay as it was at its own last turn, and
+   * what the fork spent would be in no total until the source ran again.
+   */
+  const refresh = useCallback(
+    (sessionId: string) => {
+      const seen = new Set<string>();
+      let current: string | null | undefined = sessionId;
+      while (current && !seen.has(current)) {
+        seen.add(current);
+        refreshOne(current);
+        const id: string = current;
+        current = deps.current.sessions.find((candidate) => candidate.id === id)?.forkedFrom;
+      }
+    },
+    [refreshOne],
+  );
 
   return { refresh };
 }
