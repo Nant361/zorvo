@@ -240,7 +240,9 @@ At the call, the chat gets a row Zorvo makes: the title, "Version 2" and
 
 ### Gallery
 
-**Artifacts** in the sidebar opens a page in the chat's place: every artifact
+**Artifacts** in the sidebar, a row under New session and above the filter,
+with the number of artifacts and shown while any session has one, opens a page
+in the chat's place: every artifact
 of every session, newest first, with a search by title. A row shows the title,
 the session's name, the agent and the time; an archived session's artifacts are
 marked. A click selects the session and opens its tab. It is derived from
@@ -250,8 +252,10 @@ marked. A click selects the session and opens its tab. It is derived from
 
 `artifact_export(sessionId, artifactId, version)` opens the macOS save dialog
 from Rust and writes the stored copy, byte for byte, to the place chosen. The
-webview sends no destination. The viewer says in one sentence that an exported
-page runs in a browser without Zorvo's limits.
+webview sends no destination. **Export** first opens a small panel under its
+button: "Export this page", then "Saves Version 3 as one HTML file. An exported
+page opens in a browser without Zorvo's limits.", with **Cancel** and **Choose
+where to save**; only the second calls the command.
 
 ### Other states
 
