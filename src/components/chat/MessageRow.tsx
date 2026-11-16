@@ -17,6 +17,8 @@ import { SELECTABLE_TEXT_ATTRIBUTE } from "../../hooks/useChatSelection";
 function timeLabelOf(message: ChatMessage): string | undefined {
   return message.hasKnownTime === false ? undefined : formatRelativeTime(message.timestamp);
 }
+import { ArtifactCardRow } from "./ArtifactCardRow";
+import type { ArtifactCard } from "../../types";
 
 export interface MessageRowProps {
   message: ChatMessage;
@@ -39,6 +41,10 @@ export interface MessageRowProps {
   onChooseOption?: (cardId: string, optionId: string, answers?: Record<string, string>) => void;
   onAnswerElicitation?: (key: string, answer: ElicitationAnswer) => void;
   onReopenElicitationUrl?: (key: string) => void;
+  /** The ids of the session's artifacts: a card whose artifact is not among them reads Removed. Absent where they are unknown. */
+  artifactIds?: ReadonlySet<string>;
+  /** Shows an artifact card's version in the Artifacts tab. */
+  onOpenArtifact?: (card: ArtifactCard) => void;
 }
 
 /**
@@ -64,6 +70,8 @@ export const MessageRow = memo(function MessageRow({
   onChooseOption,
   onAnswerElicitation,
   onReopenElicitationUrl,
+  artifactIds,
+  onOpenArtifact,
 }: MessageRowProps) {
   const isUser = message.role === "user";
   const timeLabel = timeLabelOf(message);
@@ -132,6 +140,15 @@ export const MessageRow = memo(function MessageRow({
           agentProfileId={agentProfileId}
           onAnswer={onAnswerElicitation}
           onReopen={onReopenElicitationUrl}
+        />
+      )}
+
+      {/* Where the agent showed a page */}
+      {message.artifactCard && (
+        <ArtifactCardRow
+          card={message.artifactCard}
+          state={artifactIds === undefined || artifactIds.has(message.artifactCard.artifactId) ? "open" : "removed"}
+          onOpen={onOpenArtifact}
         />
       )}
     </div>

@@ -10,7 +10,7 @@ import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useChatSelection } from "../hooks/useChatSelection";
 import { replyQuote } from "../lib/reply-quote";
 import { isAwaitingUser } from "../lib/acp-elicitation";
-import type { ChatMessage, ElicitationAnswer } from "../types";
+import type { ArtifactCard, ChatMessage, ElicitationAnswer } from "../types";
 
 export type { ChatMessage, ToolExecution } from "../types";
 
@@ -31,7 +31,7 @@ const COPIED_FEEDBACK_MS = 2000;
 function hasSomethingToShow(msg: ChatMessage): boolean {
   if (msg.role === "user") return true;
   return Boolean(
-    msg.content.trim() || msg.thinking || msg.plan?.length || msg.tools?.length || msg.actionCard || msg.elicitation,
+    msg.content.trim() || msg.thinking || msg.plan?.length || msg.tools?.length || msg.actionCard || msg.elicitation || msg.artifactCard,
   );
 }
 
@@ -52,6 +52,10 @@ export interface ChatCanvasProps {
   onAnswerElicitation?: (key: string, answer: ElicitationAnswer) => void;
   /** Opens an agent's page again after the user opened it once. */
   onReopenElicitationUrl?: (key: string) => void;
+  /** The ids of the session's artifacts, so a card of a deleted one reads Removed. */
+  artifactIds?: ReadonlySet<string>;
+  /** Shows an artifact card's version in the Artifacts tab; absent in a popout. */
+  onOpenArtifact?: (card: ArtifactCard) => void;
   /** True while the agent works on its turn: shown under the last message. */
   isWorking?: boolean;
   /** Failed requests in a row the agent reported while it works. */
@@ -86,6 +90,8 @@ export function ChatCanvas({
   onChooseOption,
   onAnswerElicitation,
   onReopenElicitationUrl,
+  artifactIds,
+  onOpenArtifact,
   isWorking = false,
   failures,
   onStop,
@@ -156,6 +162,8 @@ export function ChatCanvas({
   const onChooseOptionRef = useLatest(onChooseOption);
   const onAnswerElicitationRef = useLatest(onAnswerElicitation);
   const onReopenElicitationUrlRef = useLatest(onReopenElicitationUrl);
+  const onOpenArtifactRef = useLatest(onOpenArtifact);
+  const handleOpenArtifact = useCallback((card: ArtifactCard) => onOpenArtifactRef.current?.(card), [onOpenArtifactRef]);
 
   const handleCopyMessage = useCallback((id: string, content: string) => {
     if (navigator?.clipboard?.writeText) {
@@ -243,6 +251,8 @@ export function ChatCanvas({
           onChooseOption={onChooseOption ? handleChooseOption : undefined}
           onAnswerElicitation={onAnswerElicitation ? handleAnswerElicitation : undefined}
           onReopenElicitationUrl={onReopenElicitationUrl ? handleReopenElicitationUrl : undefined}
+          artifactIds={artifactIds}
+          onOpenArtifact={onOpenArtifact ? handleOpenArtifact : undefined}
         />
       ))}
       {delegationStatus}

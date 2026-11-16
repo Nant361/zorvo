@@ -15,6 +15,7 @@ import { FilesPanel } from "./components/FilesPanel";
 import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
 import { useArtifacts } from "./hooks/useArtifacts";
 import { useArtifactOpening } from "./hooks/useArtifactOpening";
+import { newestVersion } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -146,7 +147,7 @@ import {
   type AgentOptions,
   type ProbedOptions,
 } from "./lib/acp-draft";
-import type { AgentProfile, ReviewComment, Session, SessionWorktree, Settings } from "./types";
+import type { AgentProfile, ArtifactCard, ReviewComment, Session, SessionWorktree, Settings } from "./types";
 import { replyBlockedReason } from "./lib/reply-quote";
 
 const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folder chip by the message box.";
@@ -576,6 +577,14 @@ export default function App() {
     showTab: () => inspector.show("artifacts"),
     view: inspector.viewArtifact,
   });
+  const artifactIds = useMemo(() => new Set(sessionArtifacts.map((artifact) => artifact.id)), [sessionArtifacts]);
+  /** A chat card's Open: the version it marks, in the Artifacts tab (the newest is followed, not pinned). */
+  const openArtifactCard = (card: ArtifactCard) => {
+    const artifact = sessionArtifacts.find((candidate) => candidate.id === card.artifactId);
+    if (!artifact) return;
+    inspector.viewArtifact({ artifactId: card.artifactId, version: card.version === newestVersion(artifact) ? null : card.version });
+    inspector.show("artifacts");
+  };
   // Memoized: the stats object only changes when they are read again.
   const fileMarkers = useMemo(() => markersOf(inspector.headStats, inspector.filesPrefix), [inspector.headStats, inspector.filesPrefix]);
   // A tab that no longer applies (another folder, a draft) does not show.
@@ -1512,6 +1521,8 @@ export default function App() {
                       onChooseOption={(cardId, optionId, answers) => chooseOption(activeSessionId, cardId, optionId, answers)}
                       onAnswerElicitation={(key, answer) => acp.answerElicitation(activeSessionId, key, answer)}
                       onReopenElicitationUrl={(key) => acp.reopenElicitationUrl(activeSessionId, key)}
+                      artifactIds={artifactIds}
+                      onOpenArtifact={openArtifactCard}
                       isWorking={isSessionBusy(activeSessionId) && !isAwaitingUser(currentMessages)}
                       failures={acp.failuresOf(activeSessionId)}
                       onStop={() => handleInterrupt(activeSessionId)}
