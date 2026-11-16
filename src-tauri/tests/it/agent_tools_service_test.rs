@@ -178,7 +178,7 @@ fn list_and_initialize_are_answered_without_an_event() {
     client.send(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
     assert_eq!(
         client.read()["result"]["tools"].as_array().unwrap().len(),
-        5
+        7
     );
     client.send(json!({"jsonrpc":"2.0","id":3,"method":"prompts/list"}));
     assert_eq!(client.read()["error"]["code"], -32601);

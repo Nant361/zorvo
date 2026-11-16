@@ -114,7 +114,7 @@ fn text(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn without_a_tool_it_lists_the_five_tools_and_needs_no_socket() {
+fn without_a_tool_it_lists_the_seven_tools_and_needs_no_socket() {
     let output = command(&[]).output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     let listed = text(&output.stdout);
@@ -124,6 +124,8 @@ fn without_a_tool_it_lists_the_five_tools_and_needs_no_socket() {
         "start_session",
         "read_session",
         "stop_session",
+        "show_artifact",
+        "artifact_guide",
     ] {
         assert!(listed.contains(tool), "{tool} is listed: {listed}");
     }

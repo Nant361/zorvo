@@ -107,6 +107,7 @@ fn example_arguments(tool: &str) -> &'static str {
         "delegate" => r#"'{"agent":"<id>","task":"<what to do>"}'"#,
         "start_session" => r#"'{"agent":"<id>","brief":"<everything the new session must know>"}'"#,
         "read_session" | "stop_session" => r#"'{"handle":"<handle>"}'"#,
+        "show_artifact" => r#"'{"path":"<file.html>","title":"<a short name>"}'"#,
         _ => "",
     }
 }
@@ -211,5 +212,7 @@ mod tests {
             assert!(text.contains(tool), "{tool}");
         }
         assert!(text.contains("\"$ZORVO_TOOLS\" tools delegate"));
+        assert!(text
+            .contains(r#"tools show_artifact '{"path":"<file.html>","title":"<a short name>"}'"#));
     }
 }
