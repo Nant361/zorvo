@@ -190,6 +190,23 @@ it the process was gone within 13 s, the main page kept answering pings, and a
 new page opened. On a macOS where the selector is missing the page is only
 hidden, as before.
 
+**Seen on screen (2026-11-16)**, in a review build with its own identifier and
+seeded pages: the page draws exactly in its box (markers in the page's four
+corners sat on the box's corners); it follows a window resize and Expand /
+Shrink; it scrolls; keyboard focus goes into a field of the page and back to
+the composer; the version menu, the ⋯ menu and the export panel hide it and it
+returns; it is not drawn over Settings or the gallery and returns after them; a
+looping page left Zorvo usable, and going back to the list ended its process.
+Three faults were found and fixed: a new webview flashed white in a dark window
+before the page painted (the view is now made invisible and shown when the page
+has loaded, or after 3 s); the page's square corners covered the sheet's
+rounded bottom corners (the box now ends a panel radius above the sheet's
+edge); and the version menu cut "Version 2" short beside a long date (short
+dates, a wider menu). Not seen: a 2× / 1× display change, the inspector's own
+resize handle (the drag did not take), and a toast over the page. A page's own
+state (a typed field, a scroll position) is lost on Expand and Shrink, since
+each makes a new view.
+
 Also learned: a window behind another has its page timers throttled, so a
 real-app test must not time anything with timers in the page.
 
