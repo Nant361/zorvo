@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::env_resolver::find_binary_in_path_str;
-use crate::installer::npm_bin::recorded_program;
+use crate::installer::npm_bin::{package_name, recorded_program};
 use crate::installer::plan::{InstalledTools, PlannedStep};
 use crate::installer::prerequisites::{prerequisites_for, Prerequisite};
 use crate::installer::runtimes::{RuntimeKind, MIN_USER_NODE_MAJOR};
@@ -97,14 +97,6 @@ fn is_system_tool(path: &Path) -> bool {
             .is_ok_and(|real| is_system_tool_path(&real.to_string_lossy()))
 }
 
-/// `@scope/name@1.2.3` -> `@scope/name`; `name@1` -> `name`.
-fn package_name(package: &str) -> &str {
-    match package.rfind('@') {
-        Some(at) if at > 0 => &package[..at],
-        _ => package,
-    }
-}
-
 fn basename(cmd: &str) -> &str {
     cmd.rsplit('/').next().unwrap_or(cmd)
 }
@@ -136,7 +128,8 @@ enum Program {
     /// Neither the user's runtime nor Zorvo's can run it. Holds the user's
     /// own tool when it was found but cannot be used (`npx` with too old a Node).
     NeedsRuntime(Option<String>),
-    /// A binary agent with no copy on `PATH` or from Zorvo.
+    /// A binary agent with no copy on `PATH` or from Zorvo, or an npx agent
+    /// whose package Zorvo has not installed.
     NotInstalled,
 }
 
@@ -310,7 +303,8 @@ fn resolve<'e>(entry: &'e RegistryEntry, tools: &SystemTools) -> Resolution<'e> 
 
 /// What an install of `entry` would do, in order: Zorvo's pinned runtime when
 /// the agent depends on it and it is not installed yet, the missing
-/// prerequisites, then the agent's own archive. Empty when the agent is ready.
+/// prerequisites, then the agent's own archive or npm package. Empty when the
+/// agent is ready.
 pub fn planned_steps(entry: &RegistryEntry, tools: &SystemTools) -> Vec<PlannedStep> {
     steps_for(entry, &resolve(entry, tools), tools)
 }

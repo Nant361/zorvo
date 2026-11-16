@@ -56,8 +56,11 @@ export function useAutoInstall({ agentsInUse, isReady }: AutoInstallOptions): vo
     };
   }, [isReady, agentsRef]);
 
-  // An agent that came into use since the last pick gets its turn.
+  // An agent that came into use since the last pick gets its turn. The ids as one string:
+  // `agentsInUse` is a new list on every render of `App`, and this must run only when the
+  // agents to install change.
+  const targetIds = autoInstallTargets(agentsInUse).join('\n');
   useEffect(() => {
     advanceRef.current();
-  }, [agentsInUse]);
+  }, [targetIds]);
 }

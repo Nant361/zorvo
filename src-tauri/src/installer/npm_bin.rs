@@ -47,13 +47,19 @@ fn file_names_in(dir: &Path) -> Vec<String> {
     names
 }
 
+/// The package's name without its version:
+/// `@scope/name@1.2.3` -> `@scope/name`; `name@1` -> `name`.
+pub fn package_name(spec: &str) -> &str {
+    match spec.rfind('@') {
+        Some(at) if at > 0 => &spec[..at],
+        _ => spec,
+    }
+}
+
 /// The package's name without its scope and version:
 /// `qwen-code` for `@qwen-code/qwen-code@0.27.0`.
 pub fn unscoped_name(spec: &str) -> &str {
-    let name = match spec.rfind('@') {
-        Some(at) if at > 0 => &spec[..at],
-        _ => spec,
-    };
+    let name = package_name(spec);
     name.rsplit('/').next().unwrap_or(name)
 }
 

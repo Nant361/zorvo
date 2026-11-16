@@ -1,7 +1,7 @@
 # Installing npx agents into Zorvo's own folder
 
 Date: 2026-11-16
-Status: design, awaiting review
+Status: implemented in zakyirsyaad/zorvo#228
 
 ## Problem
 
@@ -236,5 +236,9 @@ Frontend:
 - `src-tauri/src/registry/resolve.rs`: the npx branch of `resolve` and
   `steps_for`; `npx_program` goes.
 - `src/hooks/useAutoInstall.ts` (new), `src/lib/agent-catalog.ts`, `src/App.tsx`.
-- `src/lib/install-plan.ts`: the new step's kind and wording.
+- `src-tauri/src/registry/schema.rs`: an npx entry's version must be one plain name, since it now
+  names the install dir.
+
+The step is shown with the existing `agent` kind and the `npm` phase, so
+`src/lib/install-plan.ts` needed no change.
 - `README.md`, `CLAUDE.md`, `CHANGELOG.md`.

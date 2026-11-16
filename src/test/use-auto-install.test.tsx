@@ -8,10 +8,14 @@ const store = vi.hoisted(() => ({
   statuses: new Map<string, string>(),
   subscribers: new Set<() => void>(),
   started: [] as string[],
+  lookups: 0,
 }));
 
 vi.mock("../lib/agent-installs", () => ({
-  installEntryOf: (id: string) => ({ status: store.statuses.get(id) ?? "idle" }),
+  installEntryOf: (id: string) => {
+    store.lookups += 1;
+    return { status: store.statuses.get(id) ?? "idle" };
+  },
   subscribeToInstalls: (onChange: () => void) => {
     store.subscribers.add(onChange);
     return () => store.subscribers.delete(onChange);
@@ -38,6 +42,7 @@ beforeEach(() => {
   store.statuses.clear();
   store.subscribers.clear();
   store.started.length = 0;
+  store.lookups = 0;
 });
 
 describe("useAutoInstall", () => {
@@ -136,6 +141,18 @@ describe("useAutoInstall", () => {
     settle("a", "failed");
 
     expect(store.started).toEqual(["a"]);
+  });
+
+  it("does not look again when a render gives the same agents in a new list", () => {
+    const { rerender } = renderHook((props: { agents: AgentProfile[] }) => useAutoInstall({ agentsInUse: props.agents, isReady: true }), {
+      initialProps: { agents: [npxAgent("a")] },
+    });
+    const lookups = store.lookups;
+
+    // `App` builds the list again on every render.
+    rerender({ agents: [npxAgent("a")] });
+
+    expect(store.lookups).toBe(lookups);
   });
 
   it("starts nothing while it is not ready, whatever comes into use", () => {

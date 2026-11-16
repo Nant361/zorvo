@@ -53,7 +53,7 @@ impl InstalledTools {
             })
             .collect();
 
-        let agents = installed_agents(tools);
+        let (agents, agent_bins) = installed_agents(tools);
 
         Self {
             user_node_major,
@@ -61,17 +61,22 @@ impl InstalledTools {
             uv: installed_runtime(tools, RuntimeKind::Uv, manifest, platform),
             pinned_node_installed: pinned(RuntimeKind::Node),
             pinned_uv_installed: pinned(RuntimeKind::Uv),
-            agent_bins: recorded_bins(&agents),
             agents,
+            agent_bins,
             prereq_bins,
             manifest: Some(manifest.clone()),
         }
     }
 }
 
-/// Every `tools/agents/<id>/<version>` dir that holds an install record.
-fn installed_agents(tools: &ToolsDir) -> BTreeMap<(String, String), PathBuf> {
-    let mut found = BTreeMap::new();
+type AgentKey = (String, String);
+
+/// Every `tools/agents/<id>/<version>` dir that holds an install record, and
+/// the program that record names for the installs that name one. Each record
+/// is read once.
+fn installed_agents(tools: &ToolsDir) -> (BTreeMap<AgentKey, PathBuf>, BTreeMap<AgentKey, String>) {
+    let mut dirs = BTreeMap::new();
+    let mut bins = BTreeMap::new();
     for id_dir in subdirs(&tools.root().join("agents")) {
         let Some(id) = id_dir
             .file_name()
@@ -88,22 +93,17 @@ fn installed_agents(tools: &ToolsDir) -> BTreeMap<(String, String), PathBuf> {
             else {
                 continue;
             };
-            if read_record(&version_dir).is_some() {
-                found.insert((id.clone(), version), version_dir);
+            let Some(record) = read_record(&version_dir) else {
+                continue;
+            };
+            let key = (id.clone(), version);
+            if let Some(bin) = record.bin {
+                bins.insert(key.clone(), bin);
             }
+            dirs.insert(key, version_dir);
         }
     }
-    found
-}
-
-/// The program each install's record names, for the installs that name one.
-fn recorded_bins(
-    agents: &BTreeMap<(String, String), PathBuf>,
-) -> BTreeMap<(String, String), String> {
-    agents
-        .iter()
-        .filter_map(|(key, dir)| Some((key.clone(), read_record(dir)?.bin?)))
-        .collect()
+    (dirs, bins)
 }
 
 fn subdirs(dir: &std::path::Path) -> Vec<PathBuf> {

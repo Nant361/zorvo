@@ -958,6 +958,37 @@ fn an_npm_agent_already_installed_is_skipped() {
 }
 
 #[test]
+fn two_installs_of_one_npm_agent_at_once_run_npm_once() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let counter = d.join("runs.txt");
+    let env = npm_env(
+        &d,
+        &[
+            ("FAKE_BINS", "fake"),
+            ("FAKE_SLEEP", "1"),
+            ("FAKE_COUNTER", counter.to_str().unwrap()),
+        ],
+    );
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+
+    // Two jobs whose plans hold the same agent: the second waits for the
+    // first, then finds the install and skips.
+    let results = thread::scope(|s| {
+        let jobs = ["first", "second"]
+            .map(|job| s.spawn(|| install.run(job, &steps, &env, Some(24), &no_progress)));
+        jobs.map(|job| job.join().unwrap())
+    });
+
+    assert_eq!(results, [Ok(()), Ok(())]);
+    assert_eq!(fs::read_to_string(counter).unwrap().lines().count(), 1);
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(staging_is_empty(&d));
+}
+
+#[test]
 fn an_npm_agent_without_a_program_to_pick_installs_nothing() {
     let server = Server::start(vec![]);
     let d = data_dir();
