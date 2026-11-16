@@ -56,6 +56,17 @@ describe("the gallery", () => {
     expect(screen.queryByRole("list", { name: "Artifacts" })).toBeNull();
   });
 
+  it("offers Show sidebar while the sidebar is hidden, since the top bar is not there", () => {
+    const onShowSidebar = vi.fn();
+    const { rerender } = render(<ArtifactGallery rows={ROWS} onOpen={vi.fn()} onShowSidebar={onShowSidebar} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+    expect(onShowSidebar).toHaveBeenCalledTimes(1);
+
+    rerender(<ArtifactGallery rows={ROWS} onOpen={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
+  });
+
   it("counts one page in one session in the singular, and says where pages live", () => {
     render(<ArtifactGallery rows={ROWS.slice(0, 1)} onOpen={vi.fn()} />);
     expect(screen.getByText("1 page in 1 session")).toBeTruthy();

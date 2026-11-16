@@ -168,16 +168,19 @@ impl ArtifactStore {
         atomic_write(&dir.join(INDEX_FILE), &tmp, &bytes).map_err(|_| FAILED.to_string())
     }
 
-    /// Drops the oldest versions past the limits; the newest always stays.
-    fn prune(&self, session_id: &str, record: &mut ArtifactRecord) {
+    /// Takes the oldest versions past the limits off the record and returns
+    /// their numbers; the newest always stays. Their files are removed by the
+    /// caller, only once the index that no longer lists them is written.
+    fn prune(&self, record: &mut ArtifactRecord) -> Vec<u32> {
         let total = |versions: &[ArtifactVersion]| versions.iter().map(|v| v.bytes).sum::<u64>();
+        let mut dropped = Vec::new();
         while record.versions.len() > 1
             && (record.versions.len() > self.max_versions
                 || total(&record.versions) > self.max_artifact_bytes)
         {
-            let dropped = record.versions.remove(0);
-            let _ = fs::remove_file(self.page_path(session_id, &record.id, dropped.n));
+            dropped.push(record.versions.remove(0).n);
         }
+        dropped
     }
 
     /// Keeps `html` as the newest version of the artifact for `source_path`,
@@ -227,6 +230,9 @@ impl ArtifactStore {
                 && fs::read(self.page_path(session_id, &artifact_id, version.n))
                     .is_ok_and(|stored| stored == html)
         });
+        // The new page, when one is written, and the versions it pushes out.
+        let mut written: Option<PathBuf> = None;
+        let mut dropped: Vec<u32> = Vec::new();
         let version = match (&newest, is_same) {
             (Some(version), true) => version.n,
             _ => {
@@ -235,16 +241,28 @@ impl ArtifactStore {
                 let folder = page.parent().ok_or_else(|| FAILED.to_string())?;
                 fs::create_dir_all(folder).map_err(|_| FAILED.to_string())?;
                 write_private(&page, html)?;
+                written = Some(page);
                 records[index].versions.push(ArtifactVersion {
                     n,
                     at: now_ms,
                     bytes: html.len() as u64,
                 });
-                self.prune(session_id, &mut records[index]);
+                dropped = self.prune(&mut records[index]);
                 n
             }
         };
-        self.write_index(session_id, &records)?;
+        // The index is the record of what exists. Until it is written the old
+        // versions stay on disk; if it cannot be written, the page it would
+        // have listed is taken back, and nothing that was listed is lost.
+        if let Err(error) = self.write_index(session_id, &records) {
+            if let Some(page) = written {
+                let _ = fs::remove_file(page);
+            }
+            return Err(error);
+        }
+        for n in dropped {
+            let _ = fs::remove_file(self.page_path(session_id, &artifact_id, n));
+        }
         Ok(Shown {
             artifact: records[index].clone(),
             version,
@@ -570,6 +588,33 @@ mod tests {
             .unwrap();
 
         assert_eq!(numbers(&store.list(SESSION).unwrap()[0]), vec![1]);
+    }
+
+    #[test]
+    fn a_show_whose_index_cannot_be_written_keeps_the_versions_it_had() {
+        let temp = Temp::new("failed-index");
+        let store = ArtifactStore::with_limits(temp.0.clone(), 1, MAX_ARTIFACT_BYTES);
+        let id = store
+            .show(SESSION, PATH, Some("Report"), b"one", 1)
+            .unwrap()
+            .artifact
+            .id;
+        let session_dir = temp.0.join(SESSION);
+        // The session's folder cannot be written, so the page can be stored but the index cannot.
+        fs::set_permissions(&session_dir, fs::Permissions::from_mode(0o555)).unwrap();
+
+        let shown = store.show(SESSION, PATH, None, b"two", 2);
+
+        fs::set_permissions(&session_dir, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(shown.is_err());
+        // The index still lists version 1, so its file must still be there: with a limit of one
+        // version, pruning before the index was written would have deleted it.
+        let listed = store.list(SESSION).unwrap();
+        assert_eq!(numbers(&listed[0]), vec![1]);
+        let first = store.version_path(SESSION, &id, 1).unwrap();
+        assert_eq!(fs::read(first).unwrap(), b"one");
+        // And the version that was never listed leaves no file behind.
+        assert!(!session_dir.join(&id).join("2.html").exists());
     }
 
     #[test]

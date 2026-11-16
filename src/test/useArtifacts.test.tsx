@@ -90,6 +90,41 @@ describe("useArtifacts", () => {
     expect(result.current.bySession.has("s-1")).toBe(false);
   });
 
+  it("keeps the newer of two overlapping refreshes of one session, whichever answers last", async () => {
+    invoke.mockResolvedValueOnce([{ sessionId: "s-1", artifacts: [artifact("First")] }]);
+    const { result } = renderHook(() => useArtifacts(["s-1"]));
+    await waitFor(() => expect(result.current.bySession.get("s-1")?.[0].title).toBe("First"));
+    let answerOlder: (value: unknown) => void = () => undefined;
+    invoke.mockReturnValueOnce(new Promise((resolve) => (answerOlder = resolve)));
+    invoke.mockResolvedValueOnce([{ sessionId: "s-1", artifacts: [artifact("Newer")] }]);
+
+    act(() => deliver("s-1"));
+    act(() => deliver("s-1"));
+    await waitFor(() => expect(result.current.bySession.get("s-1")?.[0].title).toBe("Newer"));
+    await act(async () => answerOlder([{ sessionId: "s-1", artifacts: [artifact("Older")] }]));
+
+    expect(result.current.bySession.get("s-1")?.[0].title).toBe("Newer");
+  });
+
+  it("does not let the first full list overwrite a session that was refreshed meanwhile", async () => {
+    let answerFull: (value: unknown) => void = () => undefined;
+    invoke.mockReturnValueOnce(new Promise((resolve) => (answerFull = resolve)));
+    invoke.mockResolvedValueOnce([{ sessionId: "s-1", artifacts: [artifact("Newer")] }]);
+    const { result } = renderHook(() => useArtifacts(["s-1", "s-2"]));
+
+    act(() => deliver("s-1"));
+    await waitFor(() => expect(result.current.bySession.get("s-1")?.[0].title).toBe("Newer"));
+    await act(async () =>
+      answerFull([
+        { sessionId: "s-1", artifacts: [artifact("Older")] },
+        { sessionId: "s-2", artifacts: [artifact("Two")] },
+      ]),
+    );
+
+    expect(result.current.bySession.get("s-1")?.[0].title).toBe("Newer");
+    expect(result.current.bySession.get("s-2")?.[0].title).toBe("Two");
+  });
+
   it("says when the list could not be read", async () => {
     invoke.mockRejectedValue(new Error("no"));
     const { result } = renderHook(() => useArtifacts(["s-1"]));

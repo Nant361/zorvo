@@ -30,6 +30,25 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
   const idsRef = useRef(ids);
   // An answer for an older list of sessions counts for nothing.
   const generation = useRef(0);
+  // Requests are numbered as they go out, and each session remembers the number of the answer it shows:
+  // an answer that was asked for earlier never replaces one that was asked for later, whichever arrives last.
+  const lastRequest = useRef(0);
+  const shownRequest = useRef(new Map<string, number>());
+
+  /** Takes each session's artifacts from an answer, unless a later request already answered for it. */
+  const applyAnswer = (answer: unknown, request: number, isFullList: boolean) => {
+    const entries = parseAnswer(answer).filter(([sessionId]) => (shownRequest.current.get(sessionId) ?? 0) <= request);
+    for (const [sessionId] of entries) shownRequest.current.set(sessionId, request);
+    setBySession((previous) => {
+      const next = new Map(previous);
+      for (const [sessionId, artifacts] of entries) next.set(sessionId, artifacts);
+      // A full list is for the sessions listed now: one that is gone takes its artifacts with it.
+      if (isFullList) for (const sessionId of next.keys()) if (!idsRef.current.includes(sessionId)) next.delete(sessionId);
+      return next;
+    });
+  };
+  const applyAnswerRef = useRef(applyAnswer);
+  applyAnswerRef.current = applyAnswer;
 
   useEffect(() => {
     idsRef.current = ids;
@@ -38,10 +57,11 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
       setBySession(new Map());
       return;
     }
+    const request = ++lastRequest.current;
     invoke('artifact_list', { sessionIds: ids })
       .then((answer) => {
         if (generation.current !== current) return;
-        setBySession(new Map(parseAnswer(answer)));
+        applyAnswerRef.current(answer, request, true);
         setError(false);
       })
       .catch(() => {
@@ -55,10 +75,11 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
       const sessionId = (event.payload as { sessionId?: unknown } | null)?.sessionId;
       if (typeof sessionId !== 'string' || !idsRef.current.includes(sessionId)) return;
       const current = generation.current;
+      const request = ++lastRequest.current;
       invoke('artifact_list', { sessionIds: [sessionId] })
         .then((answer) => {
           if (isGone || generation.current !== current) return;
-          setBySession((previous) => new Map([...previous, ...parseAnswer(answer)]));
+          applyAnswerRef.current(answer, request, false);
         })
         .catch(() => undefined);
     });

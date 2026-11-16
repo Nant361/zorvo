@@ -1645,7 +1645,13 @@ export default function App() {
         />
 
         <div data-stage data-tauri-drag-region className={`flex min-w-0 flex-1 gap-2 py-2 pr-2${isSidebarHidden ? " pl-2" : ""}`}>
-          {isGalleryShown && <ArtifactGallery rows={gallery} onOpen={openFromGallery} />}
+          {isGalleryShown && (
+            <ArtifactGallery
+              rows={gallery}
+              onOpen={openFromGallery}
+              onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
+            />
+          )}
           {/* Hidden, not unmounted, under the gallery: the composer keeps its text. */}
           <div data-sheet="main" className={`${isGalleryShown ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet`}>
             <TopBar

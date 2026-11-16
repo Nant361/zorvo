@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { PanelLeft, Search } from "lucide-react";
+import { IconButton } from "../ui/IconButton";
+import { TOP_BAR_TRAFFIC_LIGHT_INSET_PX } from "../TopBar";
 import { AgentTile } from "../ui/AgentTile";
 import { filterGallery, newestVersion, type GalleryRow } from "../../lib/artifacts";
 import { formatRelativeTime } from "../../lib/relative-time";
@@ -10,20 +12,35 @@ export interface ArtifactGalleryProps {
   rows: readonly GalleryRow[];
   /** Selects the session and shows the artifact in its Artifacts tab. */
   onOpen: (sessionId: string, artifactId: string) => void;
+  /**
+   * Brings the sidebar back; given only while it is hidden. The top bar, which has this button for
+   * every other view, is not drawn under the gallery, so without it there would be no way back.
+   */
+  onShowSidebar?: () => void;
 }
 
 const COLUMNS = "grid grid-cols-[minmax(0,1fr)_minmax(0,200px)_96px] items-center gap-4";
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** Every page every session's agent showed, in the chat's place: find one again by its title. */
-export function ArtifactGallery({ rows, onOpen }: ArtifactGalleryProps) {
+export function ArtifactGallery({ rows, onOpen, onShowSidebar }: ArtifactGalleryProps) {
   const [query, setQuery] = useState("");
   const shown = filterGallery(rows, query);
   const sessionCount = new Set(rows.map((row) => row.sessionId)).size;
 
   return (
     <section aria-label="Artifact gallery" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet text-ui text-fg">
-      <header data-tauri-drag-region className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4.5">
+      <header
+        data-tauri-drag-region
+        // With the sidebar hidden the window's own buttons float over this header's left end, as over the top bar's.
+        style={onShowSidebar ? { paddingLeft: TOP_BAR_TRAFFIC_LIGHT_INSET_PX } : undefined}
+        className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4.5"
+      >
+        {onShowSidebar && (
+          <IconButton label="Show sidebar" tone="secondary" onClick={onShowSidebar}>
+            <PanelLeft size={14} />
+          </IconButton>
+        )}
         <h2 className="text-ui font-semibold text-fg">Artifacts</h2>
         <span className="text-ui-sm text-fg-subtle">{`${plural(rows.length, "page")} in ${plural(sessionCount, "session")}`}</span>
       </header>
