@@ -54,6 +54,8 @@ export interface MessageRowProps {
   onOpenTask?: (messageId: string, toolId: string) => void;
   /** The subagent whose task tab is on screen. */
   openTaskId?: string;
+  /** The tool calls the turn's open permission requests are for, wherever in the turn they sit. */
+  waitingToolCallIds?: readonly string[];
 }
 
 /** A subagent's steps in the reply itself, for a window that has no inspector to open them in. */
@@ -103,6 +105,7 @@ export const MessageRow = memo(function MessageRow({
   privateModel,
   onOpenTask,
   openTaskId,
+  waitingToolCallIds,
 }: MessageRowProps) {
   const isUser = message.role === "user";
   const timeLabel = timeLabelOf(message);
@@ -149,7 +152,7 @@ export const MessageRow = memo(function MessageRow({
               <div key={index} className="flex flex-col gap-2">
                 {tools.length > 0 && <ToolsPart tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />}
                 {tasks.map((tool) => {
-                  const task = subagentTaskOf(tool, message, { isTurnOver: showActions });
+                  const task = subagentTaskOf(tool, message, { isTurnOver: showActions, waitingToolCallIds });
                   return (
                     <div key={tool.id} className="flex flex-col gap-2">
                       <TaskRow

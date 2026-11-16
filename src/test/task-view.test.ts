@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTaskTool, secondLine, shownTools, stepsOf, subagentTaskOf, type SubagentTask } from "../lib/task-view";
+import { isInRunningTurn, isTaskTool, secondLine, shownTools, stepsOf, subagentTaskOf, waitingToolCallIds, type SubagentTask } from "../lib/task-view";
 import type { ActionCard, ChatMessage, ToolExecution } from "../types";
 
 const tool = (id: string, extra: Partial<ToolExecution> = {}): ToolExecution => ({ id, name: id, status: "completed", ...extra });
@@ -78,5 +78,26 @@ describe("the task view", () => {
 
     expect(steps.parts).toEqual(p.steps);
     expect(steps.tools.map((t) => t.id)).toEqual(["c1", "c2"]);
+  });
+
+  it("reads Needs you for a request that sits in a later reply of the turn", () => {
+    const p = parent({ status: "running" });
+    const first = message([p, ...children], { toolCallId: "c1", status: "approved" });
+    const second = { ...message([], { toolCallId: "c2" }), id: "m2" };
+
+    const waiting = waitingToolCallIds([first, second]);
+
+    expect(waiting).toEqual(["c2"]);
+    expect(subagentTaskOf(p, first, { isTurnOver: false, waitingToolCallIds: waiting }).status).toBe("Needs you");
+  });
+
+  it("knows whether a reply is in the turn that runs now", () => {
+    const reply = message([parent({ status: "running" })]);
+    const later = { ...message([]), id: "m2" };
+    const user: ChatMessage = { id: "u", role: "user", content: "next", timestamp: 2 };
+
+    expect(isInRunningTurn([reply, later], reply, true)).toBe(true);
+    expect(isInRunningTurn([reply, later], reply, false)).toBe(false);
+    expect(isInRunningTurn([reply, user, later], reply, true)).toBe(false);
   });
 });

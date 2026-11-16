@@ -1,6 +1,6 @@
 import { taskTabKey, type TaskTab, type TaskTabs } from "../../hooks/useTaskTabs";
 import { findShellTask, shellToolFor, type BackgroundTask } from "../../lib/background-tasks";
-import { findTaskTool, stepsOf, subagentTaskOf } from "../../lib/task-view";
+import { findTaskTool, isInRunningTurn, stepsOf, subagentTaskOf, waitingToolCallIds } from "../../lib/task-view";
 import { escapeVisible } from "../../lib/visible-text";
 import type { ChatMessage } from "../../types";
 import { ShellTaskPanel } from "./ShellTaskPanel";
@@ -22,11 +22,12 @@ export interface TasksPanelProps {
 /** The Tasks tab: the open tasks as tabs, and the one selected: a subagent's steps or a shell command. */
 export function TasksPanel({ tabs, sessionId, messages, tasks, agentName, isBusy, onStop }: TasksPanelProps) {
   const transcripts = { [sessionId]: messages };
+  const waiting = waitingToolCallIds(messages);
   const subagentOf = (tab: TaskTab) => {
     const found = tab.kind === "subagent" ? findTaskTool(messages, tab.toolId) : undefined;
     if (!found) return undefined;
-    const isTurnOver = Boolean(found.message.isComplete) || !isBusy;
-    return { ...found, task: subagentTaskOf(found.tool, found.message, { isTurnOver }) };
+    const isTurnOver = !isInRunningTurn(messages, found.message, isBusy);
+    return { ...found, task: subagentTaskOf(found.tool, found.message, { isTurnOver, waitingToolCallIds: waiting }) };
   };
   const shellOf = (tab: TaskTab) => (tab.kind === "shell" ? findShellTask(tasks, tab.taskId, transcripts) : undefined);
 

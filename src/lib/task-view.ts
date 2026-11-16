@@ -36,21 +36,52 @@ function childrenOf(tool: ToolExecution, message: ChatMessage): ToolExecution[] 
   return (message.tools ?? []).filter((candidate) => candidate.parentId === tool.id);
 }
 
-/** Whether the reply's open permission request is for one of this subagent's tool calls. */
-function isWaitingOnUser(tool: ToolExecution, message: ChatMessage): boolean {
-  const card = message.actionCard;
-  if (card?.status !== 'pending' || card.toolCallId === undefined) return false;
-  return childrenOf(tool, message).some((child) => child.id === card.toolCallId);
+/**
+ * The tool calls the turn's open permission requests are for. A request need not sit in the reply
+ * that holds its subagent: an answered one closes its reply, and the next lands in a later one.
+ */
+export function waitingToolCallIds(messages: readonly ChatMessage[]): string[] {
+  const ids: string[] = [];
+  for (let index = messages.length - 1; index >= 0 && messages[index].role !== 'user'; index--) {
+    const card = messages[index].actionCard;
+    if (card?.status === 'pending' && card.toolCallId !== undefined) ids.push(card.toolCallId);
+  }
+  return ids;
 }
 
-function statusOf(tool: ToolExecution, message: ChatMessage, isTurnOver: boolean): TaskStatus {
+/**
+ * Whether a reply belongs to the turn that runs now: the session is in a turn and the user has
+ * sent nothing since. A turn may span several replies and only its last is marked complete, so a
+ * reply's own flag cannot say this.
+ */
+export function isInRunningTurn(messages: readonly ChatMessage[], message: ChatMessage, isBusy: boolean): boolean {
+  if (!isBusy) return false;
+  const index = messages.indexOf(message);
+  return index >= 0 && messages.slice(index + 1).every((later) => later.role !== 'user');
+}
+
+export interface TaskContext {
+  /** The turn has ended: a subagent still marked running did not finish. */
+  isTurnOver: boolean;
+  /** `waitingToolCallIds` of the transcript; without it only the reply's own request is seen. */
+  waitingToolCallIds?: readonly string[];
+}
+
+function isWaitingOnUser(tool: ToolExecution, message: ChatMessage, waiting: readonly string[]): boolean {
+  const card = message.actionCard;
+  const own = card?.status === 'pending' && card.toolCallId !== undefined ? [card.toolCallId] : [];
+  const asked = new Set([...own, ...waiting]);
+  return asked.size > 0 && childrenOf(tool, message).some((child) => asked.has(child.id));
+}
+
+function statusOf(tool: ToolExecution, message: ChatMessage, on: TaskContext): TaskStatus {
   if (tool.status === 'failed') return 'Failed';
   if (tool.status === 'completed') return 'Done';
-  if (isTurnOver) return 'Did not finish';
-  return isWaitingOnUser(tool, message) ? 'Needs you' : 'Working';
+  if (on.isTurnOver) return 'Did not finish';
+  return isWaitingOnUser(tool, message, on.waitingToolCallIds ?? []) ? 'Needs you' : 'Working';
 }
 
-export function subagentTaskOf(tool: ToolExecution, message: ChatMessage, on: { isTurnOver: boolean }): SubagentTask {
+export function subagentTaskOf(tool: ToolExecution, message: ChatMessage, on: TaskContext): SubagentTask {
   const texts = (tool.steps ?? []).flatMap((step) => (step.kind === 'text' ? [step.text] : []));
   const lastText = texts[texts.length - 1];
   return {
@@ -58,7 +89,7 @@ export function subagentTaskOf(tool: ToolExecution, message: ChatMessage, on: { 
     title: tool.name,
     ...(tool.agentType ? { agentType: tool.agentType } : {}),
     stepCount: childrenOf(tool, message).length,
-    status: statusOf(tool, message, on.isTurnOver),
+    status: statusOf(tool, message, on),
     ...(tool.startedAt === undefined ? {} : { startedAt: tool.startedAt }),
     hasSteps: tool.steps !== undefined,
     ...(lastText ? { lastText } : {}),

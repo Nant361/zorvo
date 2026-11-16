@@ -105,6 +105,32 @@ describe("the Tasks tab", () => {
     expect(scroller.scrollTop).toBe(100);
   });
 
+  it("says a subagent needs your answer when its request sits in a later reply", () => {
+    const first = messages(subagent())[0];
+    const asking: ChatMessage = {
+      id: "m2", role: "agent", content: "", timestamp: 2,
+      actionCard: { id: "a", sessionId: "s1", title: "t", prompt: "", status: "pending", timestamp: 2, toolCallId: "c1" },
+    };
+    renderPanel(SUB, { messages: [first, asking] });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Explore needs your answer in the chat");
+  });
+
+  it("does not call a subagent of an earlier turn working while a new turn runs", () => {
+    const first = messages(subagent())[0];
+    const next: ChatMessage = { id: "u2", role: "user", content: "next", timestamp: 3 };
+    renderPanel(SUB, { messages: [first, next], isBusy: true });
+
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("keeps the lines of a command's output apart", () => {
+    const twoLines = { ...dev, details: [{ kind: "text" as const, text: "VITE ready\r\nLocal: http://localhost:1420/\u202E" }] };
+    renderPanel(SHELL, { messages: [{ id: "m", role: "agent", content: "", timestamp: 1, tools: [twoLines] }] });
+
+    expect(screen.getByLabelText("Command output").textContent).toBe("VITE ready\nLocal: http://localhost:1420/\\u202E");
+  });
+
   it("says when a subagent's text was cut", () => {
     renderPanel(SUB, {}, subagent({ isTextCut: true }));
 

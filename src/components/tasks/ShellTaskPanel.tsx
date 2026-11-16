@@ -3,7 +3,7 @@ import { Terminal } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useNow } from "../../hooks/useNow";
 import { formatElapsed, type BackgroundTask } from "../../lib/background-tasks";
-import { escapeVisible } from "../../lib/visible-text";
+import { escapeVisible, escapeVisibleLines } from "../../lib/visible-text";
 import { TaskHeader, TaskNote } from "./TaskHeader";
 
 export interface ShellTaskPanelProps {
@@ -74,7 +74,7 @@ export function ShellTaskPanel({ task, output, isReporting, agentName, onStop }:
               aria-label="Command output"
               className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-terminal-bg px-3 py-2.5 font-mono text-caption text-terminal-fg select-text"
             >
-              {escapeVisible(output)}
+              {escapeVisibleLines(output)}
             </pre>
             {!isReporting && (
               <TaskNote>

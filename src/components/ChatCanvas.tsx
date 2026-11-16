@@ -2,6 +2,7 @@ import type { ModelPrice } from "../lib/private-credits";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MessageRow } from "./chat/MessageRow";
 import { WorkingIndicator } from "./chat/ReplyExtras";
+import { waitingToolCallIds } from "../lib/task-view";
 import { AgentStallNotice } from "./chat/AgentStallNotice";
 import { SelectionToolbar } from "./chat/SelectionToolbar";
 import type { AgentFailures } from "../lib/agent-stall";
@@ -186,6 +187,9 @@ export function ChatCanvas({
   // These take the message id, so every row gets the same function and an
   // unchanged row is not re-rendered when the host makes a new closure.
   const handleFork = useCallback((id: string) => onForkRef.current?.(id), [onForkRef]);
+  // The same array while the same requests wait, so a row is not drawn again on every streamed frame.
+  const waitingKey = waitingToolCallIds(messages).join("\n");
+  const waiting = useMemo(() => (waitingKey ? waitingKey.split("\n") : undefined), [waitingKey]);
   const onOpenTaskRef = useLatest(onOpenTask);
   const handleOpenTask = useCallback((_messageId: string, toolId: string) => onOpenTaskRef.current?.(toolId), [onOpenTaskRef]);
   const handleRewind = useCallback((id: string) => onRewindRef.current?.(id), [onRewindRef]);
@@ -269,6 +273,7 @@ export function ChatCanvas({
           privateModel={privateModel}
           onOpenTask={onOpenTask ? handleOpenTask : undefined}
           openTaskId={openTaskId}
+          waitingToolCallIds={waiting}
         />
       ))}
       {tasksFooter && <div className="mx-auto w-full max-w-chat">{tasksFooter}</div>}

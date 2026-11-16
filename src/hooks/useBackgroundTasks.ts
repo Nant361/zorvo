@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useBackgroundProcesses } from './useBackgroundProcesses';
 import { backgroundTasksOf, type BackgroundTask } from '../lib/background-tasks';
+import { findTaskTool } from '../lib/task-view';
 import type { TaskTab } from './useTaskTabs';
 import type { ChatMessage, Session } from '../types';
 
@@ -75,9 +76,11 @@ export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
     (task: BackgroundTask) => {
       onOpenSession(task.sessionId);
       const tab = taskTabOf(task);
-      if (tab) onOpenTask?.(task.sessionId, tab);
+      // A subagent whose agent marks no steps has nothing to show in a tab: its session is enough.
+      const canOpen = tab?.kind !== 'subagent' || findTaskTool(transcripts[task.sessionId] ?? [], tab.toolId) !== undefined;
+      if (tab && canOpen) onOpenTask?.(task.sessionId, tab);
     },
-    [onOpenSession, onOpenTask],
+    [onOpenSession, onOpenTask, transcripts],
   );
 
   const stop = useCallback(
