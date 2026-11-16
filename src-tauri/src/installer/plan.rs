@@ -24,6 +24,9 @@ pub struct InstalledTools {
     pub pinned_uv_installed: bool,
     /// `(id, version)` to the agent's install dir.
     pub agents: BTreeMap<(String, String), PathBuf>,
+    /// `(id, version)` to the program its install record names, relative to
+    /// the install dir. Only an npm package's install records one.
+    pub agent_bins: BTreeMap<(String, String), String>,
     /// Prerequisite command to the `bin` folder of its pinned install.
     pub prereq_bins: BTreeMap<String, PathBuf>,
     pub manifest: Option<RuntimeManifest>,
@@ -50,13 +53,16 @@ impl InstalledTools {
             })
             .collect();
 
+        let agents = installed_agents(tools);
+
         Self {
             user_node_major,
             node: installed_runtime(tools, RuntimeKind::Node, manifest, platform),
             uv: installed_runtime(tools, RuntimeKind::Uv, manifest, platform),
             pinned_node_installed: pinned(RuntimeKind::Node),
             pinned_uv_installed: pinned(RuntimeKind::Uv),
-            agents: installed_agents(tools),
+            agent_bins: recorded_bins(&agents),
+            agents,
             prereq_bins,
             manifest: Some(manifest.clone()),
         }
@@ -88,6 +94,16 @@ fn installed_agents(tools: &ToolsDir) -> BTreeMap<(String, String), PathBuf> {
         }
     }
     found
+}
+
+/// The program each install's record names, for the installs that name one.
+fn recorded_bins(
+    agents: &BTreeMap<(String, String), PathBuf>,
+) -> BTreeMap<(String, String), String> {
+    agents
+        .iter()
+        .filter_map(|(key, dir)| Some((key.clone(), read_record(dir)?.bin?)))
+        .collect()
 }
 
 fn subdirs(dir: &std::path::Path) -> Vec<PathBuf> {

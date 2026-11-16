@@ -173,24 +173,36 @@ impl Resolution<'_> {
     }
 }
 
-/// The user's `npx` with a new enough Node, else Zorvo's, first on `PATH` so
-/// a `#!/usr/bin/env node` script cannot pick up the user's older Node.
-fn npx_program(tools: &SystemTools) -> (Program, Option<RuntimeKind>) {
-    if tools.user_node_is_usable() {
-        if let Some(path) = tools.locate("npx") {
-            return (Program::Found(Located::as_is(path)), None);
-        }
+/// The program an npx agent's install recorded, when that file is there.
+/// A record without one, or one whose file is gone, counts as no install.
+fn installed_npm_program(entry: &RegistryEntry, tools: &SystemTools) -> Option<String> {
+    let key = (entry.id.clone(), entry.version.clone());
+    let dir = tools.installed.agents.get(&key)?;
+    let program = dir.join(tools.installed.agent_bins.get(&key)?);
+    program.is_file().then(|| path_string(&program))
+}
+
+/// An npx agent runs from Zorvo's install of its package, never through
+/// `npx`. It needs a Node: the user's when it is new enough, else Zorvo's,
+/// first on `PATH` so the program's `#!/usr/bin/env node` cannot pick up the
+/// user's older Node.
+fn npm_agent_program(entry: &RegistryEntry, tools: &SystemTools) -> (Program, Option<RuntimeKind>) {
+    let installed = installed_npm_program(entry, tools);
+    if tools.user_node_is_usable() && tools.locate("npx").is_some() {
+        let program = installed.map_or(Program::NotInstalled, |path| {
+            Program::Found(Located::as_is(path))
+        });
+        return (program, None);
     }
-    let program = tools.installed.node.as_ref().map_or_else(
-        || Program::NeedsRuntime(tools.locate("npx")),
-        |node| {
-            Program::Found(Located {
-                path: path_string(&node.bin_dir.join("npx")),
-                prepend: vec![path_string(&node.bin_dir)],
-                append: Vec::new(),
-            })
-        },
-    );
+    let program = match (&tools.installed.node, installed) {
+        (None, _) => Program::NeedsRuntime(tools.locate("npx")),
+        (Some(_), None) => Program::NotInstalled,
+        (Some(node), Some(path)) => Program::Found(Located {
+            path,
+            prepend: vec![path_string(&node.bin_dir)],
+            append: Vec::new(),
+        }),
+    };
     (program, Some(RuntimeKind::Node))
 }
 
@@ -233,17 +245,15 @@ fn binary_program(entry: &RegistryEntry, target: &BinaryTarget, tools: &SystemTo
 fn resolve<'e>(entry: &'e RegistryEntry, tools: &SystemTools) -> Resolution<'e> {
     // `setup_args` is the same launch without the entry's own arguments, which are its ACP flags.
     let (kind, command, args, setup_args, installed_on_system, target) = match &entry.distribution {
-        Distribution::Npx { package, args, .. } => {
-            let runner = vec!["-y".to_string(), package.clone()];
-            (
-                "npx",
-                "npx".to_string(),
-                [runner.clone(), args.clone()].concat(),
-                runner,
-                tools.npm_globals.contains(package_name(package)),
-                None,
-            )
-        }
+        // `npx` here only names the kind: the program is the installed package's own.
+        Distribution::Npx { package, args, .. } => (
+            "npx",
+            "npx".to_string(),
+            args.clone(),
+            Vec::new(),
+            tools.npm_globals.contains(package_name(package)),
+            None,
+        ),
         Distribution::Uvx { package, args, .. } => (
             "uvx",
             "uvx".to_string(),
@@ -262,7 +272,7 @@ fn resolve<'e>(entry: &'e RegistryEntry, tools: &SystemTools) -> Resolution<'e> 
         }
     };
     let (program, zorvo_runtime) = match (kind, target) {
-        ("npx", _) => npx_program(tools),
+        ("npx", _) => npm_agent_program(entry, tools),
         ("uvx", _) => uvx_program(tools),
         (_, Some(target)) => (binary_program(entry, target, tools), None),
         (_, None) => (Program::NotInstalled, None),
@@ -329,13 +339,28 @@ fn steps_for(
             sha256: target.sha256.clone(),
             cmd: target.cmd.clone(),
         }),
-        _ => None,
+        _ => npm_agent_step(entry, tools),
     };
     runtime
         .into_iter()
         .chain(prerequisites)
         .chain(agent)
         .collect()
+}
+
+/// The npm install of an npx agent whose package Zorvo has not installed.
+fn npm_agent_step(entry: &RegistryEntry, tools: &SystemTools) -> Option<PlannedStep> {
+    let Distribution::Npx { package, .. } = &entry.distribution else {
+        return None;
+    };
+    installed_npm_program(entry, tools)
+        .is_none()
+        .then(|| PlannedStep::NpmAgent {
+            id: entry.id.clone(),
+            name: entry.name.clone(),
+            version: entry.version.clone(),
+            package: package.clone(),
+        })
 }
 
 /// False only for a binary agent with no build for this Mac.
@@ -382,6 +407,10 @@ pub fn install_status(entry: &RegistryEntry, tools: &SystemTools) -> InstallStat
         Program::Found(located) => Some(located.path.clone()),
         _ => None,
     };
+    // A ready npx agent always runs Zorvo's install, whatever the user has globally.
+    if resolution.kind == "npx" {
+        return InstallStatus::ByZorvo;
+    }
     if resolution.installed_on_system {
         let location = (resolution.kind == "binary").then_some(program).flatten();
         return InstallStatus::OnYourMac { location };
@@ -473,6 +502,9 @@ pub fn missing_reason(profile: &AgentProfile) -> Option<String> {
         }
         AVAILABILITY_NOT_INSTALLED => Some(match missing_prerequisite(profile) {
             Some(command) => format!("{} needs {command}, which was not found", profile.name),
+            None if profile.distribution.as_deref() == Some("npx") => {
+                format!("{} is not installed", profile.name)
+            }
             None => format!(
                 "{} is not installed ({} was not found on PATH)",
                 profile.name, profile.command

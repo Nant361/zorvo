@@ -208,3 +208,23 @@ fn an_npm_agent_step_displays_as_an_agent() {
     assert_eq!(step.version, "0.27.0");
     assert_eq!(step.download_bytes, None);
 }
+
+#[test]
+fn scan_reads_each_agents_recorded_program() {
+    let d = data_dir();
+    let tools = ToolsDir::new(&d);
+    mark_installed(&tools.agent_dir("npm-agent", "1.0.0"), Some("bin/x"));
+    mark_installed(&tools.agent_dir("binary-agent", "1.0.0"), None);
+    let manifest = parse_manifest(BUNDLED_RUNTIMES).unwrap();
+
+    let installed = InstalledTools::scan(&tools, &manifest, PLATFORM, None);
+
+    assert_eq!(installed.agents.len(), 2);
+    assert_eq!(
+        installed.agent_bins,
+        std::collections::BTreeMap::from([(
+            ("npm-agent".to_string(), "1.0.0".to_string()),
+            "bin/x".to_string()
+        )])
+    );
+}

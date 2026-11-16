@@ -8,8 +8,8 @@ use zorvo_lib::installer::runtimes::{
     parse_manifest, InstalledRuntime, RuntimeKind, RuntimeManifest, BUNDLED_RUNTIMES,
 };
 use zorvo_lib::registry::resolve::{
-    canonical_agent_id, is_supported, is_system_tool_path, missing_reason, planned_steps,
-    resolve_profile, SystemTools,
+    canonical_agent_id, install_status, is_supported, is_system_tool_path, missing_reason,
+    planned_steps, resolve_profile, InstallStatus, SystemTools,
 };
 use zorvo_lib::registry::schema::{current_platform, BinaryTarget, Distribution, RegistryEntry};
 
@@ -156,6 +156,40 @@ fn uvx_entry() -> RegistryEntry {
     )
 }
 
+/// `installed` plus Zorvo's install of `entry`'s package, whose program is `dir/program`.
+fn with_npm_install(
+    installed: InstalledTools,
+    entry: &RegistryEntry,
+    dir: &Path,
+    program: &str,
+) -> InstalledTools {
+    let key = (entry.id.clone(), entry.version.clone());
+    InstalledTools {
+        agents: BTreeMap::from([(key.clone(), dir.to_path_buf())]),
+        agent_bins: BTreeMap::from([(key, program.to_string())]),
+        ..installed
+    }
+}
+
+/// The install plan's line for `entry`'s own package.
+fn agent_step(entry: &RegistryEntry) -> InstallStep {
+    InstallStep {
+        kind: "agent".to_string(),
+        name: entry.name.clone(),
+        version: entry.version.clone(),
+        download_bytes: None,
+    }
+}
+
+fn npm_agent_step(entry: &RegistryEntry, package: &str) -> PlannedStep {
+    PlannedStep::NpmAgent {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        version: entry.version.clone(),
+        package: package.to_string(),
+    }
+}
+
 fn node_step() -> InstallStep {
     let manifest = manifest();
     InstallStep {
@@ -181,11 +215,12 @@ fn pi_step() -> InstallStep {
 }
 
 #[test]
-fn npx_entry_runs_the_pinned_package_through_npx() {
+fn npx_entry_runs_its_installed_program_not_npx() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
+    let package = bin_dir_with(&["gemini"]);
     let globals = BTreeSet::new();
-    let new_node = user_node(22);
+    let new_node = with_npm_install(user_node(22), &gemini(), package.path(), "gemini");
     let tools = SystemTools {
         path_var: Some(&path),
         npm_globals: &globals,
@@ -197,9 +232,11 @@ fn npx_entry_runs_the_pinned_package_through_npx() {
     assert_eq!(profile.id, "gemini");
     assert_eq!(profile.command, "npx");
     assert_eq!(profile.acp_program.as_deref(), Some("npx"));
+    assert_eq!(profile.acp_args, vec!["--acp"]);
+    assert!(profile.setup_args.is_empty());
     assert_eq!(
-        profile.acp_args,
-        vec!["-y", "@google/gemini-cli@0.64.0", "--acp"]
+        profile.acp_program_path,
+        Some(path_of(&package.path().join("gemini")))
     );
     assert_eq!(profile.availability, "ready");
     assert_eq!(profile.distribution.as_deref(), Some("npx"));
@@ -338,7 +375,14 @@ fn missing_reason_names_what_is_missing() {
         npm_globals: &globals,
         installed: &new_node,
     };
+    let package = bin_dir_with(&["gemini"]);
+    let with_package = with_npm_install(user_node(22), &gemini(), package.path(), "gemini");
     let some = SystemTools {
+        path_var: Some(&ready_path),
+        npm_globals: &globals,
+        installed: &with_package,
+    };
+    let no_package = SystemTools {
         path_var: Some(&ready_path),
         npm_globals: &globals,
         installed: &new_node,
@@ -356,6 +400,10 @@ fn missing_reason_names_what_is_missing() {
         missing_reason(&resolve_profile(&gemini(), &some, true)),
         None
     );
+    assert_eq!(
+        missing_reason(&resolve_profile(&gemini(), &no_package, true)).as_deref(),
+        Some("Gemini CLI is not installed")
+    );
 }
 
 #[test]
@@ -363,17 +411,23 @@ fn npx_with_a_new_enough_user_node_is_ready_and_leaves_path_alone() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
     let globals = BTreeSet::new();
-    let installed = InstalledTools {
-        node: runtime("/zorvo/node/bin", "24.21.0"),
-        ..user_node(22)
-    };
+    let package = bin_dir_with(&["gemini"]);
+    let installed = with_npm_install(
+        InstalledTools {
+            node: runtime("/zorvo/node/bin", "24.21.0"),
+            ..user_node(22)
+        },
+        &gemini(),
+        package.path(),
+        "gemini",
+    );
 
     let profile = resolve_profile(&gemini(), &system(&path, &globals, &installed), true);
 
     assert_eq!(profile.availability, "ready");
     assert_eq!(
         profile.acp_program_path,
-        Some(path_of(&dir.path().join("npx")))
+        Some(path_of(&package.path().join("gemini")))
     );
     assert!(profile.acp_path_prepend.is_empty());
     assert!(profile.acp_path_append.is_empty());
@@ -385,19 +439,25 @@ fn npx_with_an_old_user_node_uses_zorvos_node_first_on_path() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
     let globals = BTreeSet::new();
-    let installed = InstalledTools {
-        node: runtime("/zorvo/node/bin", "24.21.0"),
-        pinned_node_installed: true,
-        ..user_node(20)
-    };
+    let package = bin_dir_with(&["gemini"]);
+    let installed = with_npm_install(
+        InstalledTools {
+            node: runtime("/zorvo/node/bin", "24.21.0"),
+            pinned_node_installed: true,
+            ..user_node(20)
+        },
+        &gemini(),
+        package.path(),
+        "gemini",
+    );
 
     let profile = resolve_profile(&gemini(), &system(&path, &globals, &installed), true);
 
     assert_eq!(profile.availability, "ready");
     assert!(profile.detected);
     assert_eq!(
-        profile.acp_program_path.as_deref(),
-        Some("/zorvo/node/bin/npx")
+        profile.acp_program_path,
+        Some(path_of(&package.path().join("gemini")))
     );
     assert_eq!(profile.acp_path_prepend, vec!["/zorvo/node/bin"]);
     assert!(profile.acp_path_append.is_empty());
@@ -416,11 +476,17 @@ fn npx_with_an_old_user_node_and_no_zorvo_node_needs_the_runtime() {
 
     assert_eq!(profile.availability, "needs_runtime");
     assert!(!profile.detected);
-    assert_eq!(profile.install_plan, Some(vec![node_step()]));
+    assert_eq!(
+        profile.install_plan,
+        Some(vec![node_step(), agent_step(&gemini())])
+    );
     assert!(node_step().download_bytes.is_some());
     assert_eq!(
         planned_steps(&gemini(), &tools),
-        vec![PlannedStep::Runtime(RuntimeKind::Node)]
+        vec![
+            PlannedStep::Runtime(RuntimeKind::Node),
+            npm_agent_step(&gemini(), "@google/gemini-cli@0.64.0"),
+        ]
     );
 }
 
@@ -601,10 +667,16 @@ fn pi_acp_without_pi_is_not_installed_with_a_prerequisite_step() {
 
     assert_eq!(profile.availability, "not_installed");
     assert!(!profile.detected);
-    assert_eq!(profile.install_plan, Some(vec![pi_step()]));
+    assert_eq!(
+        profile.install_plan,
+        Some(vec![pi_step(), agent_step(&pi_acp())])
+    );
     assert_eq!(
         planned_steps(&pi_acp(), &tools),
-        vec![PlannedStep::Prerequisite(&prerequisites_for("pi-acp")[0])]
+        vec![
+            PlannedStep::Prerequisite(&prerequisites_for("pi-acp")[0]),
+            npm_agent_step(&pi_acp(), "pi-acp@0.0.34"),
+        ]
     );
 }
 
@@ -612,8 +684,9 @@ fn pi_acp_without_pi_is_not_installed_with_a_prerequisite_step() {
 fn pi_acp_with_pi_on_path_is_ready() {
     let dir = bin_dir_with(&["npx", "pi"]);
     let path = path_of(dir.path());
+    let package = bin_dir_with(&["pi-acp"]);
     let globals = BTreeSet::new();
-    let installed = user_node(22);
+    let installed = with_npm_install(user_node(22), &pi_acp(), package.path(), "pi-acp");
 
     let profile = resolve_profile(&pi_acp(), &system(&path, &globals, &installed), true);
 
@@ -627,13 +700,19 @@ fn pi_acp_with_zorvos_pi_appends_its_bin() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
     let globals = BTreeSet::new();
-    let installed = InstalledTools {
-        prereq_bins: BTreeMap::from([(
-            "pi".to_string(),
-            PathBuf::from("/zorvo/prereqs/pi/1.1.0/bin"),
-        )]),
-        ..user_node(22)
-    };
+    let package = bin_dir_with(&["pi-acp"]);
+    let installed = with_npm_install(
+        InstalledTools {
+            prereq_bins: BTreeMap::from([(
+                "pi".to_string(),
+                PathBuf::from("/zorvo/prereqs/pi/1.1.0/bin"),
+            )]),
+            ..user_node(22)
+        },
+        &pi_acp(),
+        package.path(),
+        "pi-acp",
+    );
 
     let profile = resolve_profile(&pi_acp(), &system(&path, &globals, &installed), true);
 
@@ -661,8 +740,14 @@ fn not_ready_npx_agent_with_an_older_zorvo_node_plans_the_pinned_node() {
     let with_pinned = resolve_profile(&pi_acp(), &system(&path, &globals, &pinned), true);
 
     assert_eq!(with_older.availability, "not_installed");
-    assert_eq!(with_older.install_plan, Some(vec![node_step(), pi_step()]));
-    assert_eq!(with_pinned.install_plan, Some(vec![pi_step()]));
+    assert_eq!(
+        with_older.install_plan,
+        Some(vec![node_step(), pi_step(), agent_step(&pi_acp())])
+    );
+    assert_eq!(
+        with_pinned.install_plan,
+        Some(vec![pi_step(), agent_step(&pi_acp())])
+    );
 }
 
 #[test]
@@ -670,10 +755,16 @@ fn ready_npx_agent_on_an_older_zorvo_node_plans_nothing() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
     let globals = BTreeSet::new();
-    let installed = InstalledTools {
-        node: runtime("/zorvo/node/22.0.0/bin", "22.0.0"),
-        ..user_node(20)
-    };
+    let package = bin_dir_with(&["gemini"]);
+    let installed = with_npm_install(
+        InstalledTools {
+            node: runtime("/zorvo/node/22.0.0/bin", "22.0.0"),
+            ..user_node(20)
+        },
+        &gemini(),
+        package.path(),
+        "gemini",
+    );
     let tools = system(&path, &globals, &installed);
 
     assert_eq!(
@@ -718,8 +809,9 @@ fn install_plan_is_serialized_for_the_ui() {
 fn missing_reason_names_a_missing_prerequisite() {
     let dir = bin_dir_with(&["npx"]);
     let path = path_of(dir.path());
+    let package = bin_dir_with(&["pi-acp"]);
     let globals = BTreeSet::new();
-    let installed = user_node(22);
+    let installed = with_npm_install(user_node(22), &pi_acp(), package.path(), "pi-acp");
 
     let profile = resolve_profile(&pi_acp(), &system(&path, &globals, &installed), true);
 
@@ -864,10 +956,117 @@ fn setup_args_leave_out_the_registry_entrys_own_acp_arguments() {
     let npx = resolve_profile(&qwen, &tools, true);
     let binary = resolve_profile(&opencode(), &tools, false);
 
-    assert_eq!(
-        npx.acp_args,
-        vec!["-y", "pkg@1", "--acp", "--experimental-skills"]
-    );
-    assert_eq!(npx.setup_args, vec!["-y", "pkg@1"]);
+    assert_eq!(npx.acp_args, vec!["--acp", "--experimental-skills"]);
+    assert!(npx.setup_args.is_empty());
     assert!(binary.setup_args.is_empty());
+}
+
+#[test]
+fn an_npx_agent_without_an_install_is_not_installed() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let globals = BTreeSet::new();
+    let installed = user_node(22);
+    let tools = system(&path, &globals, &installed);
+
+    let profile = resolve_profile(&gemini(), &tools, true);
+
+    assert_eq!(profile.availability, "not_installed");
+    assert!(!profile.detected);
+    assert_eq!(profile.acp_program_path, None);
+    assert_eq!(profile.install_plan, Some(vec![agent_step(&gemini())]));
+    assert_eq!(
+        planned_steps(&gemini(), &tools),
+        vec![npm_agent_step(&gemini(), "@google/gemini-cli@0.64.0")]
+    );
+}
+
+#[test]
+fn an_npx_install_without_a_recorded_program_is_not_installed() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let package = bin_dir_with(&["gemini"]);
+    let globals = BTreeSet::new();
+    let installed = InstalledTools {
+        agent_bins: BTreeMap::new(),
+        ..with_npm_install(user_node(22), &gemini(), package.path(), "gemini")
+    };
+
+    let profile = resolve_profile(&gemini(), &system(&path, &globals, &installed), true);
+
+    assert_eq!(profile.availability, "not_installed");
+}
+
+#[test]
+fn an_npx_install_whose_program_is_gone_is_not_installed() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let package = bin_dir_with(&[]);
+    let globals = BTreeSet::new();
+    let installed = with_npm_install(user_node(22), &gemini(), package.path(), "gemini");
+    let tools = system(&path, &globals, &installed);
+
+    assert_eq!(
+        resolve_profile(&gemini(), &tools, true).availability,
+        "not_installed"
+    );
+    assert_eq!(
+        planned_steps(&gemini(), &tools),
+        vec![npm_agent_step(&gemini(), "@google/gemini-cli@0.64.0")]
+    );
+}
+
+#[test]
+fn an_npx_install_at_another_version_is_not_installed() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let package = bin_dir_with(&["gemini"]);
+    let globals = BTreeSet::new();
+    let older = RegistryEntry {
+        version: "0.9.0".to_string(),
+        ..gemini()
+    };
+    let installed = with_npm_install(user_node(22), &older, package.path(), "gemini");
+
+    let profile = resolve_profile(&gemini(), &system(&path, &globals, &installed), true);
+
+    assert_eq!(profile.availability, "not_installed");
+}
+
+#[test]
+fn an_installed_npx_agent_without_node_plans_only_the_runtime() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let package = bin_dir_with(&["gemini"]);
+    let globals = BTreeSet::new();
+    let installed = with_npm_install(user_node(20), &gemini(), package.path(), "gemini");
+    let tools = system(&path, &globals, &installed);
+
+    assert_eq!(
+        resolve_profile(&gemini(), &tools, true).availability,
+        "needs_runtime"
+    );
+    assert_eq!(
+        planned_steps(&gemini(), &tools),
+        vec![PlannedStep::Runtime(RuntimeKind::Node)]
+    );
+}
+
+#[test]
+fn an_installed_npx_agent_is_by_zorvo_even_with_a_global_package() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let package = bin_dir_with(&["gemini"]);
+    let globals: BTreeSet<String> = ["@google/gemini-cli".to_string()].into();
+    let with_package = with_npm_install(user_node(22), &gemini(), package.path(), "gemini");
+    let without = user_node(22);
+
+    assert_eq!(
+        install_status(&gemini(), &system(&path, &globals, &with_package)),
+        InstallStatus::ByZorvo
+    );
+    assert_eq!(
+        install_status(&gemini(), &system(&path, &globals, &without)),
+        InstallStatus::NotInstalled
+    );
 }
