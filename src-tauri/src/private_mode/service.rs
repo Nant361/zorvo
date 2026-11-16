@@ -959,9 +959,9 @@ impl PrivateMode {
         // the session the token was made for. Counting only those keeps one call in one total;
         // the fork counts its own calls from the first token made for it (a reopen), or from
         // the moment its source is deleted and the proxy hands the token over to it.
-        let records: Vec<_> = self
-            .proxy
-            .records(session_id)
+        let held = self.proxy.records(session_id);
+        let counted_for = super::billing::counted_for(&held, session_id);
+        let records: Vec<_> = held
             .into_iter()
             .filter(|record| record.app_session_id == session_id)
             .collect();
@@ -973,10 +973,7 @@ impl PrivateMode {
             .usage
             .usage(&records, &models, key.as_deref(), self.billing.as_ref());
         PrivateSessionUsage {
-            counted_for: self
-                .proxy
-                .token_owner(session_id)
-                .filter(|owner| owner != session_id),
+            counted_for,
             ..usage
         }
     }

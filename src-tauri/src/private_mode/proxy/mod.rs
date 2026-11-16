@@ -163,14 +163,6 @@ impl PrivateProxy {
             .and_then(|server| server.key(app_session_id))
     }
 
-    /// The session the token `app_session_id` holds now was made for (or handed to), under which
-    /// its calls are recorded. None for a session that holds no live token.
-    pub fn token_owner(&self, app_session_id: &str) -> Option<String> {
-        lock(&self.server)
-            .as_ref()
-            .and_then(|server| server.token_owner(app_session_id))
-    }
-
     /// The completed calls of `app_session_id`, oldest first. A stopped session keeps its last token's
     /// records for verification; a deleted one calls [`Self::forget`].
     pub fn records(&self, app_session_id: &str) -> Vec<ProxyRecord> {

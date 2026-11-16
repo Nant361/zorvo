@@ -176,13 +176,6 @@ impl TokenTable {
             .cloned()
     }
 
-    fn owner_of(&self, app_session_id: &str) -> Option<String> {
-        let token = self.by_session.get(app_session_id)?;
-        self.by_token
-            .get(token)
-            .map(|entry| entry.app_session_id.clone())
-    }
-
     fn key_of(&self, app_session_id: &str) -> Option<String> {
         if let Some(key) = self.last_key_by_session.get(app_session_id) {
             return Some(key.clone());
@@ -492,11 +485,6 @@ impl ProxyServer {
             .collect()
     }
 
-    /// The session named by the live token `app_session_id` holds, if it holds one.
-    pub(super) fn token_owner(&self, app_session_id: &str) -> Option<String> {
-        lock(&self.state.tokens).owner_of(app_session_id)
-    }
-
     /// The key behind a session's current or last token, for a billing read. It never leaves the
     /// backend or reaches an event.
     pub(super) fn key(&self, app_session_id: &str) -> Option<String> {
@@ -710,21 +698,6 @@ mod tests {
             table.find(&token).map(|entry| entry.app_session_id),
             Some("fork-a".to_string())
         );
-    }
-
-    #[test]
-    fn a_fork_of_a_fork_names_the_session_its_token_was_made_for() {
-        let mut table = TokenTable::default();
-        table.issue("a", "model", "key", false).expect("token");
-        assert!(table.share("a", "b"));
-        assert!(table.share("b", "c"));
-
-        // Deleting the fork in between leaves the token with its owner.
-        table.forget("b");
-
-        assert_eq!(table.owner_of("c"), Some("a".to_string()));
-        assert_eq!(table.owner_of("a"), Some("a".to_string()));
-        assert_eq!(table.owner_of("b"), None);
     }
 
     #[test]

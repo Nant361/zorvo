@@ -242,6 +242,17 @@ impl UsageTracker {
     }
 }
 
+/// The session the newest call on `session_id`'s tokens was recorded for, when that is another
+/// one. Read from the records, not from the live token: they outlive a Stop or an archive, and
+/// the usage checks of a turn go on for a while after it.
+pub fn counted_for(records: &[ProxyRecord], session_id: &str) -> Option<String> {
+    records
+        .iter()
+        .max_by_key(|record| record.started)
+        .map(|record| record.app_session_id.clone())
+        .filter(|owner| owner != session_id)
+}
+
 /// What a call's tokens cost at the catalog's price, or zero when it reported none.
 fn token_credits(record: &ProxyRecord, model: &ModelPrice) -> f64 {
     record
@@ -596,6 +607,18 @@ mod tests {
             assert_eq!((usage.credits, usage.estimated), (0.0, ask >= 3));
         }
         assert_eq!(lock(&fake.calls).len(), 3);
+    }
+
+    #[test]
+    fn a_forks_calls_name_the_session_they_are_counted_for() {
+        // `record` labels its calls "session": a fork that shares that token sees them too.
+        let mut newer = record("b");
+        newer.started = 5;
+        let records = vec![record("a"), newer];
+
+        assert_eq!(counted_for(&records, "fork"), Some("session".to_string()));
+        assert_eq!(counted_for(&records, "session"), None);
+        assert_eq!(counted_for(&[], "fork"), None);
     }
 
     #[test]
