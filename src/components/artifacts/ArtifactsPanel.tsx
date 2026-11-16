@@ -1,5 +1,5 @@
 import { ChevronRight, PanelsTopLeft } from "lucide-react";
-import { newestVersion, type ViewedArtifact } from "../../lib/artifacts";
+import { newestVersion, shownArtifactOf, type ViewedArtifact } from "../../lib/artifacts";
 import { formatRelativeTime } from "../../lib/relative-time";
 import type { Artifact } from "../../types";
 import { ArtifactViewer } from "./ArtifactViewer";
@@ -29,7 +29,7 @@ export function ArtifactMark() {
 /** The Artifacts tab: the pages this session's agent showed, and one of them open. */
 export function ArtifactsPanel({ sessionId, artifacts, viewed, onView, isExpanded, onToggleExpanded, onError }: ArtifactsPanelProps) {
   const isOnly = artifacts.length === 1;
-  const open = viewed ? artifacts.find((artifact) => artifact.id === viewed.artifactId) : isOnly ? artifacts[0] : undefined;
+  const open = shownArtifactOf(artifacts, viewed);
 
   if (open) {
     return (

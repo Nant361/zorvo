@@ -8,6 +8,7 @@ import {
   openingFor,
   parseArtifacts,
   parseShown,
+  shownArtifactOf,
   shownResultText,
   versionLabel,
   type ShownArtifact,
@@ -154,5 +155,17 @@ describe("a saved transcript", () => {
     const [kept] = normalizeTranscript([{ ...message, artifactCard: { artifactId: "../x", title: "T", version: 1 } }]);
     expect(kept.id).toBe("m-1");
     expect("artifactCard" in kept).toBe(false);
+  });
+});
+
+describe("shownArtifactOf", () => {
+  const one = { id: "a-0000000000000001", title: "One", sourcePath: "/w/1.html", versions: [{ n: 1, at: 1, bytes: 1 }] };
+  const two = { ...one, id: "a-0000000000000002", title: "Two" };
+
+  it("is the viewed artifact, or the only one when none is viewed", () => {
+    expect(shownArtifactOf([one, two], { artifactId: two.id, version: null })).toBe(two);
+    expect(shownArtifactOf([one], null)).toBe(one);
+    expect(shownArtifactOf([one, two], null)).toBeUndefined();
+    expect(shownArtifactOf([one], { artifactId: "a-ffffffffffffffff", version: null })).toBeUndefined();
   });
 });

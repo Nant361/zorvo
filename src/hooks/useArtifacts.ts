@@ -9,20 +9,27 @@ const ARTIFACTS_CHANGED = 'artifacts-changed';
 
 type BySession = ReadonlyMap<string, readonly Artifact[]>;
 
-function parseAnswer(answer: unknown): Array<[string, Artifact[]]> {
+/** One session's answer: its artifacts, and whether its index could not be read (then they are not known). */
+type Entry = [sessionId: string, artifacts: Artifact[], failed: boolean];
+
+function parseAnswer(answer: unknown): Entry[] {
   if (!Array.isArray(answer)) return [];
-  return answer.flatMap((entry): Array<[string, Artifact[]]> => {
-    const sessionId = (entry as { sessionId?: unknown } | null)?.sessionId;
-    return typeof sessionId === 'string' ? [[sessionId, parseArtifacts((entry as { artifacts?: unknown }).artifacts)]] : [];
+  return answer.flatMap((entry): Entry[] => {
+    const fields = entry as { sessionId?: unknown; artifacts?: unknown; failed?: unknown } | null;
+    const sessionId = fields?.sessionId;
+    return typeof sessionId === 'string' ? [[sessionId, parseArtifacts(fields?.artifacts), fields?.failed === true]] : [];
   });
 }
 
 /**
  * The artifacts of the given sessions, read from the backend, which owns them.
- * A session is read again when the backend says it changed.
+ * A session is read again when the backend says it changed. A session whose
+ * index could not be read keeps the list it had, and is left out of
+ * `readSessions`: nothing may be removed because its artifacts seem gone.
  */
-export function useArtifacts(sessionIds: readonly string[]): { bySession: BySession; error: boolean } {
+export function useArtifacts(sessionIds: readonly string[]): { bySession: BySession; error: boolean; readSessions: ReadonlySet<string> } {
   const [bySession, setBySession] = useState<BySession>(new Map());
+  const [readSessions, setReadSessions] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState(false);
   // The ids as one string, so a new array with the same ids asks nothing.
   const key = sessionIds.join('\n');
@@ -41,9 +48,18 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
     for (const [sessionId] of entries) shownRequest.current.set(sessionId, request);
     setBySession((previous) => {
       const next = new Map(previous);
-      for (const [sessionId, artifacts] of entries) next.set(sessionId, artifacts);
+      for (const [sessionId, artifacts, failed] of entries) if (!failed) next.set(sessionId, artifacts);
       // A full list is for the sessions listed now: one that is gone takes its artifacts with it.
       if (isFullList) for (const sessionId of next.keys()) if (!idsRef.current.includes(sessionId)) next.delete(sessionId);
+      return next;
+    });
+    setReadSessions((previous) => {
+      const next = new Set(previous);
+      for (const [sessionId, , failed] of entries) {
+        if (failed) next.delete(sessionId);
+        else next.add(sessionId);
+      }
+      if (isFullList) for (const sessionId of next) if (!idsRef.current.includes(sessionId)) next.delete(sessionId);
       return next;
     });
   };
@@ -55,6 +71,7 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
     const current = ++generation.current;
     if (ids.length === 0) {
       setBySession(new Map());
+      setReadSessions(new Set());
       return;
     }
     const request = ++lastRequest.current;
@@ -89,5 +106,5 @@ export function useArtifacts(sessionIds: readonly string[]): { bySession: BySess
     };
   }, []);
 
-  return { bySession, error };
+  return { bySession, error, readSessions };
 }

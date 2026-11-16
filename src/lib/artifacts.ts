@@ -101,6 +101,12 @@ export function versionLabel(version: number, artifact: Artifact): string {
   return `Version ${version} of ${newestVersion(artifact)}`;
 }
 
+/** The artifact the viewer shows: the one viewed, else the only one, else none (the list shows). */
+export function shownArtifactOf(artifacts: readonly Artifact[], viewed: ViewedArtifact | null): Artifact | undefined {
+  if (viewed) return artifacts.find((artifact) => artifact.id === viewed.artifactId);
+  return artifacts.length === 1 ? artifacts[0] : undefined;
+}
+
 export function hasVersion(artifact: Artifact | undefined, version: number): boolean {
   return artifact !== undefined && artifact.versions.some((listed) => listed.n === version);
 }

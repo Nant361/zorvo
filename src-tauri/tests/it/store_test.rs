@@ -76,6 +76,7 @@ fn session(id: &str, status: &str) -> SessionRecord {
         delegated_from: None,
         opened_by: None,
         review_comments: Vec::new(),
+        artifact_comments: Vec::new(),
         private_mode: None,
         private_usage: None,
     }

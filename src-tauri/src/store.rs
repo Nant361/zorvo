@@ -221,6 +221,12 @@ pub struct SessionRecord {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub review_comments: Vec<ReviewCommentRecord>,
+    /// Comments the user wrote on the session's artifact pages.
+    #[serde(
+        deserialize_with = "lenient_artifact_comments",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub artifact_comments: Vec<ArtifactCommentRecord>,
     /// Set for a Zorvo Private session: the NEAR AI model it runs on. The key
     /// is never saved; the backend makes the launch again from the model.
     #[serde(
@@ -258,6 +264,26 @@ fn is_false(value: &bool) -> bool {
 pub struct PrivateUsageRecord {
     pub credits: f64,
     pub estimated: bool,
+}
+
+/// One comment on an artifact page. The UI checks the anchor's fields and the
+/// limits; here only the shape matters, and the anchor must be an object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactCommentRecord {
+    pub id: String,
+    pub artifact_id: String,
+    pub version: i64,
+    pub anchor: serde_json::Map<String, serde_json::Value>,
+    pub body: String,
+    pub created_at: i64,
+    /// When a message holding this comment was sent.
+    #[serde(
+        default,
+        deserialize_with = "lenient_time",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub sent_at: Option<i64>,
 }
 
 /// One comment on a line of a session's diff. The UI checks the values of
@@ -417,6 +443,19 @@ fn lenient_opened_by<'de, D: Deserializer<'de>>(
 fn lenient_review_comments<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ReviewCommentRecord>, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value(item).ok())
+            .collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// The saved artifact comments, each read on its own, as review comments are.
+fn lenient_artifact_comments<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<ArtifactCommentRecord>, D::Error> {
     Ok(match serde_json::Value::deserialize(deserializer)? {
         serde_json::Value::Array(items) => items
             .into_iter()
@@ -881,6 +920,65 @@ mod tests {
         assert_eq!(saved["sentAt"], 20);
         assert_eq!(saved["lineHash"], "deadbeef");
         assert_eq!(saved["createdAt"], 10);
+    }
+
+    fn artifact_comment_json(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "artifactId": "a-0123456789abcdef",
+            "version": 2,
+            "anchor": { "kind": "text", "quote": "Annual", "before": "", "after": "" },
+            "body": "Make this a badge.",
+            "createdAt": 10,
+            "sentAt": 20,
+        })
+    }
+
+    #[test]
+    fn artifact_comments_survive_a_save() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "artifactComments": [artifact_comment_json("ac-1")]
+        })))
+        .expect("deserialize");
+
+        let value = serde_json::to_value(&record).expect("serialize");
+
+        assert_eq!(value["artifactComments"][0], artifact_comment_json("ac-1"));
+        let back: SessionRecord = serde_json::from_value(value).expect("deserialize again");
+        assert_eq!(back, record);
+    }
+
+    #[test]
+    fn an_artifact_comments_field_of_the_wrong_type_loads_empty() {
+        let record: SessionRecord =
+            serde_json::from_value(session_json(serde_json::json!({ "artifactComments": 5 })))
+                .expect("a bad artifactComments must not fail the record");
+        assert!(record.artifact_comments.is_empty());
+
+        let mut no_anchor = artifact_comment_json("ac-2");
+        no_anchor.as_object_mut().expect("object").remove("anchor");
+        let mut text_anchor = artifact_comment_json("ac-3");
+        text_anchor["anchor"] = serde_json::json!("text");
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "artifactComments": [no_anchor, text_anchor, artifact_comment_json("ac-1")]
+        })))
+        .expect("deserialize");
+        let ids: Vec<&str> = record
+            .artifact_comments
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect();
+        assert_eq!(ids, ["ac-1"]);
+    }
+
+    #[test]
+    fn an_empty_artifact_comments_list_is_not_written() {
+        let value = serde_json::to_value(SessionRecord {
+            id: "s-1".to_string(),
+            ..SessionRecord::default()
+        })
+        .expect("serialize");
+        assert!(value.get("artifactComments").is_none());
     }
 
     #[test]

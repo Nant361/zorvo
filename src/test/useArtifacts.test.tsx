@@ -125,6 +125,29 @@ describe("useArtifacts", () => {
     expect(result.current.bySession.get("s-2")?.[0].title).toBe("Two");
   });
 
+  it("a failed session keeps its earlier list and leaves readSessions", async () => {
+    invoke.mockResolvedValueOnce([{ sessionId: "s-1", artifacts: [artifact("One")], failed: false }]);
+    const { result } = renderHook(() => useArtifacts(["s-1"]));
+    await waitFor(() => expect(result.current.readSessions.has("s-1")).toBe(true));
+    invoke.mockResolvedValueOnce([{ sessionId: "s-1", artifacts: [], failed: true }]);
+
+    act(() => deliver("s-1"));
+
+    await waitFor(() => expect(result.current.readSessions.has("s-1")).toBe(false));
+    expect(result.current.bySession.get("s-1")?.[0].title).toBe("One");
+  });
+
+  it("a session read for the first time with a failure is not read", async () => {
+    invoke.mockResolvedValueOnce([
+      { sessionId: "s-1", artifacts: [], failed: true },
+      { sessionId: "s-2", artifacts: [] },
+    ]);
+    const { result } = renderHook(() => useArtifacts(["s-1", "s-2"]));
+    await waitFor(() => expect(result.current.readSessions.has("s-2")).toBe(true));
+    expect(result.current.readSessions.has("s-1")).toBe(false);
+    expect(result.current.bySession.has("s-1")).toBe(false);
+  });
+
   it("says when the list could not be read", async () => {
     invoke.mockRejectedValue(new Error("no"));
     const { result } = renderHook(() => useArtifacts(["s-1"]));

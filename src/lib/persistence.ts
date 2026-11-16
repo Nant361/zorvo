@@ -17,6 +17,7 @@ import { settlePermissionCards } from './acp-events';
 import { diffDetail } from './diff-rows';
 import { normalizeAppearance } from './appearance';
 import type { AgentOptions } from './acp-draft';
+import { validArtifactComments } from './artifact-comments';
 import { validReviewComments } from './review-comments';
 import { parseArtifactCard } from './artifacts';
 import { toCommands, toConfigOptions, toModels, toModes } from '../hooks/useAcpSessions';
@@ -126,8 +127,9 @@ function withValidStartCommit(worktree: SessionWorktree): SessionWorktree {
 
 /** A session keeps everything else when one of its optional fields is malformed. */
 function withValidFields(session: Session): Session {
-  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, compareRunId, reviewComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
+  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
   const comments = validReviewComments(reviewComments);
+  const pageComments = validArtifactComments(artifactComments);
   const usage = toPrivateUsage(privateUsage);
   const sessionCap = isPrivateMode(privateMode) ? privateSessionCap(privateMode.sessionCap) : undefined;
   return {
@@ -142,6 +144,7 @@ function withValidFields(session: Session): Session {
     ...(delegatedFrom === null || isDelegationLink(delegatedFrom) ? { delegatedFrom } : {}),
     ...(isOpenedByLink(openedBy) ? { openedBy: withValidHandle(openedBy) } : {}),
     ...(comments.length > 0 ? { reviewComments: comments } : {}),
+    ...(pageComments.length > 0 ? { artifactComments: pageComments } : {}),
     ...(isPrivateMode(privateMode)
       ? {
           privateMode: {
