@@ -165,7 +165,7 @@ import {
   type AgentOptions,
   type ProbedOptions,
 } from "./lib/acp-draft";
-import type { AgentProfile, ArtifactCard, ReviewComment, Session, SessionWorktree, Settings } from "./types";
+import type { AgentProfile, ArtifactCard, ArtifactComment, ReviewComment, Session, SessionWorktree, Settings } from "./types";
 import { replyBlockedReason } from "./lib/reply-quote";
 
 const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folder chip by the message box.";
@@ -454,6 +454,19 @@ export default function App() {
       updateState((prev) => ({
         ...prev,
         sessions: prev.sessions.map((s) => (s.id === sessionId ? { ...s, reviewComments: change(s.reviewComments ?? []) } : s)),
+      })),
+    [updateState],
+  );
+  const updateArtifactComments = useCallback(
+    (sessionId: string, change: (prev: ArtifactComment[]) => ArtifactComment[]) =>
+      updateState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) => {
+          if (s.id !== sessionId) return s;
+          const current = s.artifactComments ?? [];
+          const next = change(current);
+          return next === current ? s : { ...s, artifactComments: next };
+        }),
       })),
     [updateState],
   );
@@ -1275,11 +1288,13 @@ export default function App() {
     sessions,
     comments: reviewComments,
     updateComments: updateReviewComments,
+    updateArtifactComments,
     composerRef,
     canContinue: isActiveRunning || isResumable,
     hasComposer: activeAgentRemoved === null,
     isComposerDisabled,
     collapseDiff: inspector.collapseDiff,
+    collapseArtifact: () => inspector.setArtifactExpanded(false),
     agentNameOf: (profileId) => agents.find((a) => a.id === profileId)?.name ?? profileId,
   });
   rearmReviewRef.current = review.rearm;
