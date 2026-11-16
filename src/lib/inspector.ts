@@ -1,5 +1,5 @@
 /** The inspector's tabs, in the order they show. */
-export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "terminal";
+export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "terminal" | "private";
 
 export const INSPECTOR_WIDTH = { min: 320, max: 720, initial: 380, wide: 560, step: 16 } as const;
 
@@ -62,15 +62,23 @@ export function minInspectorWidth(tab: InspectorTab, isViewingFile = false): num
 
 /**
  * The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder,
- * and Artifacts, between those two, while the session has a page its agent showed.
+ * Artifacts, between those two, while the session has a page its agent showed, and Private only while a
+ * private session is on screen.
  */
-export function offeredTabs(on: { hasFolder: boolean; isRepository: boolean; hasSession: boolean; hasArtifacts?: boolean }): InspectorTab[] {
+export function offeredTabs(on: {
+  hasFolder: boolean;
+  isRepository: boolean;
+  hasSession: boolean;
+  hasArtifacts?: boolean;
+  isPrivate?: boolean;
+}): InspectorTab[] {
   const tabs: InspectorTab[] = [];
   if (on.hasFolder && on.isRepository) tabs.push("changes");
   if (on.hasSession) tabs.push("activity");
   if (on.hasFolder) tabs.push("files");
   if (on.hasSession && on.hasArtifacts) tabs.push("artifacts");
   if (on.hasFolder) tabs.push("terminal");
+  if (on.hasSession && on.isPrivate) tabs.push("private");
   return tabs;
 }
 
