@@ -42,14 +42,16 @@ export function UserQuestionsForm({ questions, drafts, onChange, options, onChoo
   const answers = answersOf(questions, drafts);
   const hint = submitHint(questions, drafts);
   const showsSubmit = current === questions.length - 1 || answers !== undefined;
-  const status = showsSubmit && hint ? hint : hasSteps ? `Question ${current + 1} of ${questions.length}` : "";
+  const isSubmitBlocked = showsSubmit && hint !== undefined;
   const draftOf = (index: number) => drafts[index] ?? EMPTY_DRAFT;
 
   useEffect(() => {
     if (!hasMoved.current) return;
     hasMoved.current = false;
-    const controls = [...(questionRef.current?.querySelectorAll<HTMLInputElement>("input[type=radio], input[type=checkbox]") ?? [])];
-    (controls.find((control) => control.checked) ?? controls[0])?.focus();
+    const fieldset = questionRef.current;
+    const controls = [...(fieldset?.querySelectorAll<HTMLInputElement>("input[type=radio]:enabled, input[type=checkbox]:enabled") ?? [])];
+    // A disabled card has no control to take it, and the button pressed may be gone: the question takes it.
+    (controls.find((control) => control.checked) ?? controls[0] ?? fieldset)?.focus();
   }, [current]);
 
   const goTo = (index: number) => {
@@ -60,6 +62,12 @@ export function UserQuestionsForm({ questions, drafts, onChange, options, onChoo
 
   const declines = options.filter((option) => !option.kind.startsWith("allow"));
   const allows = options.filter((option) => option.kind.startsWith("allow"));
+  const submitWith = allows[allows.length - 1];
+  // Enter in the Other box does what the primary button beside it would.
+  const onEnter = () => {
+    if (!showsSubmit) goTo(current + 1);
+    else if (answers && submitWith && !disabled) onChoose?.(submitWith.optionId, answers);
+  };
 
   return (
     <>
@@ -101,11 +109,16 @@ export function UserQuestionsForm({ questions, drafts, onChange, options, onChoo
         onChange={(draft) => onChange(current, draft)}
         disabled={disabled}
         showsHeader={!hasSteps}
+        onEnter={onEnter}
       />
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <p id={statusId} role="status" className="min-w-0 flex-1 text-ui-sm text-fg-muted">
-          {status}
+        <p className="min-w-0 flex-1 text-ui-sm text-fg-muted">
+          {/* Not announced: moving to a question already puts the focus, and its name, there. */}
+          {!isSubmitBlocked && hasSteps && <span>{`Question ${current + 1} of ${questions.length}`}</span>}
+          <span id={statusId} role="status">
+            {isSubmitBlocked ? hint : ""}
+          </span>
         </p>
         {declines.map((option) => (
           <Button key={option.optionId} variant="ghost" tone="secondary" disabled={disabled} onClick={() => onChoose?.(option.optionId)}>

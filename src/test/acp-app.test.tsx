@@ -234,7 +234,7 @@ describe("ACP sessions in the app", () => {
     expect(submit.disabled).toBe(true);
     await act(async () => {
       fireEvent.click(screen.getByRole("radio", { name: "Other" }));
-      fireEvent.change(screen.getByRole("textbox", { name: "Other answer for Editor" }), { target: { value: "Helix-9f3" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Your own answer" }), { target: { value: "Helix-9f3" } });
     });
     expect(submit.disabled).toBe(false);
     await act(async () => {

@@ -10,6 +10,9 @@ export interface UserQuestionFieldProps {
   disabled: boolean;
   /** The header above the question; left out when a step already names it. */
   showsHeader: boolean;
+  /** Enter in the Other box: what Next or Submit would do. */
+  onEnter: () => void;
+  /** Takes the focus itself (`tabIndex` -1) when it has no control that can, as in a disabled card. */
   ref?: Ref<HTMLFieldSetElement>;
 }
 
@@ -58,13 +61,14 @@ function OptionRow({ type, name, label, description, checked, disabled, onChange
  * multi-select question) and "Other", whose text box opens once it is picked. Holds no answers;
  * what is typed is never stored or logged.
  */
-export function UserQuestionField({ question, draft, onChange, disabled, showsHeader, ref }: UserQuestionFieldProps) {
+export function UserQuestionField({ question, draft, onChange, disabled, showsHeader, onEnter, ref }: UserQuestionFieldProps) {
   const name = useId();
   const type = question.multiSelect ? "checkbox" : "radio";
-  const subject = question.header || question.question;
   const boxRef = useRef<HTMLInputElement>(null);
-  // Set when Other is picked, so the box that opens takes the focus.
+  // Set when Other is picked with the pointer, so the box that opens takes the focus. Not from the
+  // keyboard: arrow keys pick Other on their way through a radio group and would be caught in the box.
   const focusBox = useRef(false);
+  const isPointerPick = useRef(false);
 
   useEffect(() => {
     if (focusBox.current && draft.otherChecked) boxRef.current?.focus();
@@ -78,7 +82,8 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
         : { ...draft, picked: [label], otherChecked: false },
     );
   const toggleOther = () => {
-    focusBox.current = !draft.otherChecked;
+    focusBox.current = !draft.otherChecked && isPointerPick.current;
+    isPointerPick.current = false;
     onChange(question.multiSelect ? { ...draft, otherChecked: !draft.otherChecked } : { ...draft, picked: [], otherChecked: true });
   };
   // Typing an answer picks "Other"; for a single choice it replaces the option picked.
@@ -86,7 +91,7 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
     onChange(question.multiSelect ? { ...draft, otherChecked: true, otherText } : { picked: [], otherChecked: true, otherText });
 
   return (
-    <fieldset ref={ref} className="flex min-w-0 flex-col gap-1.5">
+    <fieldset ref={ref} tabIndex={-1} className="flex min-w-0 flex-col gap-1.5 focus:outline-none">
       <legend className="mb-1.5 flex flex-col gap-0.5">
         {showsHeader && question.header && <span className="text-caption font-medium text-fg-muted">{question.header}</span>}
         <span className="whitespace-pre-line text-ui font-semibold text-fg">{question.question}</span>
@@ -106,8 +111,23 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
       ))}
       {/* One element whether or not Other is picked, so its control keeps the focus while the box opens. */}
       <div className={rowClass(draft.otherChecked, disabled)}>
-        <label className={`${ROW_INNER} ${disabled ? "" : "cursor-pointer"}`}>
-          <input type={type} name={name} className={CONTROL} checked={draft.otherChecked} disabled={disabled} onChange={toggleOther} />
+        <label
+          className={`${ROW_INNER} ${disabled ? "" : "cursor-pointer"}`}
+          onPointerDown={() => {
+            isPointerPick.current = true;
+          }}
+        >
+          <input
+            type={type}
+            name={name}
+            className={CONTROL}
+            checked={draft.otherChecked}
+            disabled={disabled}
+            onChange={toggleOther}
+            onKeyDown={() => {
+              isPointerPick.current = false;
+            }}
+          />
           <span className="text-fg">Other</span>
         </label>
         {draft.otherChecked && (
@@ -116,12 +136,19 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
               ref={boxRef}
               type="text"
               className={INPUT}
-              aria-label={`Other answer for ${subject}`}
+              // The fieldset's legend already names the question; only one question shows at a time.
+              aria-label="Your own answer"
               placeholder="Type your own answer"
               maxLength={MAX_OTHER_CHARS}
               value={draft.otherText}
               disabled={disabled}
               onChange={(e) => typeOther(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  onEnter();
+                }
+              }}
             />
           </div>
         )}

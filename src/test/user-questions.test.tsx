@@ -331,14 +331,16 @@ describe("ActionCard with questions", () => {
     expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Blue, Green", "1": "Zed" });
   });
 
-  it("opens a box for Other only once Other is picked, and puts focus in it", () => {
+  it("opens a box for Other only once Other is picked, and puts focus in it after a click", () => {
     const onChoose = vi.fn();
     render(<ActionCard card={questionCard()} onChoose={onChoose} />);
     expect(within(colours()).queryByRole("textbox")).toBeNull();
 
     fireEvent.click(within(colours()).getByRole("checkbox", { name: /Blue/ }));
-    fireEvent.click(within(colours()).getByRole("checkbox", { name: "Other" }));
-    const box = within(colours()).getByRole("textbox", { name: "Other answer for Colours" });
+    const other = within(colours()).getByRole("checkbox", { name: "Other" });
+    fireEvent.pointerDown(other);
+    fireEvent.click(other);
+    const box = within(colours()).getByRole("textbox", { name: "Your own answer" });
     expect(document.activeElement).toBe(box);
     expect(box.getAttribute("maxlength")).toBe(String(MAX_OTHER_CHARS));
     fireEvent.change(box, { target: { value: "Red" } });
@@ -346,11 +348,43 @@ describe("ActionCard with questions", () => {
     fireEvent.click(next());
     fireEvent.click(within(editor()).getByRole("radio", { name: /Vim/ }));
     fireEvent.click(within(editor()).getByRole("radio", { name: "Other" }));
-    fireEvent.change(within(editor()).getByRole("textbox", { name: "Other answer for Editor" }), { target: { value: "Helix" } });
+    fireEvent.change(within(editor()).getByRole("textbox", { name: "Your own answer" }), { target: { value: "Helix" } });
     expect((within(editor()).getByRole("radio", { name: /Vim/ }) as HTMLInputElement).checked).toBe(false);
     fireEvent.click(submit());
 
     expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Blue, Red", "1": "Helix" });
+  });
+
+  it("leaves the focus on Other when the keyboard picks it, so the arrow keys keep moving through the options", () => {
+    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    fireEvent.click(next());
+    const other = within(editor()).getByRole("radio", { name: "Other" });
+
+    other.focus();
+    fireEvent.keyDown(other, { key: "ArrowDown" });
+    fireEvent.click(other);
+
+    expect(within(editor()).getByRole("textbox")).toBeDefined();
+    expect(document.activeElement).toBe(other);
+  });
+
+  it("takes Enter in the Other box as Next, and as Submit once every question has an answer", () => {
+    const onChoose = vi.fn();
+    render(<ActionCard card={questionCard()} onChoose={onChoose} />);
+    fireEvent.click(within(colours()).getByRole("checkbox", { name: "Other" }));
+    fireEvent.change(within(colours()).getByRole("textbox"), { target: { value: "Red" } });
+
+    fireEvent.keyDown(within(colours()).getByRole("textbox"), { key: "Enter" });
+    expect(editor()).toBeDefined();
+
+    fireEvent.click(within(editor()).getByRole("radio", { name: "Other" }));
+    const box = within(editor()).getByRole("textbox");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onChoose).not.toHaveBeenCalled();
+
+    fireEvent.change(box, { target: { value: "Helix" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onChoose).toHaveBeenCalledWith("proceed_once", { "0": "Red", "1": "Helix" });
   });
 
   it("keeps what was typed for Other when you leave the question and come back", () => {
@@ -430,6 +464,8 @@ describe("ActionCard with questions", () => {
     expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(next());
     expect((within(editor()).getByRole("radio", { name: /Vim/ }) as HTMLInputElement).disabled).toBe(true);
+    // No control can take the focus, and Next is gone: the question takes it.
+    expect(document.activeElement).toBe(editor());
   });
 
   it("says how a settled card ended, with none of the answers", () => {

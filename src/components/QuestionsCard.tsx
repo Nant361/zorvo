@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { AgentTile } from "./ui/AgentTile";
 import { UserQuestionsForm, type QuestionAnswers } from "./UserQuestionsForm";
 import { orderedChoices, questionsOutcome, questionsTitle } from "../lib/permission-copy";
@@ -34,16 +34,19 @@ export function QuestionsCard({ card, questions, agentName, agentProfileId, onCh
   const setDraft = (index: number, draft: QuestionDraft) =>
     setDrafts((prev) => questions.map((_, i) => (i === index ? draft : (prev[i] ?? EMPTY_DRAFT))));
   const isPending = card.status === "pending";
+  const titleId = useId();
 
   return (
     <section
       data-testid={`action-card-${card.id}`}
-      aria-label={questionsTitle(agentName, questions.length)}
+      aria-labelledby={titleId}
       className="my-3 flex flex-col gap-3.5 rounded-xl border border-border-strong bg-surface-2 p-4 text-left"
     >
       <div className="flex items-center gap-2">
         <AgentTile profileId={agentProfileId ?? ""} name="" size={22} />
-        <h2 className="min-w-0 flex-1 text-ui font-semibold text-fg">{questionsTitle(agentName, questions.length)}</h2>
+        <h2 id={titleId} className="min-w-0 flex-1 text-ui font-semibold text-fg">
+          {questionsTitle(agentName, questions.length)}
+        </h2>
         {isPending && <span className="shrink-0 text-caption text-fg-muted">Waiting for you</span>}
       </div>
 
