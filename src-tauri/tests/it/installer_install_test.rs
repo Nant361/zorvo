@@ -1114,3 +1114,47 @@ fn a_real_npm_install_keeps_its_program_runnable_after_the_move() {
     let out = std::process::Command::new(dest.join(bin)).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "fixture-ok");
 }
+
+#[test]
+fn installing_repairs_an_npm_agent_whose_program_is_gone() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    fs::remove_file(dest.join("bin/fake")).unwrap();
+
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+
+    assert!(dest.join("bin/fake").is_file());
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(staging_is_empty(&d));
+}
+
+#[test]
+fn installing_repairs_an_npm_agent_whose_record_names_no_program() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    mark_installed(&dest);
+
+    installer(&d, &server)
+        .run(
+            "fake",
+            &[npm_agent_step("fake", "fake@1.0.0")],
+            &env,
+            Some(24),
+            &no_progress,
+        )
+        .unwrap();
+
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(dest.join("bin/fake").is_file());
+}

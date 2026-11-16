@@ -20,7 +20,7 @@ use super::archive::{ensure_agent_command, format_for_url, unpack, UnpackError, 
 use super::cleanup::{clean_up, CleanupInputs};
 use super::download::{download, DownloadError, DownloadLimits};
 use super::layout::{read_record, remove_path, CommitOutcome, InstallRecord, Staging, ToolsDir};
-use super::npm_bin::choose_installed_bin;
+use super::npm_bin::{choose_installed_bin, recorded_program};
 use super::plan::PlannedStep;
 use super::prerequisites::{
     npm_install_args, prerequisites_for, run_npm_install, NpmError, Prerequisite,
@@ -462,8 +462,16 @@ impl Installer {
         user_node_major: Option<u32>,
     ) -> Result<(), StepError> {
         let dest = self.tools.agent_dir(id, version);
-        if read_record(&dest).is_some() {
-            return Ok(());
+        if let Some(installed) = read_record(&dest) {
+            let has_program = installed
+                .bin
+                .is_some_and(|bin| recorded_program(&dest, &bin).is_some());
+            if has_program {
+                return Ok(());
+            }
+            // A record whose program is missing reads as not installed, so
+            // Install must replace it, not skip it.
+            remove_path(&dest)?;
         }
         let (npm, npm_env) = self.npm_for(&run.name, env, user_node_major)?;
         let staging = self.tools.new_staging()?;

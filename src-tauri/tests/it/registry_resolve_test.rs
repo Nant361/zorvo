@@ -1070,3 +1070,25 @@ fn an_installed_npx_agent_is_by_zorvo_even_with_a_global_package() {
         InstallStatus::NotInstalled
     );
 }
+
+#[test]
+fn a_recorded_program_outside_the_install_is_not_installed() {
+    let dir = bin_dir_with(&["npx"]);
+    let path = path_of(dir.path());
+    let outside = bin_dir_with(&["evil"]);
+    let package = bin_dir_with(&["gemini"]);
+    let globals = BTreeSet::new();
+    let absolute = path_of(&outside.path().join("evil"));
+    let up = format!(
+        "../{}/evil",
+        outside.path().file_name().unwrap().to_string_lossy()
+    );
+
+    for program in [absolute.as_str(), up.as_str(), "./../x", ""] {
+        let installed = with_npm_install(user_node(22), &gemini(), package.path(), program);
+        let profile = resolve_profile(&gemini(), &system(&path, &globals, &installed), true);
+
+        assert_eq!(profile.availability, "not_installed", "{program}");
+        assert_eq!(profile.acp_program_path, None, "{program}");
+    }
+}

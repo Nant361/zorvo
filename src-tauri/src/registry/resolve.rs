@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::env_resolver::find_binary_in_path_str;
+use crate::installer::npm_bin::recorded_program;
 use crate::installer::plan::{InstalledTools, PlannedStep};
 use crate::installer::prerequisites::{prerequisites_for, Prerequisite};
 use crate::installer::runtimes::{RuntimeKind, MIN_USER_NODE_MAJOR};
@@ -178,8 +179,8 @@ impl Resolution<'_> {
 fn installed_npm_program(entry: &RegistryEntry, tools: &SystemTools) -> Option<String> {
     let key = (entry.id.clone(), entry.version.clone());
     let dir = tools.installed.agents.get(&key)?;
-    let program = dir.join(tools.installed.agent_bins.get(&key)?);
-    program.is_file().then(|| path_string(&program))
+    let bin = tools.installed.agent_bins.get(&key)?;
+    recorded_program(dir, bin).map(|program| path_string(&program))
 }
 
 /// An npx agent runs from Zorvo's install of its package, never through

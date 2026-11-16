@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use super::install::is_single_name;
 
@@ -20,6 +20,19 @@ pub fn choose_installed_bin(spec: &str, bin_dir: &Path) -> Option<String> {
         Some(first) if is_one_program && is_single_name(first) => Some(first.clone()),
         _ => choose_bin(spec, &names),
     }
+}
+
+/// The file an install record's `bin` names inside `install_dir`, when it is
+/// there. `bin` comes from a file on disk, so it counts only as a relative
+/// path of plain parts: it can never name a program outside the install.
+pub fn recorded_program(install_dir: &Path, bin: &str) -> Option<PathBuf> {
+    let relative = Path::new(bin);
+    let is_inside = !bin.is_empty()
+        && relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)));
+    let program = install_dir.join(relative);
+    (is_inside && program.is_file()).then_some(program)
 }
 
 /// The names of what is directly in `dir`, sorted; none when it cannot be read.
