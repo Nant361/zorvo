@@ -1,5 +1,5 @@
 /** The inspector's tabs, in the order they show. */
-export type InspectorTab = "changes" | "activity" | "files" | "terminal";
+export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "terminal";
 
 export const INSPECTOR_WIDTH = { min: 320, max: 720, initial: 380, wide: 560, step: 16 } as const;
 
@@ -20,9 +20,12 @@ export function clampInspectorWidth(px: number): number {
   return Math.min(INSPECTOR_WIDTH.max, Math.max(INSPECTOR_WIDTH.min, Math.round(px)));
 }
 
-/** The Terminal tab, and the Files tab while a file is open in it, need room for a line of code or a shell. */
+/**
+ * The Terminal and Artifacts tabs, and the Files tab while a file is open in it, need room for a shell,
+ * a page or a line of code. Artifacts is wide for its list too, so opening a page does not move the edge.
+ */
 function isWideTab(tab: InspectorTab, isViewingFile: boolean): boolean {
-  return tab === "terminal" || (tab === "files" && isViewingFile);
+  return tab === "terminal" || tab === "artifacts" || (tab === "files" && isViewingFile);
 }
 
 /** The narrowest the main sheet may get beside the inspector, so its top bar is never crushed. */
@@ -57,12 +60,17 @@ export function minInspectorWidth(tab: InspectorTab, isViewingFile = false): num
   return isWideTab(tab, isViewingFile) ? INSPECTOR_WIDTH.wide : INSPECTOR_WIDTH.min;
 }
 
-/** The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder. */
-export function offeredTabs(on: { hasFolder: boolean; isRepository: boolean; hasSession: boolean }): InspectorTab[] {
+/**
+ * The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder,
+ * and Artifacts, between those two, while the session has a page its agent showed.
+ */
+export function offeredTabs(on: { hasFolder: boolean; isRepository: boolean; hasSession: boolean; hasArtifacts?: boolean }): InspectorTab[] {
   const tabs: InspectorTab[] = [];
   if (on.hasFolder && on.isRepository) tabs.push("changes");
   if (on.hasSession) tabs.push("activity");
-  if (on.hasFolder) tabs.push("files", "terminal");
+  if (on.hasFolder) tabs.push("files");
+  if (on.hasSession && on.hasArtifacts) tabs.push("artifacts");
+  if (on.hasFolder) tabs.push("terminal");
   return tabs;
 }
 

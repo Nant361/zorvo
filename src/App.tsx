@@ -12,6 +12,9 @@ import { RemovedAgentPanel } from "./components/RemovedAgentPanel";
 import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
+import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
+import { useArtifacts } from "./hooks/useArtifacts";
+import { useArtifactOpening } from "./hooks/useArtifactOpening";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -547,7 +550,15 @@ export default function App() {
   const isDraggingFiles = useFileDrop(handleDroppedFiles, reportError);
 
   const turnsEnded = useTurnsEnded(Boolean(activeSessionId) && isSessionBusy(activeSessionId));
-  const inspectorTabs = offeredTabs({ hasFolder: Boolean(filesFolder), isRepository, hasSession: Boolean(activeSession) });
+  // The pages each session's agent showed; the backend owns them and says when they change.
+  const artifacts = useArtifacts(useMemo(() => sessions.map((session) => session.id), [sessions]));
+  const sessionArtifacts = useMemo(() => (activeSession ? artifacts.bySession.get(activeSession.id) ?? [] : []), [artifacts.bySession, activeSession]);
+  const inspectorTabs = offeredTabs({
+    hasFolder: Boolean(filesFolder),
+    isRepository,
+    hasSession: Boolean(activeSession),
+    hasArtifacts: sessionArtifacts.length > 0,
+  });
   const inspector = useInspector(filesFolder?.path, isRepository, turnsEnded, reportError, {
     isSidebarShown: !isSidebarHidden,
     offered: inspectorTabs,
@@ -559,10 +570,18 @@ export default function App() {
       if (tab === "terminal" && filesFolder) terminalDrawer.ensureShell(filesFolder.path);
     },
   });
+  const onArtifactShown = useArtifactOpening({
+    activeSessionId: activeSession?.id ?? null,
+    viewed: inspector.viewedArtifact,
+    showTab: () => inspector.show("artifacts"),
+    view: inspector.viewArtifact,
+  });
   // Memoized: the stats object only changes when they are read again.
   const fileMarkers = useMemo(() => markersOf(inspector.headStats, inspector.filesPrefix), [inspector.headStats, inspector.filesPrefix]);
   // A tab that no longer applies (another folder, a draft) does not show.
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
+  // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
+  const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -622,8 +641,7 @@ export default function App() {
     updateMessages,
     onAttention: (sessionId, reason) => notifyAttention(sessionId, reason),
     onNotice: (message) => setNotice(message),
-    // Task 8 opens the Artifacts tab from here.
-    onArtifactShown: () => undefined,
+    onArtifactShown,
     messagesOf: async (sessionId) => {
       const live = transcripts[sessionId] ?? [];
       if (transcriptStatus[sessionId] === "ready") return live;
@@ -1382,7 +1400,7 @@ export default function App() {
             <div className="flex min-h-0 flex-1">
               {/* A still frame: the drop overlay is placed against it and the update banner sits on it, so both stay on
                   screen whatever the column under them is scrolled to. */}
-              <article className={`${isDiffOpen && inspector.isDiffExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
+              <article className={`${(isDiffOpen && inspector.isDiffExpanded) || isArtifactExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
                 {isDraggingFiles && <FileDropOverlay />}
                 <UpdateNotice
                   agents={agentUpdates.unnotified}
@@ -1665,6 +1683,19 @@ export default function App() {
                   {isNewSessionDraft && <NewSessionBelow sessionList={draftSessionList.sessionList} />}
                 </div>
               </article>
+              {isArtifactExpanded && activeSession && (
+                <section aria-label="Artifact" className="flex min-w-0 flex-1 flex-col">
+                  <ArtifactsPanel
+                    sessionId={activeSession.id}
+                    artifacts={sessionArtifacts}
+                    viewed={inspector.viewedArtifact}
+                    onView={inspector.viewArtifact}
+                    isExpanded
+                    onToggleExpanded={() => inspector.setArtifactExpanded(false)}
+                    onError={reportError}
+                  />
+                </section>
+              )}
               {isDiffOpen && filesFolder && (
                 <DiffView
                   key={`${activeSession?.id ?? "draft"}:${filesFolder.path}`}
@@ -1682,13 +1713,13 @@ export default function App() {
               )}
             </div>
           </div>
-          {inspectorTab && (
+          {inspectorTab && !isArtifactExpanded && (
             <Inspector
               tab={inspectorTab}
               tabs={inspectorTabs}
               width={inspector.width}
               maxWidth={maxInspectorWidth(windowWidth, !isSidebarHidden)}
-              counts={{ changes: inspector.changes.changes?.length }}
+              counts={{ changes: inspector.changes.changes?.length, artifacts: sessionArtifacts.length }}
               isViewingFile={inspectorTab === "files" && inspector.viewedFile !== null}
               onSelect={inspector.show}
               onResize={inspector.setWidth}
@@ -1754,6 +1785,18 @@ export default function App() {
                       ? undefined
                       : (text) => composerRef.current?.insertText(text)
                   }
+                />
+              )}
+              {inspectorTab === "artifacts" && activeSession && (
+                <ArtifactsPanel
+                  key={activeSession.id}
+                  sessionId={activeSession.id}
+                  artifacts={sessionArtifacts}
+                  viewed={inspector.viewedArtifact}
+                  onView={inspector.viewArtifact}
+                  isExpanded={false}
+                  onToggleExpanded={() => inspector.setArtifactExpanded(true)}
+                  onError={reportError}
                 />
               )}
               {inspectorTab === "terminal" && filesFolder && (

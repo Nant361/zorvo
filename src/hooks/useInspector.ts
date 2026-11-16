@@ -5,6 +5,7 @@ import type { DiffTargets } from "../lib/diff-stats";
 import { useInspectorWidth } from "./useInspectorWidth";
 import { isCrowded, shownInspectorWidth, type InspectorTab } from "../lib/inspector";
 import type { FileStat } from "../lib/diff-stats";
+import type { ViewedArtifact } from "../lib/artifacts";
 
 export interface InspectorState {
   /** The tab shown in the inspector; null while it is closed. */
@@ -44,6 +45,12 @@ export interface InspectorState {
   targets: DiffTargets;
   /** The last read of `targets` failed, so they know no root. */
   targetsFailed: boolean;
+  /** The artifact open in the Artifacts tab; null shows the list. Another view closes it. */
+  viewedArtifact: ViewedArtifact | null;
+  viewArtifact: (view: ViewedArtifact | null) => void;
+  /** The open artifact's page takes the chat's place (only while the Artifacts tab shows). */
+  isArtifactExpanded: boolean;
+  setArtifactExpanded: (isExpanded: boolean) => void;
   /** The file open in the Files tab, relative to its folder; null shows the tree. Another folder closes it. */
   viewedFile: string | null;
   /** Opens a file in the Files tab; the inspector widens like the Terminal tab, the sidebar giving way if it must. */
@@ -104,6 +111,16 @@ export function useInspector(
   }
   const isViewingFile = viewedFile !== null && viewedFolder === folderPath;
 
+  // The artifact open in the Artifacts tab belongs to the view it was opened in (adjusted in render, as above).
+  const [viewedArtifact, setViewedArtifact] = useState<ViewedArtifact | null>(null);
+  const [isArtifactExpanded, setArtifactExpanded] = useState(false);
+  const [artifactView, setArtifactView] = useState(layout.view);
+  if (artifactView !== layout.view) {
+    setArtifactView(layout.view);
+    setViewedArtifact(null);
+    setArtifactExpanded(false);
+  }
+
   /** Asks the sidebar to give way when the inspector is about to show wider than it does now, in a narrow window. */
   const makeRoom = (nextWidth: number) => {
     const shownWidth = shownInspectorWidth(shownTab, width, isViewingFile);
@@ -126,6 +143,7 @@ export function useInspector(
     makeRoom(shownInspectorWidth(next, width, next === "files" && isViewingFile));
     // The diff and the inspector share the room beside the chat: one shows at a time.
     closeDiff();
+    if (next !== "artifacts") setArtifactExpanded(false);
     setTab(next);
     setLastTab(next);
     layout.onShow?.(next);
@@ -149,6 +167,7 @@ export function useInspector(
     setDiffOpen(true);
     // The full review opens in the chat's place; Shrink, or Add to message, brings it beside the chat.
     setExpandedView(forView ?? layout.view);
+    setArtifactExpanded(false);
     setTab(null);
   };
 
@@ -173,6 +192,10 @@ export function useInspector(
     filesPrefix,
     targets,
     targetsFailed,
+    viewedArtifact,
+    viewArtifact: setViewedArtifact,
+    isArtifactExpanded: isArtifactExpanded && shownTab === "artifacts",
+    setArtifactExpanded,
     viewedFile: isViewingFile ? viewedFile : null,
     viewFile,
     closeFile: () => setViewedFile(null),
