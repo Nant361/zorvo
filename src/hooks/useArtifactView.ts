@@ -25,6 +25,17 @@ function rectOf(box: HTMLElement): Rect {
 const isSameRect = (a: Rect | null, b: Rect) => a !== null && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 
 /**
+ * Every call about the one page view goes out through this queue, in the order
+ * it was asked for. An async command may otherwise overtake the one before it,
+ * and one viewer leaving (its close) must not land after the next one's show.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+function enqueue(call: () => Promise<unknown>, onError?: (error: unknown) => void): void {
+  queue = queue.then(call).catch((error) => onError?.(error));
+}
+
+/**
  * Shows an artifact's page over `boxRef`. The page lives in a webview of its
  * own, which the backend places: this hook only says which page, where the
  * box is, and when something of Zorvo's covers it. The webview sends ids and a
@@ -38,68 +49,81 @@ export function useArtifactView(
 ): void {
   const onErrorRef = useLatest(onError);
   const isCoveredRef = useLatest(isCovered);
-  // Calls go out one at a time: an async command may otherwise overtake the one before it.
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
   const lastRect = useRef<Rect | null>(null);
-  const hasView = useRef(false);
+  // The target the backend was last asked to show; null while it shows none of ours.
+  const shownKey = useRef<string | null>(null);
+
+  // A view is made visible, so only a change from that is worth a call.
+  const wasCovered = useRef(false);
 
   const targetKey = target === null ? null : `${target.sessionId}/${target.artifactId}/${target.version}/${target.reload}`;
   const targetRef = useLatest(target);
 
   useEffect(() => {
-    const shown = targetRef.current;
-    const box = boxRef.current;
-    if (shown === null || box === null) return;
-    const rect = rectOf(box);
-    lastRect.current = rect;
-    hasView.current = true;
-    queue.current = queue.current
-      .then(() =>
-        invoke('artifact_view_show', {
-          sessionId: shown.sessionId,
-          artifactId: shown.artifactId,
-          version: shown.version,
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-        }),
-      )
-      .then(() => (isCoveredRef.current ? invoke('artifact_view_hide', { hidden: true }) : undefined))
-      .catch((error) => onErrorRef.current(typeof error === 'string' ? error : 'Zorvo could not show that page.'));
+    if (targetKey === null) return;
 
-    // The box moves with the window, the inspector's width and Expand: the page follows it.
+    /** Brings the backend's view in step with the box: shows the page once the box has a size, then follows it. */
+    const sync = () => {
+      const box = boxRef.current;
+      const shown = targetRef.current;
+      if (box === null || shown === null) return;
+      const rect = rectOf(box);
+      // A box with no size is hidden (Settings and the gallery hide the main sheet without unmounting it):
+      // there is nowhere to show the page, and a zero rectangle would make the backend close the view.
+      if (rect.width === 0 || rect.height === 0) return;
+      if (shownKey.current !== targetKey) {
+        shownKey.current = targetKey;
+        lastRect.current = rect;
+        enqueue(
+          () =>
+            invoke('artifact_view_show', {
+              sessionId: shown.sessionId,
+              artifactId: shown.artifactId,
+              version: shown.version,
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+            }).then(() => {
+              // A new view is visible: hide it at once if something is over its box.
+              wasCovered.current = isCoveredRef.current;
+              return isCoveredRef.current ? invoke('artifact_view_hide', { hidden: true }) : undefined;
+            }),
+          (error) => onErrorRef.current(typeof error === 'string' ? error : 'Zorvo could not show that page.'),
+        );
+        return;
+      }
+      if (isSameRect(lastRect.current, rect)) return;
+      lastRect.current = rect;
+      enqueue(() => invoke('artifact_view_bounds', { x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
+    };
+
+    sync();
+    // The box moves with the window, the inspector's width and Expand, and gets its size back when what hid it closes.
     let frame = 0;
     const follow = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const current = boxRef.current;
-        if (current === null) return;
-        const next = rectOf(current);
-        // A box with no size is hidden (Settings, the gallery): the page is hidden then, not moved.
-        if (next.width === 0 || next.height === 0 || isSameRect(lastRect.current, next)) return;
-        lastRect.current = next;
-        queue.current = queue.current
-          .then(() => invoke('artifact_view_bounds', { x: next.x, y: next.y, width: next.width, height: next.height }))
-          .catch(() => undefined);
-      });
+      frame = requestAnimationFrame(sync);
     };
+    const box = boxRef.current;
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(follow);
-    observer?.observe(box);
+    if (box !== null) observer?.observe(box);
     observer?.observe(document.body);
     window.addEventListener('resize', follow);
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
       window.removeEventListener('resize', follow);
-      hasView.current = false;
-      queue.current = queue.current.then(() => invoke('artifact_view_close')).catch(() => undefined);
+      if (shownKey.current === null) return;
+      shownKey.current = null;
+      enqueue(() => invoke('artifact_view_close'));
     };
   }, [targetKey, boxRef, targetRef, isCoveredRef, onErrorRef]);
 
   useEffect(() => {
-    if (!hasView.current) return;
-    queue.current = queue.current.then(() => invoke('artifact_view_hide', { hidden: isCovered })).catch(() => undefined);
+    if (shownKey.current === null || wasCovered.current === isCovered) return;
+    wasCovered.current = isCovered;
+    enqueue(() => invoke('artifact_view_hide', { hidden: isCovered }));
   }, [isCovered]);
 }
 

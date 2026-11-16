@@ -588,7 +588,8 @@ export default function App() {
   const isGalleryShown = isGalleryOpen && gallery.length > 0;
   const openFromGallery = (sessionId: string, artifactId: string) => {
     handleSelectSession(sessionId);
-    inspector.viewArtifact({ artifactId, version: null });
+    // For the session about to show, whose id is its view: the one on screen now may be another.
+    inspector.viewArtifact({ artifactId, version: null }, sessionId);
     inspector.show("artifacts");
   };
   const artifactIds = useMemo(() => new Set(sessionArtifacts.map((artifact) => artifact.id)), [sessionArtifacts]);

@@ -72,6 +72,35 @@ describe("the gallery in the app", () => {
     expect(screen.getByRole("heading", { name: "Session list performance", level: 3 })).toBeTruthy();
   });
 
+  it("opens the artifact that was clicked, in a session that has several", async () => {
+    fakeStore().state.sessions = [
+      { id: "s-old", name: "Refactor parser", profileId: "claude-code", cwd: "/Users/test/developer/zorvo", status: "terminated", createdAt: 1000, transport: "acp" },
+      { id: "s-new", name: "Write the docs", profileId: "claude-code", cwd: "/Users/test/developer/zorvo", status: "terminated", createdAt: 2000, transport: "acp" },
+    ];
+    const second = { id: "a-1111111111111111", title: "Render steps", sourcePath: "/w/s.html", versions: [{ n: 1, at: 500, bytes: 5 }] };
+    vi.spyOn(internals(), "invoke").mockImplementation((cmd, args) => {
+      if (cmd === "artifact_list") {
+        const ids = (args as { sessionIds: string[] }).sessionIds;
+        return Promise.resolve(ids.map((sessionId) => ({ sessionId, artifacts: sessionId === "s-old" ? [ARTIFACT, second] : [] })));
+      }
+      return fakeTauriInvoke(cmd, args);
+    });
+    await renderApp();
+    // Another session is on screen when the gallery opens.
+    await act(async () => {
+      fireEvent.click(await waitFor(() => sidebar().getByText("Write the docs")));
+    });
+    await act(async () => {
+      fireEvent.click(await waitFor(() => sidebar().getByRole("button", { name: "Artifacts, 2" })));
+    });
+
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("region", { name: "Artifact gallery" })).getByRole("button", { name: /Render steps/ }));
+    });
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Render steps", level: 3 })).toBeTruthy());
+  });
+
   it("leaves the gallery when a session is picked in the sidebar", async () => {
     seed(true);
     await renderApp();

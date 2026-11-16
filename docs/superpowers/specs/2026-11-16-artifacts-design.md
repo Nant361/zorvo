@@ -180,6 +180,16 @@ Rust to the main page every 500 ms.
 | A page that never yields | **Pass** | The main page answered all 16 pings during 8 s of `while(true){}` in the child. Closing the child and opening another worked. |
 | Moving it | **Partly** | `set_bounds` succeeded and reported the new rectangle. **Not seen on screen**: the spike window was behind another window, so where it draws, how it follows a resize, the native layer over HTML, focus and scrolling are unverified until Task 8 checks them in a build in front. |
 
+**Found in the final review, then measured (2026-11-16):** closing the child
+did not end a looping page. wry keeps the `WKWebView` alive when its own view is
+dropped, so the page's web content process went on at 98% of a core, 16 s after
+the close, until the app quit. WebKit has no public call that ends the process
+of a page that does not yield. The view is therefore ended by sending the
+`WKWebView` `_killWebContentProcess`, only when it answers that selector; with
+it the process was gone within 13 s, the main page kept answering pings, and a
+new page opened. On a macOS where the selector is missing the page is only
+hidden, as before.
+
 Also learned: a window behind another has its page timers throttled, so a
 real-app test must not time anything with timers in the page.
 

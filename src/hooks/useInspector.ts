@@ -47,7 +47,11 @@ export interface InspectorState {
   targetsFailed: boolean;
   /** The artifact open in the Artifacts tab; null shows the list. Another view closes it. */
   viewedArtifact: ViewedArtifact | null;
-  viewArtifact: (view: ViewedArtifact | null) => void;
+  /**
+   * Opens an artifact, or the list with null. `forView` names the view it is for when that is not the
+   * one on screen yet: the gallery selects a session and opens its artifact in the same click.
+   */
+  viewArtifact: (artifact: ViewedArtifact | null, forView?: string) => void;
   /** The open artifact's page takes the chat's place (only while the Artifacts tab shows). */
   isArtifactExpanded: boolean;
   setArtifactExpanded: (isExpanded: boolean) => void;
@@ -111,15 +115,16 @@ export function useInspector(
   }
   const isViewingFile = viewedFile !== null && viewedFolder === folderPath;
 
-  // The artifact open in the Artifacts tab belongs to the view it was opened in (adjusted in render, as above).
-  const [viewedArtifact, setViewedArtifact] = useState<ViewedArtifact | null>(null);
-  const [isArtifactExpanded, setArtifactExpanded] = useState(false);
-  const [artifactView, setArtifactView] = useState(layout.view);
-  if (artifactView !== layout.view) {
-    setArtifactView(layout.view);
-    setViewedArtifact(null);
-    setArtifactExpanded(false);
-  }
+  // The artifact open in the Artifacts tab is kept with the view it was opened for, and counts only there:
+  // another view shows its own list, and one opened for a view that is about to show is not lost on the way.
+  const [openArtifact, setOpenArtifact] = useState<{ view: string; artifact: ViewedArtifact | null; isExpanded: boolean } | null>(null);
+  const artifactHere = openArtifact?.view === layout.view ? openArtifact : null;
+  const viewedArtifact = artifactHere?.artifact ?? null;
+  const isArtifactExpanded = artifactHere?.isExpanded ?? false;
+  const viewArtifact = (artifact: ViewedArtifact | null, forView: string = layout.view) =>
+    setOpenArtifact((current) => ({ view: forView, artifact, isExpanded: current?.view === forView ? current.isExpanded : false }));
+  const setArtifactExpanded = (isExpanded: boolean) =>
+    setOpenArtifact((current) => ({ view: layout.view, artifact: current?.view === layout.view ? current.artifact : null, isExpanded }));
 
   /** Asks the sidebar to give way when the inspector is about to show wider than it does now, in a narrow window. */
   const makeRoom = (nextWidth: number) => {
@@ -193,7 +198,7 @@ export function useInspector(
     targets,
     targetsFailed,
     viewedArtifact,
-    viewArtifact: setViewedArtifact,
+    viewArtifact,
     isArtifactExpanded: isArtifactExpanded && shownTab === "artifacts",
     setArtifactExpanded,
     viewedFile: isViewingFile ? viewedFile : null,

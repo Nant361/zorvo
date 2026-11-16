@@ -178,6 +178,75 @@ describe("the viewer", () => {
   });
 });
 
+describe("a box that has no size yet", () => {
+  const zero = { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => ({}) };
+  const sized = { ...RECT, top: RECT.y, left: RECT.x, right: RECT.x + RECT.width, bottom: RECT.y + RECT.height, toJSON: () => ({}) };
+
+  it("asks for the page only once the box shows (Settings and the gallery hide it without unmounting)", async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(zero);
+    show(viewingReport);
+    await act(async () => {});
+    expect(calls("artifact_view_show")).toEqual([]);
+
+    rect.mockReturnValue(sized);
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+    expect(calls("artifact_view_show")[0]).toMatchObject({ version: 3, ...RECT });
+  });
+
+  it("asks for a new version that arrived while the box was hidden, when it shows again", async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(sized);
+    const { props, rerender } = show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+
+    rect.mockReturnValue(zero);
+    const next = { ...REPORT, versions: [...REPORT.versions, { n: 4, at: 4_000, bytes: 13 }] };
+    rerender(<ArtifactsPanel {...props} artifacts={[next, STEPS]} />);
+    await act(async () => {});
+    expect(calls("artifact_view_show")).toHaveLength(1);
+
+    rect.mockReturnValue(sized);
+    await act(async () => {
+      window.dispatchEvent(new Event("resize"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    await waitFor(() => expect(calls("artifact_view_show").at(-1)).toMatchObject({ version: 4 }));
+  });
+});
+
+describe("one viewer leaving as another arrives", () => {
+  it("closes the old page before it shows the new one, whatever the old one still had in flight", async () => {
+    // A call that takes a while (the hide for the open menu): the leaving viewer's close must still go out before the next show.
+    let release: () => void = () => undefined;
+    let isHeld = false;
+    spy.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd !== "artifact_view_hide" || isHeld) return fakeTauriInvoke(cmd, args);
+      isHeld = true;
+      return new Promise((resolve) => (release = () => resolve(undefined)));
+    });
+    const { props, rerender } = show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Version 3 of 3" }));
+    await waitFor(() => expect(calls("artifact_view_hide")).toHaveLength(1));
+
+    // Another session's panel takes its place while that call is still out.
+    rerender(<ArtifactsPanel {...props} key="other" sessionId="s-2" artifacts={[STEPS]} viewed={null} />);
+    await act(async () => {
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(2));
+    const order = spy.mock.calls.map(([cmd]: unknown[]) => cmd).filter((cmd: unknown) => cmd === "artifact_view_show" || cmd === "artifact_view_close");
+    expect(order).toEqual(["artifact_view_show", "artifact_view_close", "artifact_view_show"]);
+  });
+});
+
 describe("export", () => {
   it("says what an exported page is, then saves with ids and the version only", async () => {
     show({ viewed: { artifactId: REPORT.id, version: 2 } });
