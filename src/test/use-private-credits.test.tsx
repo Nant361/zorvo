@@ -812,6 +812,32 @@ describe("usePrivateCredits: credits-out sessions", () => {
     expect(view.result.current.creditsOut).toEqual({});
   });
 
+  it("keeps an own-key session's marks whatever Zorvo's balance and key say", async () => {
+    const view = await mount();
+    const onBalanceLagging = vi.fn();
+    readyWith(500, { keyReady: true, keyError: null });
+
+    act(() => view.result.current.markCreditsOut("own-empty", "empty", onBalanceLagging, true));
+    act(() => view.result.current.markCreditsOut("own-key", "key", undefined, true));
+    await act(async () => view.result.current.refresh());
+
+    expect(view.result.current.creditsOut).toEqual({ "own-empty": "empty", "own-key": "key" });
+    expect(onBalanceLagging).not.toHaveBeenCalled();
+  });
+
+  it("lets an own-key session that ran out try again when the user comes back to the window", async () => {
+    const view = await mount();
+    act(() => view.result.current.markCreditsOut("own-empty", "empty", undefined, true));
+    act(() => view.result.current.markCreditsOut("own-key", "key", undefined, true));
+    act(() => view.result.current.markCreditsOut("credits", "empty"));
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(view.result.current.creditsOut).toEqual({ "own-key": "key", credits: "empty" });
+  });
+
   it("keeps a key mark when credits arrive but the key is not ready", async () => {
     const view = await mount();
     act(() => view.result.current.markCreditsOut("s3", "key"));

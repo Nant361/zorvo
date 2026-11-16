@@ -27,6 +27,17 @@ pub const CREDITS_BASE_URL: &str = match option_env!("ZORVO_CREDITS_URL") {
     None => "http://127.0.0.1:8787",
 };
 
+/// Zorvo's rates and turn size, as the Credits Worker sets them (`server/wrangler.jsonc`:
+/// `CREDITS_PER_USD_PAID`, `BURN_PER_USD_COST`). The client only estimates with them; the Worker
+/// decides what is charged. `src/test/private-rates.test.ts` keeps these, the frontend's copies and
+/// the Worker's variables equal, so changing one without the others fails a test.
+pub(crate) const CREDITS_PER_USD_PAID: u64 = 100;
+/// Credits charged per US dollar of model cost.
+pub(crate) const CREDITS_PER_USD_COST: f64 = 120.0;
+/// A turn is priced as this many tokens in and out, a rough size of one agent turn.
+pub(crate) const TURN_INPUT_TOKENS: f64 = 20_000.0;
+pub(crate) const TURN_OUTPUT_TOKENS: f64 = 1_000.0;
+
 /// Declares [`PrivateError`] with each variant's code, and the list of every
 /// variant, from one table, so the code, the serde form and the list cannot
 /// drift apart (tests check the serde form against the code).

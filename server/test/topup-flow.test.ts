@@ -99,7 +99,7 @@ beforeEach(async () => {
   consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   ping = new FakePingPay();
   await runInDurableObject(stub(), (ledger: Ledger, state) => {
-    for (const table of ["snapshot", "reservations", "topups", "queue", "events"]) state.storage.sql.exec(`DELETE FROM ${table}`);
+    for (const table of ["snapshot", "reservations", "topups", "queue", "events", "ratelimits"]) state.storage.sql.exec(`DELETE FROM ${table}`);
     ledger.fetcher = ping.fetcher;
   });
 });

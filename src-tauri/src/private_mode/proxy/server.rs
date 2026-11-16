@@ -73,6 +73,9 @@ struct TokenTable {
     /// The key behind that last token. Kept until the session is deleted, so a turn that ended
     /// after Stop can still be verified and billed; it never leaves the backend.
     last_key_by_session: HashMap<String, String>,
+    /// Sessions whose last token spent the user's own key, running or stopped, so removing the
+    /// key can drop it from every one of them.
+    own_key_sessions: HashSet<String>,
 }
 
 impl TokenTable {
@@ -93,6 +96,7 @@ impl TokenTable {
             .insert(app_session_id.to_string(), token.clone());
         self.last_key_by_session
             .insert(app_session_id.to_string(), key.to_string());
+        self.note_key_source(app_session_id, own_key);
         let held = self
             .tokens_by_session
             .entry(app_session_id.to_string())
@@ -131,8 +135,10 @@ impl TokenTable {
             return false;
         };
         let key = entry.key.clone();
+        let own_key = entry.own_key;
         entry.holders.insert(fork.to_string());
         self.last_key_by_session.insert(fork.to_string(), key);
+        self.note_key_source(fork, own_key);
         self.by_session.insert(fork.to_string(), token.clone());
         self.last_by_session.insert(fork.to_string(), token.clone());
         let held = self.tokens_by_session.entry(fork.to_string()).or_default();
@@ -140,6 +146,14 @@ impl TokenTable {
             held.push(token.clone());
         }
         true
+    }
+
+    fn note_key_source(&mut self, app_session_id: &str, own_key: bool) {
+        if own_key {
+            self.own_key_sessions.insert(app_session_id.to_string());
+        } else {
+            self.own_key_sessions.remove(app_session_id);
+        }
     }
 
     /// The live entry a bearer token names. Tokens are compared without an early exit, so a wrong
@@ -197,6 +211,7 @@ impl TokenTable {
     /// returned, so its records can go too.
     fn forget(&mut self, app_session_id: &str) -> Vec<String> {
         self.last_key_by_session.remove(app_session_id);
+        self.own_key_sessions.remove(app_session_id);
         let mut tokens = self
             .tokens_by_session
             .remove(app_session_id)
@@ -257,6 +272,11 @@ impl TokenTable {
                 self.last_key_by_session.remove(&holder);
                 self.tokens_by_session.remove(&holder);
             }
+        }
+        // A stopped session holds no token, but its last key is still kept for verification
+        // and billing reads: that copy goes too.
+        for session in std::mem::take(&mut self.own_key_sessions) {
+            self.last_key_by_session.remove(&session);
         }
         revoked
     }
@@ -668,6 +688,25 @@ mod tests {
         assert!(table.token_of("own-fork").is_none());
         assert!(table.key_of("own").is_none());
         assert!(table.find(&credits).is_some());
+        assert_eq!(table.key_of("credits").as_deref(), Some("credits-key"));
+    }
+
+    #[test]
+    fn revoking_the_own_key_drops_it_from_a_stopped_session_too() {
+        let mut table = TokenTable::default();
+        table
+            .issue("stopped", "model", "own-key", true)
+            .expect("own token");
+        table.release("stopped");
+        table
+            .issue("credits", "model", "credits-key", false)
+            .expect("credits token");
+        table.release("credits");
+        assert_eq!(table.key_of("stopped").as_deref(), Some("own-key"));
+
+        table.revoke_own_key();
+
+        assert!(table.key_of("stopped").is_none());
         assert_eq!(table.key_of("credits").as_deref(), Some("credits-key"));
     }
 }

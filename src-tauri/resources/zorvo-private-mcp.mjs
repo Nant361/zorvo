@@ -37,7 +37,7 @@ const TOOLS = [
         usd: {
           type: "integer",
           minimum: 1,
-          description: "Package size in whole US dollars, one of the packages credits_balance or private_models returned.",
+          description: "Package size in whole US dollars. Zorvo sells a few fixed sizes; when this is not one of them, the answer lists the sizes it does sell.",
         },
         reason: {
           type: "string",

@@ -147,7 +147,9 @@ impl PrivateMode {
         .map(|_| ())
     }
 
-    /// Deletes every Keychain item and resets the state file. The UI offers
+    /// Deletes the device's Keychain items (its secrets, its key and the keys of
+    /// its capped sessions) and resets the state file. The user's own NEAR AI
+    /// key is not the device's and stays, with its date. The UI offers
     /// it only for a moved device; these guards keep a stray call from
     /// wiping credits:
     /// - a recovery in flight that cannot be settled: `Unreachable`, since
@@ -168,6 +170,13 @@ impl PrivateMode {
         if self.store.get(DEVICE_SECRET)?.is_some() && has_own_credits(&self.load_state()) {
             return Err(PrivateError::HasOwnCredits);
         }
+        // The capped sessions' keys belong to the device's workspace; once the
+        // state file is reset nothing would name them, so they go first.
+        for cap in self.load_state().session_caps {
+            if let Ok(account) = self.session_account(&cap.app_session_id) {
+                self.store.delete(&account)?;
+            }
+        }
         for account in [NEARAI_KEY, DEVICE_SECRET_NEXT, DEVICE_SECRET] {
             self.store.delete(account)?;
         }
@@ -176,8 +185,11 @@ impl PrivateMode {
         lock(&self.checkouts).clear();
         // The record of private sessions belongs to the agent's store, not to
         // the device: forgetting the device must not unlock those sessions.
+        // The own key stays in the Keychain, so its date and its warning stay.
         self.update_state(|old| LocalState {
             private_sessions: old.private_sessions,
+            own_key_added_at: old.own_key_added_at,
+            own_key_no_credits: old.own_key_no_credits,
             ..LocalState::default()
         })
         .map(|_| ())

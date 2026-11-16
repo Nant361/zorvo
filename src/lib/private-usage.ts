@@ -1,4 +1,4 @@
-import { modelLabel, turnsFor, type ModelPrice } from "./private-credits";
+import { CREDITS_PER_USD_COST, modelLabel, turnsFor, type ModelPrice } from "./private-credits";
 import type { Session } from "../types";
 
 /** The backend's answer for one private session. */
@@ -51,10 +51,10 @@ export function usageLead(credits: number, estimated: boolean): string {
   return `${estimated ? "about " : ""}${formatUsageCredits(credits)}`;
 }
 
-/** A private usage total in dollars: NEAR AI bills 120 credits per dollar of cost. */
+/** A private usage total in dollars, at the rate the balance burns per dollar of cost. */
 export function usageUsd(credits: number): string {
   if (!Number.isFinite(credits) || credits < 0) return "$0.00";
-  return `$${(credits / 120).toFixed(2)}`;
+  return `$${(credits / CREDITS_PER_USD_COST).toFixed(2)}`;
 }
 
 /** The total used, summed per model, from the persisted session totals. */

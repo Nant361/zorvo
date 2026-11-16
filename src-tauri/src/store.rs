@@ -246,6 +246,25 @@ pub struct PrivateModeRecord {
     /// This session spends the user's own NEAR AI key rather than Zorvo credits.
     #[serde(default, skip_serializing_if = "is_false")]
     pub own_key: bool,
+    /// The spending limit the user gave this session, in credits. Without it
+    /// a restart would lose the limit and the session's own key with it.
+    #[serde(
+        default,
+        deserialize_with = "lenient_session_cap",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub session_cap: Option<u64>,
+}
+
+/// A saved limit, or none when it is not a whole positive number: the session
+/// stays private either way.
+fn lenient_session_cap<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value
+        .and_then(|value| value.as_u64())
+        .filter(|cap| *cap > 0))
 }
 
 fn is_false(value: &bool) -> bool {
@@ -895,6 +914,7 @@ mod tests {
             Some(PrivateModeRecord {
                 model_id: "Qwen/Qwen3.8-27B".to_string(),
                 own_key: false,
+                session_cap: None,
             })
         );
         let value = serde_json::to_value(&record).expect("serialize");
@@ -913,10 +933,40 @@ mod tests {
             Some(PrivateModeRecord {
                 model_id: "Qwen/Qwen3.8-27B".to_string(),
                 own_key: true,
+                session_cap: None,
             })
         );
         let value = serde_json::to_value(&record).expect("serialize");
         assert_eq!(value["privateMode"]["ownKey"], true);
+    }
+
+    #[test]
+    fn a_private_mode_record_keeps_the_session_limit() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "privateMode": { "modelId": "Qwen/Qwen3.8-27B", "sessionCap": 200 }
+        })))
+        .expect("deserialize");
+
+        assert_eq!(
+            record
+                .private_mode
+                .as_ref()
+                .and_then(|mode| mode.session_cap),
+            Some(200)
+        );
+        let value = serde_json::to_value(&record).expect("serialize");
+        assert_eq!(value["privateMode"]["sessionCap"], 200);
+    }
+
+    #[test]
+    fn a_malformed_session_limit_keeps_the_session_private() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "privateMode": { "modelId": "Qwen/Qwen3.8-27B", "sessionCap": "lots" }
+        })))
+        .expect("deserialize");
+
+        let mode = record.private_mode.expect("still private");
+        assert_eq!(mode.session_cap, None);
     }
 
     #[test]

@@ -115,6 +115,26 @@ describe("promo attempts", () => {
   });
 });
 
+describe("top-ups from one address", () => {
+  it("answers 429 to the 21st top-up from one address in an hour, across devices", async () => {
+    // A top-up holds stock before anyone pays, and a device is free to register: the limit per
+    // device alone would let one address hold the stock through many devices.
+    const ip = "198.51.100.85";
+    const topUp = (secret: string, from = ip) =>
+      call("/v1/topups", { method: "POST", ip: from, secret, body: JSON.stringify({ packageUsd: 5 }) });
+    for (let d = 0; d < 20; d += 1) {
+      expect((await topUp(await registered())).status).not.toBe(429);
+    }
+
+    const fresh = await registered();
+    const limited = await topUp(fresh);
+
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: "rate_limited" });
+    expect((await topUp(await registered(), "198.51.100.86")).status).not.toBe(429);
+  });
+});
+
 describe("promo redemptions from one address", () => {
   it("lets 25 devices behind one address redeem a valid code: only refused attempts count per address", async () => {
     const ip = "198.51.100.90";

@@ -155,8 +155,9 @@ function hasRoomFor(ctx: FulfilmentContext, reserve: number): boolean {
 /**
  * Asks PingPay about checkouts whose webhook may never come: `created` top-ups older than 2 minutes
  * and `expired` ones, whose payment may still arrive late, for 7 days after they were created. At
- * most `POLLS_PER_TICK` sessions a tick (3 by default), the ones due longest first; each is then not
- * asked again until its `next_poll_at` (`nextPoll`). Stops starting sessions once the next poll's
+ * most `POLLS_PER_TICK` sessions a tick (3 by default): checkouts that can still be paid first, so a
+ * pile of abandoned ones cannot hold up a payment whose webhook was lost, then the ones due longest;
+ * each is then not asked again until its `next_poll_at` (`nextPoll`). Stops starting sessions once the next poll's
  * two fetches would pass the tick's budget, leaving the rest due for the next tick.
  */
 async function pollSessions(ctx: FulfilmentContext, now: number): Promise<void> {
@@ -168,10 +169,11 @@ async function pollSessions(ctx: FulfilmentContext, now: number): Promise<void> 
          AND created_at > ?
          AND (status = 'expired' OR created_at < ?)
          AND COALESCE(next_poll_at, 0) <= ?
-       ORDER BY COALESCE(next_poll_at, 0), id
+       ORDER BY (status = 'created' AND COALESCE(reserved_until, 0) > ?) DESC, COALESCE(next_poll_at, 0), id
        LIMIT ?`,
       now - POLL_FOR_MS,
       now - POLL_CREATED_AFTER_MS,
+      now,
       now,
       ctx.config().pollsPerTick,
     )

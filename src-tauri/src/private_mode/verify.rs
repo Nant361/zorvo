@@ -121,7 +121,8 @@ pub struct PrivateVerifier {
     base: String,
     agent: ureq::Agent,
     retry: Duration,
-    /// Per model, a report fetched once; a failed report is not cached and is tried again.
+    /// Per model, the last report fetched; a failed report is not cached and is tried again,
+    /// and a signer the cached report does not list makes one fresh read.
     attestations: Mutex<HashMap<String, Attestation>>,
     /// Per completion id, a final result or a retryable `checking` with its attempts.
     results: Mutex<HashMap<String, Checked>>,
@@ -234,23 +235,29 @@ impl PrivateVerifier {
                         );
                         continue;
                     }
-                    match self.attestation(&record.model, key, &mut local_attestations) {
+                    let allowed = self
+                        .attestation(&record.model, key, &mut local_attestations)
+                        .and_then(|attestation| {
+                            if attestation.allows(&proof) {
+                                return Ok(true);
+                            }
+                            // A report from an earlier turn may be stale: NEAR AI can restart a
+                            // model's TEE with a new signing key while Zorvo runs.
+                            self.refetched_attestation(&record.model, key, &mut local_attestations)
+                                .map(|fresh| fresh.is_some_and(|fresh| fresh.allows(&proof)))
+                        });
+                    match allowed {
                         Err(()) => self.retry_later(&mut out, &record, attempts),
-                        Ok(attestation) if attestation.allows(&proof) => {
+                        Ok(allowed) => {
+                            let state = if allowed {
+                                VerificationState::Verified
+                            } else {
+                                VerificationState::DidntVerify
+                            };
                             self.record_result(
                                 &mut out,
                                 &record,
-                                VerificationState::Verified,
-                                Some(proof.kind),
-                                Some(&proof.signer),
-                                0,
-                            );
-                        }
-                        Ok(_) => {
-                            self.record_result(
-                                &mut out,
-                                &record,
-                                VerificationState::DidntVerify,
+                                state,
                                 Some(proof.kind),
                                 Some(&proof.signer),
                                 0,
@@ -355,6 +362,21 @@ impl PrivateVerifier {
             lock(&self.attestations).insert(model.to_string(), attestation.clone());
         }
         answer
+    }
+
+    /// The model's report read again, once per `verify` call, when the one just used came from
+    /// this app run's cache. `None` when this call already fetched it, so it cannot be newer.
+    fn refetched_attestation(
+        &self,
+        model: &str,
+        key: &str,
+        local: &mut HashMap<String, Result<Attestation, ()>>,
+    ) -> Result<Option<Attestation>, ()> {
+        if local.contains_key(model) {
+            return Ok(None);
+        }
+        lock(&self.attestations).remove(model);
+        self.attestation(model, key, local).map(Some)
     }
 
     fn get(

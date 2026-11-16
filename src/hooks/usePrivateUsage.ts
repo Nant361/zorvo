@@ -9,10 +9,40 @@ interface PrivateUsageDeps {
   updateSession: (sessionId: string, usage: NonNullable<Session["privateUsage"]>) => void;
 }
 
+type Usage = NonNullable<Session["privateUsage"]>;
+
+const BASE_KEY = "zorvo.privateUsageBase.";
+
+/**
+ * The total a session had before this app run, as an earlier page of the same run noted it.
+ * sessionStorage outlives a window reload and not the app, exactly like the backend's records:
+ * without it a reloaded page would take the saved total, which already counts this run's
+ * records, as the base and count them twice.
+ */
+function readBase(sessionId: string): Usage | undefined {
+  try {
+    const saved: unknown = JSON.parse(window.sessionStorage.getItem(BASE_KEY + sessionId) ?? "null");
+    if (typeof saved !== "object" || saved === null) return undefined;
+    const { credits, estimated } = saved as Record<string, unknown>;
+    if (typeof credits !== "number" || !Number.isFinite(credits) || credits < 0) return undefined;
+    return { credits, estimated: estimated === true };
+  } catch {
+    return undefined;
+  }
+}
+
+function writeBase(sessionId: string, base: Usage) {
+  try {
+    window.sessionStorage.setItem(BASE_KEY + sessionId, JSON.stringify(base));
+  } catch {
+    // Without the note a reload falls back to the saved total, as before.
+  }
+}
+
 /**
  * Reads a private session's usage at the same turn-end checks as verification. The backend's
- * records live for the app run, so the first read of a session adds its answer to the total saved
- * before the last restart.
+ * records live for the app run, so the first read of a session in a run adds its answer to the
+ * total saved before the last restart.
  */
 export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
   const deps = useRef({ sessions, updateSession });
@@ -31,8 +61,12 @@ export function usePrivateUsage({ sessions, updateSession }: PrivateUsageDeps) {
         if (runs.current.get(sessionId) !== run) return;
         const usage = parsePrivateSessionUsage(answer);
         if (!usage) return;
-        const base = bases.current.get(sessionId) ?? session.privateUsage ?? { credits: 0, estimated: false };
-        bases.current.set(sessionId, base);
+        const known = bases.current.get(sessionId);
+        const base = known ?? readBase(sessionId) ?? session.privateUsage ?? { credits: 0, estimated: false };
+        if (!known) {
+          bases.current.set(sessionId, base);
+          writeBase(sessionId, base);
+        }
         updateSession(sessionId, {
           credits: base.credits + usage.credits,
           estimated: base.estimated || usage.estimated,

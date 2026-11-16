@@ -49,6 +49,24 @@ describe("usePrivateUsage", () => {
     expect(spy).toHaveBeenCalledWith("private_session_usage", { sessionId: "s-1" }, undefined);
   });
 
+  it("does not count this run's records twice after the window reloads", async () => {
+    vi.spyOn(tauriInternals(), "invoke").mockResolvedValue({ credits: 30, estimated: false, calls: 0 });
+    const first = vi.fn();
+    const before = renderHook(() => usePrivateUsage({ sessions: [session()], updateSession: first }));
+    await act(async () => before.result.current.refresh("s-1"));
+    await waitFor(() => expect(first).toHaveBeenLastCalledWith("s-1", { credits: 30, estimated: false }));
+    before.unmount();
+
+    // The reloaded page loads the saved total, 30, while the backend still holds the same records.
+    const second = vi.fn();
+    const after = renderHook(() =>
+      usePrivateUsage({ sessions: [session({ credits: 30, estimated: false })], updateSession: second }),
+    );
+    await act(async () => after.result.current.refresh("s-1"));
+
+    await waitFor(() => expect(second).toHaveBeenLastCalledWith("s-1", { credits: 30, estimated: false }));
+  });
+
   it("keeps the saved base when a reopen makes the backend total cumulative", async () => {
     const spy = vi
       .spyOn(tauriInternals(), "invoke")

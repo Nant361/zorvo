@@ -6,6 +6,7 @@ import {
   shortSigner,
   summarizeVerification,
   VERIFICATION_LABEL,
+  verificationLabel,
   type VerificationRecord,
 } from "../lib/private-verification";
 import type { ChatMessage } from "../types";
@@ -174,6 +175,14 @@ describe("verification copy", () => {
     expect(VERIFICATION_LABEL.didnt_verify).toBe("Didn't verify");
     expect(VERIFICATION_LABEL.not_signed).toBe("Not signed");
     expect(VERIFICATION_LABEL.checking).toBe("Checking the signature");
+  });
+
+  it("says a TEE verified an answer only when the model's own TEE signed it", () => {
+    expect(verificationLabel({ state: "verified", kind: "provider_tee" })).toBe("Verified in TEE");
+    expect(verificationLabel({ state: "verified", kind: "gateway" })).toBe("Signed by NEAR AI");
+    expect(verificationLabel({ state: "verified", kind: "unknown" })).toBe("Signed by NEAR AI");
+    expect(verificationLabel({ state: "verified" })).toBe("Signed by NEAR AI");
+    expect(verificationLabel({ state: "not_signed", kind: "gateway" })).toBe("Not signed");
   });
 
   it("shortens a long signer and leaves a short one as it is", () => {

@@ -84,6 +84,10 @@ export async function scanMessageSecrets(
  */
 export function useSecretGuard({ isEnabled, root, agentName, onEdit }: SecretGuardOptions) {
   const [review, setReview] = useState<SecretGuardReview | null>(null);
+  // A new-session draft's message is being scanned: Send waits, since its `deliver` was made for
+  // the draft and a second one would start a second session.
+  const [isCheckingDraft, setIsCheckingDraft] = useState(false);
+  const draftChecksRef = useRef(0);
   const deliverRef = useRef<(() => void) | null>(null);
   const onEditRef = useLatest(onEdit);
   // One scan at a time: a second Send waits its turn instead of replacing the first held message.
@@ -102,10 +106,16 @@ export function useSecretGuard({ isEnabled, root, agentName, onEdit }: SecretGua
       drainRef.current();
       return;
     }
+    const scanned = () => {
+      runningRef.current = false;
+      if (active.sessionId !== undefined) return;
+      draftChecksRef.current = Math.max(0, draftChecksRef.current - 1);
+      setIsCheckingDraft(draftChecksRef.current > 0);
+    };
     runningRef.current = true;
     void scanMessageSecrets(active.root, job.message)
       .then(({ matches, skipped }) => {
-        runningRef.current = false;
+        scanned();
         if (matches.length === 0 && skipped.length === 0) {
           job.deliver();
           drainRef.current();
@@ -124,7 +134,7 @@ export function useSecretGuard({ isEnabled, root, agentName, onEdit }: SecretGua
       })
       // Fails open by design: a scanner error must never become a Send the user cannot get past.
       .catch(() => {
-        runningRef.current = false;
+        scanned();
         job.deliver();
         drainRef.current();
       });
@@ -132,6 +142,16 @@ export function useSecretGuard({ isEnabled, root, agentName, onEdit }: SecretGua
   drainRef.current = drain;
 
   const check = useCallback((message: SecretMessage, deliver: () => void, context?: SecretGuardContext) => {
+    // A message nothing scans (a plain session's, or the check is off) never waits behind another
+    // session's scan or its open dialog: it goes out at once.
+    if (context && (!context.isEnabled || context.root === undefined)) {
+      deliver();
+      return;
+    }
+    if (context && context.sessionId === undefined) {
+      draftChecksRef.current += 1;
+      setIsCheckingDraft(true);
+    }
     queueRef.current.push({ message, deliver, context });
     drainRef.current();
   }, []);
@@ -154,5 +174,5 @@ export function useSecretGuard({ isEnabled, root, agentName, onEdit }: SecretGua
     drainRef.current();
   }, [onEditRef, review]);
 
-  return { review, check, sendAnyway, edit };
+  return { review, isCheckingDraft, check, sendAnyway, edit };
 }
