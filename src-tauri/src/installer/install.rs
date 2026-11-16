@@ -623,7 +623,7 @@ fn record(source: &str, sha256: Option<&str>, bin: Option<&str>) -> InstallRecor
 }
 
 /// True for exactly one plain path component, so a join stays one level down.
-fn is_single_name(name: &str) -> bool {
+pub(super) fn is_single_name(name: &str) -> bool {
     let mut components = Path::new(name).components();
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
