@@ -10,6 +10,7 @@ pub mod view;
 pub(crate) mod test_support {
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     /// A temp folder removed when the test ends, even on panic.
@@ -21,8 +22,12 @@ pub(crate) mod test_support {
                 .duration_since(UNIX_EPOCH)
                 .expect("system clock is before the unix epoch")
                 .as_nanos();
+            // Tests run side by side and reuse tags, and the clock's nanoseconds repeat within a
+            // microsecond on macOS: the counter is what makes two folders never the same.
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "zorvo-artifacts-{tag}-{}-{nanos}",
+                "zorvo-artifacts-{tag}-{}-{nanos}-{n}",
                 std::process::id()
             ));
             fs::create_dir_all(&path).expect("create temp folder");
