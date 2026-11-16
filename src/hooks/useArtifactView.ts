@@ -76,7 +76,8 @@ export function useArtifactView(
         const current = boxRef.current;
         if (current === null) return;
         const next = rectOf(current);
-        if (isSameRect(lastRect.current, next)) return;
+        // A box with no size is hidden (Settings, the gallery): the page is hidden then, not moved.
+        if (next.width === 0 || next.height === 0 || isSameRect(lastRect.current, next)) return;
         lastRect.current = next;
         queue.current = queue.current
           .then(() => invoke('artifact_view_bounds', { x: next.x, y: next.y, width: next.width, height: next.height }))
@@ -106,9 +107,10 @@ export function useArtifactView(
 const SAMPLES = [0.1, 0.5, 0.9];
 
 function isCoveredNow(box: HTMLElement): boolean {
-  if (typeof document.elementFromPoint !== 'function') return false;
   const { x, y, width, height } = box.getBoundingClientRect();
-  if (width === 0 || height === 0) return false;
+  // No size: the box is in a part of the window that is hidden, so the page must not show either.
+  if (width === 0 || height === 0) return true;
+  if (typeof document.elementFromPoint !== 'function') return false;
   return SAMPLES.some((fx) =>
     SAMPLES.some((fy) => {
       const top = document.elementFromPoint(x + width * fx, y + height * fy);

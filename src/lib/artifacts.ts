@@ -134,6 +134,8 @@ export function cardState(card: ArtifactCard, artifacts: readonly Artifact[]): '
 export interface GalleryRow {
   sessionId: string;
   sessionName: string;
+  /** The session's agent, for its logo. */
+  profileId: string;
   agentName: string;
   isArchived: boolean;
   artifact: Artifact;
@@ -152,6 +154,7 @@ export function galleryRows(
       (bySession.get(session.id) ?? []).map((artifact) => ({
         sessionId: session.id,
         sessionName: session.name,
+        profileId: session.profileId,
         agentName: agentNameOf(session.profileId),
         isArchived: isArchived(session),
         artifact,

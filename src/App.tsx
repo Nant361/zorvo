@@ -13,9 +13,10 @@ import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
 import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
+import { ArtifactGallery } from "./components/artifacts/ArtifactGallery";
 import { useArtifacts } from "./hooks/useArtifacts";
 import { useArtifactOpening } from "./hooks/useArtifactOpening";
-import { newestVersion } from "./lib/artifacts";
+import { galleryRows, newestVersion } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -182,6 +183,8 @@ export default function App() {
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsPage = useSettingsPage(settingsButtonRef);
   const [isSidebarHidden, setSidebarHidden] = useState(false);
+  // The gallery of every session's artifacts takes the main sheet's place; picking anything in the sidebar leaves it.
+  const [isGalleryOpen, setGalleryOpen] = useState(false);
   const windowWidth = useWindowWidth();
   const composerRef = useRef<ComposerHandle>(null);
   // The top bar's Inspector button: focus goes back to it when the inspector closes from its own button.
@@ -577,6 +580,17 @@ export default function App() {
     showTab: () => inspector.show("artifacts"),
     view: inspector.viewArtifact,
   });
+  const gallery = useMemo(
+    () => galleryRows(sessions, artifacts.bySession, (profileId) => agentNameOr(agents.find((agent) => agent.id === profileId))),
+    [sessions, artifacts.bySession, agents],
+  );
+  // The last artifact may go while the gallery is open: then there is nothing to show, and the chat is back.
+  const isGalleryShown = isGalleryOpen && gallery.length > 0;
+  const openFromGallery = (sessionId: string, artifactId: string) => {
+    handleSelectSession(sessionId);
+    inspector.viewArtifact({ artifactId, version: null });
+    inspector.show("artifacts");
+  };
   const artifactIds = useMemo(() => new Set(sessionArtifacts.map((artifact) => artifact.id)), [sessionArtifacts]);
   /** A chat card's Open: the version it marks, in the Artifacts tab (the newest is followed, not pinned). */
   const openArtifactCard = (card: ArtifactCard) => {
@@ -752,6 +766,7 @@ export default function App() {
    * the composer, and the agent starts with the first message.
    */
   const openNewSession = (path?: string, agentId?: string, options?: OpenNewSessionOptions) => {
+    setGalleryOpen(false);
     if (path) chooseFolder(path);
     setPickedAgentId(agentId ?? null);
     compare.reset();
@@ -773,6 +788,7 @@ export default function App() {
   });
 
   const handleSelectSession = (sessionId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId(sessionId);
     // An agent picked for a new session that was never started is forgotten.
     setPickedAgentId(null);
@@ -831,6 +847,7 @@ export default function App() {
 
   /** Shows a run's panel in the chat's place; no session stays selected, or the panel would not show. */
   const openRun = (runId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId("");
     setPickedAgentId(null);
     compare.reset();
@@ -886,8 +903,10 @@ export default function App() {
     (sessionId: string) => {
       forgetQueued(sessionId);
       removeTranscript(sessionId);
+      // An artifact belongs to its session: its pages go with it. The session is deleted either way.
+      invoke("artifact_delete_session", { sessionId }).catch(() => reportError("Could not delete the session's artifacts."));
     },
-    [forgetQueued, removeTranscript],
+    [forgetQueued, removeTranscript, reportError],
   );
 
   const terminals = useWorkspaceTerminals(setNotice);
@@ -1305,6 +1324,9 @@ export default function App() {
         <Sidebar
           isHidden={isSidebarHidden}
           onHide={() => setSidebarHidden(true)}
+          artifactCount={gallery.length}
+          isGalleryOpen={isGalleryShown}
+          onOpenGallery={() => setGalleryOpen(true)}
           workspaces={workspaces}
           activeWorkspacePath={activeWorkspacePath}
           sessions={sessions}
@@ -1350,7 +1372,9 @@ export default function App() {
         />
 
         <div data-stage data-tauri-drag-region className={`flex min-w-0 flex-1 gap-2 py-2 pr-2${isSidebarHidden ? " pl-2" : ""}`}>
-          <div data-sheet="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet">
+          {isGalleryShown && <ArtifactGallery rows={gallery} onOpen={openFromGallery} />}
+          {/* Hidden, not unmounted, under the gallery: the composer keeps its text. */}
+          <div data-sheet="main" className={`${isGalleryShown ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet`}>
             <TopBar
               onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
               hasTrafficLights={isSidebarHidden}
@@ -1724,7 +1748,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {inspectorTab && !isArtifactExpanded && (
+          {inspectorTab && !isArtifactExpanded && !isGalleryShown && (
             <Inspector
               tab={inspectorTab}
               tabs={inspectorTabs}
