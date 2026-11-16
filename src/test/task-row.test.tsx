@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { TaskRow } from "../components/chat/TaskRow";
+import { ShellTaskRow, TaskRow } from "../components/chat/TaskRow";
 import { MessageRow, type MessageRowProps } from "../components/chat/MessageRow";
 import type { SubagentTask, TaskStatus } from "../lib/task-view";
 import type { ChatMessage, ToolExecution } from "../types";
@@ -99,5 +99,20 @@ describe("a reply saved without parts", () => {
 
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(screen.queryByText("child.txt")).toBeNull();
+  });
+});
+
+describe("ShellTaskRow", () => {
+  const shell = { id: "process:7", kind: "shell" as const, name: "pnpm tauri dev", detail: "Alpha · localhost:1420", status: "Running" as const, startedAt: Date.now() - 724_000, sessionId: "s1", pid: 7 };
+
+  it("shows a running command with its port and opens its task", () => {
+    const onOpen = vi.fn();
+    render(<ShellTaskRow task={shell} isOpen={false} onOpen={onOpen} />);
+
+    expect(screen.getByText("Shell · localhost:1420")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open pnpm tauri dev. Running." }));
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });

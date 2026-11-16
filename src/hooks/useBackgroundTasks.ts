@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useBackgroundProcesses } from './useBackgroundProcesses';
 import { backgroundTasksOf, type BackgroundTask } from '../lib/background-tasks';
+import type { TaskTab } from './useTaskTabs';
 import type { ChatMessage, Session } from '../types';
 
 export interface BackgroundTasksArgs {
@@ -11,12 +12,22 @@ export interface BackgroundTasksArgs {
   busySince: (sessionId: string) => number | undefined;
   needsApproval: (sessionId: string) => boolean;
   onOpenSession: (sessionId: string) => void;
+  /** Shows a subagent's or a shell command's task beside its chat, once its session is selected. */
+  onOpenTask?: (sessionId: string, tab: TaskTab) => void;
   /**
    * Stops an agent's turn through the app's interrupt path, which also answers
    * pending permission requests and handles a starting or rewinding agent.
    */
   stopAgent: (sessionId: string) => void | Promise<void>;
   onError: (message: string) => void;
+}
+
+/** The task tab a row opens: a subagent's by its tool call, a shell command's by its row; a working session has none. */
+export function taskTabOf(task: BackgroundTask): TaskTab | undefined {
+  if (task.kind === 'shell') return { kind: 'shell', taskId: task.id };
+  const prefix = `tool:${task.sessionId}:`;
+  if (task.kind !== 'subagent' || !task.id.startsWith(prefix)) return undefined;
+  return { kind: 'subagent', toolId: task.id.slice(prefix.length) };
 }
 
 function stopCall(task: BackgroundTask, stopAgent: BackgroundTasksArgs['stopAgent']): Promise<unknown> {
@@ -41,7 +52,7 @@ export interface BackgroundTasks {
 }
 
 export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
-  const { sessions, transcripts, isBusy, busySince, needsApproval, onOpenSession, stopAgent, onError } = args;
+  const { sessions, transcripts, isBusy, busySince, needsApproval, onOpenSession, onOpenTask, stopAgent, onError } = args;
   const [isMenuOpen, setMenuOpen] = useState(false);
   const hasLiveSessions = sessions.some((s) => s.status === 'running');
   const { processes, readAt, reload } = useBackgroundProcesses(hasLiveSessions, isMenuOpen, onError);
@@ -60,7 +71,14 @@ export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
     [sessions, transcripts, isBusy, busySince, needsApproval, processes, readAt],
   );
 
-  const open = useCallback((task: BackgroundTask) => onOpenSession(task.sessionId), [onOpenSession]);
+  const open = useCallback(
+    (task: BackgroundTask) => {
+      onOpenSession(task.sessionId);
+      const tab = taskTabOf(task);
+      if (tab) onOpenTask?.(task.sessionId, tab);
+    },
+    [onOpenSession, onOpenTask],
+  );
 
   const stop = useCallback(
     async (task: BackgroundTask): Promise<boolean> => {

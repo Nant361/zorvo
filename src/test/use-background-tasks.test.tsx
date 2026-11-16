@@ -17,6 +17,7 @@ function task(over: Partial<BackgroundTask>): BackgroundTask {
 interface SetupOptions {
   needsApproval?: (sessionId: string) => boolean;
   stopAgent?: (sessionId: string) => void | Promise<void>;
+  onOpenTask?: (sessionId: string, tab: unknown) => void;
 }
 
 function setup(sessions: readonly Session[], options: SetupOptions = {}) {
@@ -32,6 +33,7 @@ function setup(sessions: readonly Session[], options: SetupOptions = {}) {
         busySince: () => undefined,
         needsApproval: options.needsApproval ?? (() => false),
         onOpenSession,
+        onOpenTask: options.onOpenTask,
         stopAgent,
         onError,
       }),
@@ -97,6 +99,39 @@ describe("useBackgroundTasks", () => {
     const { result, onOpenSession } = setup([]);
     act(() => result.current.open(task({ sessionId: "s9" })));
     expect(onOpenSession).toHaveBeenCalledWith("s9");
+  });
+
+  it("opens a subagent's task after selecting its session", () => {
+    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
+    const onOpenTask = vi.fn();
+    const { result, onOpenSession } = setup([], { onOpenTask });
+
+    act(() => result.current.open(task({ id: "tool:s9:t1", kind: "subagent", sessionId: "s9" })));
+
+    expect(onOpenSession).toHaveBeenCalledWith("s9");
+    expect(onOpenTask).toHaveBeenCalledWith("s9", { kind: "subagent", toolId: "t1" });
+    expect(onOpenSession.mock.invocationCallOrder[0]).toBeLessThan(onOpenTask.mock.invocationCallOrder[0]);
+  });
+
+  it("opens a shell command's task", () => {
+    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
+    const onOpenTask = vi.fn();
+    const { result } = setup([], { onOpenTask });
+
+    act(() => result.current.open(task({ id: "process:7", kind: "shell", sessionId: "s9", pid: 7 })));
+
+    expect(onOpenTask).toHaveBeenCalledWith("s9", { kind: "shell", taskId: "process:7" });
+  });
+
+  it("opens no task for a working session", () => {
+    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
+    const onOpenTask = vi.fn();
+    const { result, onOpenSession } = setup([], { onOpenTask });
+
+    act(() => result.current.open(task({ id: "agent:s9", kind: "agent", sessionId: "s9" })));
+
+    expect(onOpenSession).toHaveBeenCalledWith("s9");
+    expect(onOpenTask).not.toHaveBeenCalled();
   });
 
   it("does not poll when no session is running", async () => {

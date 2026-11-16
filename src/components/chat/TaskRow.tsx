@@ -1,6 +1,7 @@
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, Terminal, Users } from "lucide-react";
 import { useNow } from "../../hooks/useNow";
-import { formatElapsed } from "../../lib/background-tasks";
+import { formatElapsed, type BackgroundTask } from "../../lib/background-tasks";
+import { escapeVisible } from "../../lib/visible-text";
 import type { SubagentTask, TaskStatus } from "../../lib/task-view";
 
 export interface TaskRowProps {
@@ -68,6 +69,40 @@ export function TaskRow({ task, secondLine, isOpen, onOpen }: TaskRowProps) {
       className={`${FRAME} focus-ring cursor-pointer transition-colors hover:bg-surface-hover ${isOpen ? "border-border-strong" : "border-border"}`}
     >
       {body}
+    </button>
+  );
+}
+
+const PORT = /^localhost:\d+$/;
+
+/** A command an agent left running, as a row at the end of the chat that opens its task. */
+export function ShellTaskRow({ task, isOpen, onOpen }: { task: BackgroundTask; isOpen: boolean; onOpen: () => void }) {
+  const now = useNow(1000);
+  const command = escapeVisible(task.name);
+  const ports = (task.detail ?? "").split(" · ").filter((part) => PORT.test(part));
+  return (
+    <button
+      type="button"
+      data-task-row=""
+      aria-pressed={isOpen}
+      aria-label={`Open ${command}. Running.`}
+      onClick={onOpen}
+      className={`${FRAME} focus-ring cursor-pointer transition-colors hover:bg-surface-hover ${isOpen ? "border-border-strong" : "border-border"}`}
+    >
+      <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-hover text-fg-secondary">
+        <Terminal size={14} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-mono text-ui-sm text-fg" title={command}>
+          {command}
+        </span>
+        <span className="truncate text-caption text-fg-subtle">{["Shell", ...ports].join(" · ")}</span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end text-caption">
+        <span className="text-status-running">Running</span>
+        <span className="font-mono tabular-nums text-fg-subtle">{formatElapsed(now - task.startedAt)}</span>
+      </span>
+      <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-fg-muted" />
     </button>
   );
 }
