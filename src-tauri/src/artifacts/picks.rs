@@ -194,6 +194,24 @@ pub fn is_accepted(message: &PageMessage, state: ViewState) -> bool {
     }
 }
 
+/// What the view's handler does with `raw`: the message, when it comes from the
+/// view on screen (`is_current`), is well formed, is accepted in `state`, and
+/// fits the rate. Only accepted messages use the rate.
+pub fn accepted_message(
+    raw: &str,
+    is_current: bool,
+    state: ViewState,
+    rate: &mut RateLimit,
+    now: Instant,
+) -> Option<PageMessage> {
+    if !is_current {
+        return None;
+    }
+    parse_page_message(raw)
+        .filter(|message| is_accepted(message, state))
+        .filter(|_| rate.allow(now))
+}
+
 /// Lets `MAX_PER_SECOND` messages through in a window of one second, counted
 /// from the window's first message.
 #[derive(Debug, Default)]
@@ -444,6 +462,49 @@ mod tests {
         }
         assert!(!limit.allow(start + Duration::from_millis(500)));
         assert!(limit.allow(start + Duration::from_millis(1000)));
+    }
+
+    #[test]
+    fn a_message_from_an_older_view_is_dropped() {
+        let on = ViewState {
+            is_commenting: true,
+            has_marks: false,
+        };
+        let mut limit = RateLimit::default();
+        let now = Instant::now();
+        assert_eq!(
+            accepted_message(&text_pick("a"), false, on, &mut limit, now),
+            None
+        );
+        assert!(accepted_message(&text_pick("a"), true, on, &mut limit, now).is_some());
+    }
+
+    #[test]
+    fn only_accepted_messages_use_the_rate() {
+        let off = ViewState::default();
+        let on = ViewState {
+            is_commenting: true,
+            has_marks: false,
+        };
+        let mut limit = RateLimit::default();
+        let now = Instant::now();
+        for _ in 0..10 {
+            assert_eq!(
+                accepted_message(&text_pick("a"), true, off, &mut limit, now),
+                None
+            );
+            assert_eq!(accepted_message("junk", true, on, &mut limit, now), None);
+        }
+        for i in 0..5 {
+            assert!(
+                accepted_message(&text_pick("a"), true, on, &mut limit, now).is_some(),
+                "{i}"
+            );
+        }
+        assert_eq!(
+            accepted_message(&text_pick("a"), true, on, &mut limit, now),
+            None
+        );
     }
 
     fn mark(n: u32, anchor: serde_json::Value) -> serde_json::Value {

@@ -10,9 +10,14 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::sync::Arc;
+use std::time::Instant;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+use super::page_script::{marks_script, mode_script, PAGE_SCRIPT};
+use super::picks::{
+    accepted_message, PageMark, PagePickEvent, RateLimit, ViewState, ARTIFACT_PAGE_PICK,
+};
 use super::protocol::{is_allowed_navigation, respond, SCHEME};
 use super::store::ArtifactStore;
 
@@ -24,6 +29,7 @@ pub const COULD_NOT_SHOW: &str = "Zorvo could not show that page.";
 pub struct ShownPage {
     pub session_id: String,
     pub artifact_id: String,
+    pub version: u32,
 }
 
 /// What decides whether the view is drawn.
@@ -61,6 +67,15 @@ thread_local! {
     static DISPLAY: Cell<Display> = const { Cell::new(Display { is_loaded: false, is_hidden: false, is_outside: false }) };
     /// Counts the views made, so a late "loaded" for an earlier view changes nothing.
     static GENERATION: Cell<u64> = const { Cell::new(0) };
+    /// Comment mode of the view on screen; every new view starts with it off.
+    static COMMENTING: Cell<bool> = const { Cell::new(false) };
+    /// The last marks asked for, with their page. Kept across views of the same
+    /// page (Reload), and run again once such a view has loaded.
+    static MARKS: RefCell<Option<(ShownPage, Vec<PageMark>)>> = const { RefCell::new(None) };
+    /// The generation marks were last run in, so only that view may say which it could not find.
+    static MARKS_SENT: Cell<u64> = const { Cell::new(0) };
+    /// How many messages the view on screen has had through this second.
+    static RATE: RefCell<RateLimit> = RefCell::new(RateLimit::default());
 }
 
 /// Changes what decides the view's visibility and applies it. Main thread only.
@@ -74,13 +89,88 @@ fn update_display(change: impl FnOnce(Display) -> Display) {
     });
 }
 
-/// Marks the view of `generation` as loaded, if it is still the one shown. Main thread only.
+/// Marks the view of `generation` as loaded, if it is still the one shown, and
+/// gives its page the comment mode and marks it should have. Main thread only.
 fn mark_loaded(generation: u64) {
     if GENERATION.get() == generation {
         update_display(|display| Display {
             is_loaded: true,
             ..display
         });
+        apply_page_state();
+    }
+}
+
+/// The page the view on screen shows. Main thread only.
+fn shown_page() -> Option<ShownPage> {
+    VIEW.with(|slot| slot.borrow().as_ref().map(|(_, page)| page.clone()))
+}
+
+/// Runs one of `page_script.rs`'s fixed calls in the view on screen. Main thread only.
+fn evaluate(script: &str) {
+    VIEW.with(|slot| {
+        if let Some((view, _)) = slot.borrow().as_ref() {
+            let _ = view.evaluate_script(script);
+        }
+    });
+}
+
+/// Runs the stored marks when they are for the page on screen. Main thread only.
+fn run_marks(page: &ShownPage) {
+    let script = MARKS.with(|marks| {
+        marks
+            .borrow()
+            .as_ref()
+            .filter(|(marked, _)| marked == page)
+            .map(|(_, marks)| marks_script(marks))
+    });
+    if let Some(script) = script {
+        evaluate(&script);
+        MARKS_SENT.set(GENERATION.get());
+    }
+}
+
+/// Gives a loaded page its comment mode and marks. Main thread only.
+fn apply_page_state() {
+    let Some(page) = shown_page() else {
+        return;
+    };
+    if COMMENTING.get() {
+        evaluate(&mode_script(true));
+    }
+    run_marks(&page);
+}
+
+/// What the page sent, once `picks.rs` accepts it, goes to the main webview with
+/// the page it came from. Main thread only (wry calls the handler there).
+fn on_page_message(app: &AppHandle, generation: u64, body: &str) {
+    let Some(page) = shown_page() else {
+        return;
+    };
+    let state = ViewState {
+        is_commenting: COMMENTING.get(),
+        has_marks: MARKS_SENT.get() == generation,
+    };
+    let is_current = GENERATION.get() == generation;
+    let message = RATE.with(|rate| {
+        accepted_message(
+            body,
+            is_current,
+            state,
+            &mut rate.borrow_mut(),
+            Instant::now(),
+        )
+    });
+    if let Some(message) = message {
+        let _ = app.emit(
+            ARTIFACT_PAGE_PICK,
+            PagePickEvent {
+                session_id: page.session_id,
+                artifact_id: page.artifact_id,
+                version: page.version,
+                message,
+            },
+        );
     }
 }
 
@@ -181,6 +271,9 @@ pub fn show(
         let generation = GENERATION.get() + 1;
         GENERATION.set(generation);
         DISPLAY.set(Display::default());
+        COMMENTING.set(false);
+        RATE.with(|rate| *rate.borrow_mut() = RateLimit::default());
+        let messages = handle.clone();
         let built = handle
             .get_webview_window(MAIN_WINDOW)
             .ok_or(())
@@ -188,6 +281,10 @@ pub fn show(
                 wry::WebViewBuilder::new()
                     .with_incognito(true)
                     .with_visible(false)
+                    .with_initialization_script(PAGE_SCRIPT)
+                    .with_ipc_handler(move |request| {
+                        on_page_message(&messages, generation, request.body())
+                    })
                     .with_on_page_load_handler(move |event, _url| {
                         if matches!(event, wry::PageLoadEvent::Finished) {
                             mark_loaded(generation);
@@ -248,6 +345,31 @@ pub fn set_hidden(app: &AppHandle, hidden: bool) {
             is_hidden: hidden,
             ..display
         });
+    });
+}
+
+/// Turns comment mode on or off in the view, only when it shows `page`.
+pub fn set_comment_mode(app: &AppHandle, page: ShownPage, on: bool) {
+    let _ = app.run_on_main_thread(move || {
+        if shown_page().as_ref() != Some(&page) {
+            return;
+        }
+        COMMENTING.set(on);
+        if DISPLAY.get().is_loaded {
+            evaluate(&mode_script(on));
+        }
+    });
+}
+
+/// Keeps `marks` for `page`, and runs them now when the view shows that page
+/// and it has loaded; a page still loading gets them once it has.
+pub fn set_marks(app: &AppHandle, page: ShownPage, marks: Vec<PageMark>) {
+    let _ = app.run_on_main_thread(move || {
+        let is_shown = shown_page().as_ref() == Some(&page);
+        MARKS.with(|stored| *stored.borrow_mut() = Some((page.clone(), marks)));
+        if is_shown && DISPLAY.get().is_loaded {
+            run_marks(&page);
+        }
     });
 }
 
@@ -338,6 +460,7 @@ mod tests {
         let page = ShownPage {
             session_id: "s-1".to_string(),
             artifact_id: "a-0123456789abcdef".to_string(),
+            version: 1,
         };
 
         // Deleting the session it belongs to, or the artifact it shows, closes it.

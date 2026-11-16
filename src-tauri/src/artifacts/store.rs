@@ -311,10 +311,16 @@ impl ArtifactStore {
     /// The session's artifacts, the most recently changed first. A session with
     /// no index, or one that cannot be read, has none.
     pub fn list(&self, session_id: &str) -> Result<Vec<ArtifactRecord>, String> {
+        Ok(self.list_checked(session_id).unwrap_or_default())
+    }
+
+    /// The session's artifacts, newest first; an error when its index exists
+    /// but cannot be read, which `list` reads as no artifacts.
+    pub fn list_checked(&self, session_id: &str) -> Result<Vec<ArtifactRecord>, String> {
         if !is_session_id(session_id) {
             return Ok(Vec::new());
         }
-        let mut records = self.read_index(session_id).unwrap_or_default();
+        let mut records = self.read_index(session_id)?;
         records.sort_by_key(|record| std::cmp::Reverse(newest_at(record)));
         Ok(records)
     }

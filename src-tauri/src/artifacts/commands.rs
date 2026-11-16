@@ -9,6 +9,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
+use super::picks::{checked_marks, PageMark};
 use super::protocol::page_url;
 use super::source::{read_source, temp_roots};
 use super::store::{is_artifact_id, is_session_id, ArtifactRecord, ArtifactStore, Shown, FAILED};
@@ -22,6 +23,7 @@ pub const ARTIFACTS_CHANGED: &str = "artifacts-changed";
 pub const SWEEP_MIN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 const MAIN_WINDOW: &str = "main";
 const COULD_NOT_SAVE: &str = "Zorvo could not save that file.";
+const COULD_NOT_MARK: &str = "Zorvo could not mark that page.";
 const DEFAULT_EXPORT_NAME: &str = "Artifact";
 
 /// One session's artifacts, as `artifact_list` returns them.
@@ -30,6 +32,8 @@ const DEFAULT_EXPORT_NAME: &str = "Artifact";
 pub struct SessionArtifacts {
     pub session_id: String,
     pub artifacts: Vec<ArtifactRecord>,
+    /// The index exists but could not be read: `artifacts` is empty, not known to be.
+    pub failed: bool,
 }
 
 fn now_ms() -> u64 {
@@ -71,9 +75,13 @@ pub fn show_page(
 pub fn list_sessions(artifacts: &ArtifactStore, session_ids: &[String]) -> Vec<SessionArtifacts> {
     session_ids
         .iter()
-        .map(|session_id| SessionArtifacts {
-            session_id: session_id.clone(),
-            artifacts: artifacts.list(session_id).unwrap_or_default(),
+        .map(|session_id| {
+            let listed = artifacts.list_checked(session_id);
+            SessionArtifacts {
+                session_id: session_id.clone(),
+                failed: listed.is_err(),
+                artifacts: listed.unwrap_or_default(),
+            }
         })
         .collect()
 }
@@ -272,6 +280,7 @@ pub fn artifact_view_show(
             ShownPage {
                 session_id: session_id.clone(),
                 artifact_id: artifact_id.clone(),
+                version,
             },
             page_url(&session_id, &artifact_id, version),
             bounds,
@@ -305,6 +314,43 @@ pub fn artifact_view_hide(app: AppHandle, hidden: bool) {
 #[tauri::command(async)]
 pub fn artifact_view_close(app: AppHandle) {
     view::close(&app);
+}
+
+/// Turns comment mode on or off in the page on screen, when it is that page.
+#[tauri::command(async)]
+pub fn artifact_comment_mode(
+    app: AppHandle,
+    session_id: String,
+    artifact_id: String,
+    version: u32,
+    on: bool,
+) {
+    let page = ShownPage {
+        session_id,
+        artifact_id,
+        version,
+    };
+    view::set_comment_mode(&app, page, on);
+}
+
+/// Numbered marks for a page, drawn when it is on screen. Each anchor is checked
+/// against the pick limits; a list that fails is refused whole.
+#[tauri::command(async)]
+pub fn artifact_view_marks(
+    app: AppHandle,
+    session_id: String,
+    artifact_id: String,
+    version: u32,
+    marks: Vec<PageMark>,
+) -> Result<(), String> {
+    let marks = checked_marks(marks).ok_or_else(|| COULD_NOT_MARK.to_string())?;
+    let page = ShownPage {
+        session_id,
+        artifact_id,
+        version,
+    };
+    view::set_marks(&app, page, marks);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -427,6 +473,36 @@ mod tests {
         assert_eq!(listed[0].artifacts.len(), 1);
         assert!(listed[1].artifacts.is_empty());
         assert!(listed[2].artifacts.is_empty());
+    }
+
+    #[test]
+    fn list_sessions_marks_an_unreadable_index_failed() {
+        let data = Temp::new("data");
+        let artifacts = ArtifactStore::new(data.0.clone());
+        artifacts
+            .show("one-1", "/w/a.html", Some("A"), b"a", 1)
+            .unwrap();
+        std::fs::create_dir_all(data.0.join("bad-2")).unwrap();
+        std::fs::write(data.0.join("bad-2").join("index.json"), b"{").unwrap();
+
+        let listed = list_sessions(
+            &artifacts,
+            &[
+                "one-1".to_string(),
+                "bad-2".to_string(),
+                "none-3".to_string(),
+            ],
+        );
+
+        assert!(!listed[0].failed);
+        assert!(listed[1].failed);
+        assert!(listed[1].artifacts.is_empty());
+        // No index at all is a session with no pages, not a failure.
+        assert!(!listed[2].failed);
+        assert_eq!(
+            serde_json::to_value(&listed[1]).unwrap()["failed"],
+            serde_json::json!(true)
+        );
     }
 
     #[test]

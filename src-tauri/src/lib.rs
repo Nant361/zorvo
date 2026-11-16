@@ -540,6 +540,8 @@ pub fn run() {
             artifacts::commands::artifact_view_bounds,
             artifacts::commands::artifact_view_hide,
             artifacts::commands::artifact_view_close,
+            artifacts::commands::artifact_comment_mode,
+            artifacts::commands::artifact_view_marks,
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_update_restart,
