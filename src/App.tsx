@@ -622,6 +622,8 @@ export default function App() {
     updateMessages,
     onAttention: (sessionId, reason) => notifyAttention(sessionId, reason),
     onNotice: (message) => setNotice(message),
+    // Task 8 opens the Artifacts tab from here.
+    onArtifactShown: () => undefined,
     messagesOf: async (sessionId) => {
       const live = transcripts[sessionId] ?? [];
       if (transcriptStatus[sessionId] === "ready") return live;

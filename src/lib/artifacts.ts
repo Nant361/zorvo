@@ -1,5 +1,22 @@
 import type { Artifact, ArtifactCard, ArtifactVersion, Session } from '../types';
 import { isArchived } from './session-helpers';
+import guide from './artifact-guide.md?raw';
+
+/** What `artifact_guide` answers: how to make a page that reads well in Zorvo. */
+export const ARTIFACT_GUIDE: string = guide;
+
+/**
+ * The sentences the backend refuses a page with. They are written for the
+ * agent and repeat nothing it sent, so they are passed on as they are; any
+ * other failure is Zorvo's own and is not. A test keeps them equal to the Rust.
+ */
+export const ARTIFACT_REFUSALS: ReadonlySet<string> = new Set([
+  'Give the page a title the first time you show it.',
+  'This session already has 50 pages. The user can delete one in Zorvo.',
+  "That is not an HTML file in this session's folder or the temporary folder.",
+  'The page is over 16 MB.',
+  'The page is not valid UTF-8 text.',
+]);
 
 /** What `artifact_show` answers: the artifact as it now is and the version to display. */
 export interface ShownArtifact {
