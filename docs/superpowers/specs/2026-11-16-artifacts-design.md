@@ -99,9 +99,13 @@ a throwaway build that shows, in the real WKWebView:
 3. **Common libraries work** under the CSP above: Tailwind's CDN build,
    Chart.js, D3, Mermaid, and a Google Font.
 
-If 1 fails, this design stops and goes back to the user with an alternative (a
-separate webview for artifacts). If 2 fails, it is recorded here as a known
-hole. The result of 3 fixes the CSP text. The check of 1 stays afterwards as a
+4. **A page that never yields** (`while(true){}`): whether Zorvo's own
+   interface stays usable, since WKWebView may run the frame in the page's
+   process.
+
+If 1 fails, or 4 freezes the app, this design stops and goes back to the user
+with an alternative (a separate webview for artifacts). If 2 fails, it is
+recorded here as a known hole. The result of 3 fixes the CSP text. The check of 1 stays afterwards as a
 permanent real-app test.
 
 ## 2. Tools
