@@ -116,6 +116,31 @@ with an alternative (a separate webview for artifacts). If 2 fails, it is
 recorded here as a known hole. The result of 3 fixes the CSP text. The check of 1 stays afterwards as a
 permanent real-app test.
 
+### Spike results (2026-11-16)
+
+Run on a debug build with the production CSP (Tauri 2.12.5, wry 0.57, macOS
+WKWebView), a throwaway branch `spike/artifacts-sandbox`. Each page reported
+through `postMessage`; the log is the evidence.
+
+| # | Question | Result | Evidence |
+| --- | --- | --- | --- |
+| 1 | IPC out of reach | **Pass** | `__TAURI_INTERNALS__`, `__TAURI__` and `window.ipc` are undefined in the frame. `fetch('ipc://…')` fails under the page CSP, and without it Tauri answers 500 "Origin header is not a valid URL". `window.webkit.messageHandlers.ipc` **is** reachable from the frame, and a hand-built invoke posted to it was refused only because it did not carry the invoke key; the command never ran. |
+| 2 | Navigation out refused | **Pass** | `location.href`, a clicked link and a meta refresh to `https://example.com` all loaded nothing; the page was still there 3.5 s later. Zorvo's own `frame-src zorvo-artifact:` refused them (a `frame-src` violation each time), before the Rust handler was asked. The handler is called for the frame's own loads, so it stays as a second layer. |
+| 3 | Libraries without `unsafe-eval` | **Pass** | Tailwind's CDN build applied its classes; Chart.js, D3 and Mermaid drew; lodash and jQuery loaded; a Google Font loaded. No CSP violation but the expected one for `fetch` (`connect-src`). `localStorage` throws `SecurityError`, as designed. The CSP text stands as written. |
+| 4 | A page that never yields | **Fail** | The frame runs in the main page's web content process. From the moment the page entered `while(true){}` the main interface stopped completely (its 500 ms timer never fired again in 68 s) until the app was killed. |
+
+What follows from them:
+
+- The invoke key, kept in the main frame, is the only thing between a page and
+  Tauri's message handler. Nothing may ever inject Tauri's scripts or the key
+  into a frame (`initialization_script_for_all_frames` is forbidden), and the
+  real-app test of 1 is permanent.
+- Navigation URLs seen on a normal start: `tauri://localhost`, `about:blank`,
+  `zorvo-artifact://localhost/…`.
+- Result 4 stops this design as written: a sandboxed frame cannot protect
+  Zorvo's interface from a page that loops. The frame must move out of the main
+  webview's process. **Sections 1 and 4 are on hold until the user chooses how.**
+
 ## 2. Tools
 
 Two tools join the five in `agent_tools/tools.rs`. Both are answered by the
