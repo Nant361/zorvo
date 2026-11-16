@@ -2,6 +2,7 @@ pub mod acp;
 pub mod agent_tools;
 pub mod app_update;
 pub mod appearance;
+pub mod artifacts;
 pub mod attachment_paths;
 pub mod attachments;
 pub mod background_processes;
