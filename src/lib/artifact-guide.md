@@ -48,6 +48,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 ## Layout
 
 - It must hold from 320 px wide to a full window with no sideways scrolling. Use fluid widths, `max-width` on the reading column (about 720 px), flex or grid with `gap`, and `minmax(0, 1fr)` columns that collapse to one.
+- A row of tiles or cards must wrap evenly: use `repeat(auto-fit, minmax(150px, 1fr))`, or a column count that divides the number of tiles, so none is left alone on a row.
 - A wide table goes in its own box with `overflow-x: auto`.
 - Padding of 16 to 24 px around the content. Text of 14 to 16 px with a line height near 1.5.
 - A system font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`) unless you link a Google Font. Monospace for code and numbers in columns.
