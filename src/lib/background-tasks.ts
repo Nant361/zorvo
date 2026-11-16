@@ -44,7 +44,7 @@ const SUBAGENT_TOOLS = new Set(['task', 'agent']);
  * report plain reasoning as `think` too, so the adapter's own tool name decides,
  * with a title that names the subagent as the fallback for older adapters.
  */
-function isSubagent(tool: ToolExecution): boolean {
+export function isSubagent(tool: ToolExecution): boolean {
   const provider = tool.providerToolName?.toLowerCase();
   if (provider && SUBAGENT_TOOLS.has(provider)) return true;
   return /^(task|agent|subagent)\b/i.test(tool.name);

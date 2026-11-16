@@ -400,6 +400,7 @@ export function applyPermissionRequest(
     timestamp: ctx.now,
     options: toChoices(payload.options),
     requestId: payload.requestId,
+    ...(typeof toolCall.toolCallId === 'string' ? { toolCallId: toolCall.toolCallId } : {}),
     ...(questions ? { questions } : {}),
     ...(edits ? { edits } : {}),
   };

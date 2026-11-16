@@ -251,6 +251,8 @@ export interface ActionCard {
   /** ACP permission requests: the agent's own choices and the request to answer. */
   options?: PermissionChoice[];
   requestId?: string | number;
+  /** The tool call the request is for, when the agent names it. */
+  toolCallId?: string;
   /** The option the user picked, once answered. */
   chosenOptionId?: string;
   /** The mode changed after the agent asked; the card still needs its answer. */
