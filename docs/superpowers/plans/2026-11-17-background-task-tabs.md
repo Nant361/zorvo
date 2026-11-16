@@ -119,7 +119,7 @@ test('parentToolIdOf ignores wrong types', … '' , 7, null, {} → undefined
 
 **Files:**
 - Create: `src/lib/task-view.ts`, `src/test/task-view.test.ts`
-- Modify: `src/lib/background-tasks.ts` (export `isSubagent`)
+- Modify: `src/lib/background-tasks.ts` (export `isSubagent`), `src/types/index.ts` and `src/lib/acp-events.ts` (`ActionCard.toolCallId`), `src/lib/persistence.ts`
 
 **Interfaces:**
 - Produces:
@@ -140,12 +140,13 @@ export function stepsOf(tool: ToolExecution, message: ChatMessage): { parts: Cha
 export function secondLine(task: SubagentTask, agentName: string): string;
 ```
 
-- Status rules: tool `failed` → Failed; `completed` → Done; `running` and `isTurnOver` → Did not finish; `running` and the message's pending `actionCard` names a tool call whose `parentId` is this tool → Needs you; else Working.
+- Also produces, since a card does not say today which tool call it is for: `ActionCard.toolCallId?: string` in `types`, set in `applyPermissionRequest` (`lib/acp-events.ts`) from the request's `toolCall.toolCallId` when it is a string, and kept by `persistence.ts` only when a string.
+- Status rules: tool `failed` → Failed; `completed` → Done; `running` and `isTurnOver` → Did not finish; `running` and the message's `actionCard` is `pending` with a `toolCallId` naming a tool whose `parentId` is this tool → Needs you; else Working. A request whose tool call was never announced as a child leaves the row at Working; the card in the chat still asks.
 - `secondLine`: `"{agentType} · N steps"`, `"N steps"` without a type, `"1 step"` for one, and `"{agentName} doesn't report this subagent's steps"` when `hasSteps` is false.
 
 - [ ] **Step 1: Write the failing tests**, one per status rule (including `reads Needs you while its child waits for a permission`), `shownTools leaves out child tools`, `a subagent with no steps has no tab` (a tool named `Task` with no `steps` → `hasSteps` false), the four `secondLine` strings, `stepsOf returns the child tools in order`.
 - [ ] **Step 2: Run** `pnpm vitest run src/test/task-view.test.ts`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Check how a pending card names its tool call (`ActionCard` in `types`, set in `applyPermissionRequest`) and use that field.
+- [ ] **Step 3: Implement**, with a test in `acp-events.test.ts` that `applyPermissionRequest` records the request's `toolCallId` on the card.
 - [ ] **Step 4: Run.** Expected: PASS; also `pnpm vitest run src/test/background-tasks.test.ts`.
 - [ ] **Step 5: Commit** `feat: derive task rows from the transcript`.
 
