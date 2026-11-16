@@ -3,6 +3,7 @@ import {
   TRANSPORT_ACP,
   type ChatMessage,
   type ChatMessagePart,
+  type ToolExecution,
   type DelegationLink,
   type OpenedByLink,
   type DiffRow,
@@ -420,11 +421,62 @@ function withReadableDiffs(message: ChatMessage): ChatMessage {
   };
 }
 
+/** Whether `steps` is a subagent's steps: well-formed parts whose tools are this tool's own children. */
+function hasValidSteps(tool: Record<string, unknown>, byId: ReadonlyMap<string, Record<string, unknown>>): boolean {
+  const steps = tool.steps;
+  if (!Array.isArray(steps) || !steps.every(isMessagePart)) return false;
+  return steps.every(
+    (step) => step.kind !== 'tools' || step.toolIds.every((id) => byId.get(id)?.parentId === tool.id),
+  );
+}
+
+/**
+ * Keeps what a subagent did only where it holds together: a parent's steps must name its own
+ * children, and a child must be named by its parent. A tool that loses its parent is added to the
+ * reply's parts, so nothing a transcript holds stops showing.
+ */
+function withValidSubagentFields(message: ChatMessage): ChatMessage {
+  if (!Array.isArray(message.tools)) return message;
+  const raws = message.tools as unknown as Record<string, unknown>[];
+  const marked = ['parentId', 'steps', 'agentType', 'thinking', 'isTextCut'];
+  if (!raws.some((tool) => isObject(tool) && marked.some((key) => key in tool))) return message;
+
+  const byId = new Map(raws.filter(isObject).map((tool) => [String(tool.id), tool]));
+  const parents = new Set(raws.filter((tool) => isObject(tool) && hasValidSteps(tool, byId)).map((tool) => tool.id));
+  const listed = new Set(
+    raws.flatMap((tool) =>
+      parents.has(tool.id) ? (tool.steps as ChatMessagePart[]).flatMap((step) => (step.kind === 'tools' ? step.toolIds : [])) : [],
+    ),
+  );
+  const orphans: string[] = [];
+  const tools = raws.map((raw) => {
+    if (!isObject(raw)) return raw;
+    const { parentId, steps, agentType, thinking, isTextCut, ...rest } = raw;
+    const isChild = typeof parentId === 'string' && parents.has(parentId) && listed.has(String(raw.id));
+    if (parentId !== undefined && !isChild) orphans.push(String(raw.id));
+    return {
+      ...rest,
+      ...(isChild ? { parentId } : {}),
+      ...(parents.has(raw.id) ? { steps } : {}),
+      ...(typeof agentType === 'string' ? { agentType } : {}),
+      ...(typeof thinking === 'string' ? { thinking } : {}),
+      ...(isTextCut === true ? { isTextCut } : {}),
+    };
+  }) as unknown as ToolExecution[];
+  const parts =
+    orphans.length && Array.isArray(message.parts)
+      ? [...message.parts, { kind: 'tools' as const, toolIds: orphans }]
+      : message.parts;
+  return { ...message, tools, ...(parts ? { parts } : {}) };
+}
+
 export function normalizeTranscript(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((raw): ChatMessage[] => {
     if (!isMessage(raw)) return [];
-    const message = withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw))));
+    const message = withValidSubagentFields(
+      withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw)))),
+    );
     if (!('parts' in message)) return [message];
     const { parts, ...rest } = message;
     const isWellFormed = Array.isArray(parts) && parts.length > 0 && parts.every(isMessagePart);
