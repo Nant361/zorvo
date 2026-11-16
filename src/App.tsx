@@ -70,6 +70,11 @@ import {
 import { useAppearance } from "./hooks/useAppearance";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useBackgroundTasks } from "./hooks/useBackgroundTasks";
+import { useSessionTaskTabs } from "./hooks/useSessionTaskTabs";
+import type { TaskTab } from "./hooks/useTaskTabs";
+import { TasksPanel } from "./components/tasks/TasksPanel";
+import { ShellTaskRow } from "./components/chat/TaskRow";
+import { findShellTask } from "./lib/background-tasks";
 import { useTranscripts } from "./hooks/useTranscripts";
 import { usePrivateCreditsRefresh } from "./hooks/usePrivateCreditsRefresh";
 import { usePrivateTopupRequests } from "./hooks/usePrivateTopupRequests";
@@ -674,11 +679,25 @@ export default function App() {
   const isDraggingFiles = useFileDrop(handleDroppedFiles, reportError);
 
   const turnsEnded = useTurnsEnded(Boolean(activeSessionId) && isSessionBusy(activeSessionId));
+  const backgroundTasks = useBackgroundTasks({
+    sessions,
+    transcripts,
+    isBusy: acp.isBusy,
+    busySince: acp.busySinceOf,
+    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
+    // These three are declared further down and only ever called from a click.
+    onOpenSession: (id) => handleSelectSession(id),
+    onOpenTask: (id, tab) => openTask(id, tab),
+    stopAgent: (id) => handleInterrupt(id),
+    onError: reportError,
+  });
+  const taskTabs = useSessionTaskTabs({ sessionId: activeSessionId ?? null, transcripts, tasks: backgroundTasks.tasks });
   const inspectorTabs = offeredTabs({
     hasFolder: Boolean(filesFolder),
     isRepository,
     hasSession: Boolean(activeSession),
     isPrivate: Boolean(activeSession?.privateMode),
+    hasTaskTabs: taskTabs.tabs.length > 0,
   });
   const inspector = useInspector(filesFolder?.path, isRepository, turnsEnded, reportError, {
     isSidebarShown: !isSidebarHidden,
@@ -695,6 +714,16 @@ export default function App() {
   const fileMarkers = useMemo(() => markersOf(inspector.headStats, inspector.filesPrefix), [inspector.headStats, inspector.filesPrefix]);
   // A tab that no longer applies (another folder, a draft) does not show.
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
+  /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
+  const openTask = (sessionId: string, tab: TaskTab) => {
+    // A compare run's panel and a removed agent's panel have no inspector for the session.
+    if (isComposerHidden) return;
+    taskTabs.open(sessionId, tab);
+    inspector.show("tasks");
+  };
+  const openTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "subagent" ? taskTabs.selected.toolId : undefined;
+  const openShellTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "shell" ? taskTabs.selected.taskId : undefined;
+  const sessionShellTasks = backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId);
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -1028,17 +1057,6 @@ export default function App() {
     if (isRestarting(sessionId)) cancelRestart(sessionId);
     else acp.interrupt(sessionId, transcripts[sessionId]);
   };
-
-  const backgroundTasks = useBackgroundTasks({
-    sessions,
-    transcripts,
-    isBusy: acp.isBusy,
-    busySince: acp.busySinceOf,
-    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
-    onOpenSession: handleSelectSession,
-    stopAgent: handleInterrupt,
-    onError: reportError,
-  });
 
   const navigateTo = (sessionId: string | null) => {
     if (sessionId) handleSelectSession(sessionId);
@@ -1697,6 +1715,22 @@ export default function App() {
                       agentName={activeAgent?.name}
                       agentProfileId={activeSession?.profileId}
                       onForkBranch={(messageId) => void forkSession(messageId)}
+                      onOpenTask={activeSession ? (toolId) => openTask(activeSession.id, { kind: "subagent", toolId }) : undefined}
+                      openTaskId={openTaskId}
+                      tasksFooter={
+                        activeSession && sessionShellTasks.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {sessionShellTasks.map((task) => (
+                              <ShellTaskRow
+                                key={task.id}
+                                task={task}
+                                isOpen={openShellTaskId !== undefined && findShellTask([task], openShellTaskId, transcripts) === task}
+                                onOpen={() => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
+                              />
+                            ))}
+                          </div>
+                        ) : undefined
+                      }
                       onReply={(quote) => composerRef.current?.insertText(quote)}
                       onOpenUrl={openLink}
                       privateModelId={activeSession?.privateMode?.modelId}
@@ -2035,7 +2069,7 @@ export default function App() {
               tabs={inspectorTabs}
               width={inspector.width}
               maxWidth={maxInspectorWidth(windowWidth, !isSidebarHidden)}
-              counts={{ changes: inspector.changes.changes?.length }}
+              counts={{ changes: inspector.changes.changes?.length, tasks: taskTabs.tabs.length || undefined }}
               isViewingFile={inspectorTab === "files" && inspector.viewedFile !== null}
               onSelect={inspector.show}
               onResize={inspector.setWidth}
@@ -2064,6 +2098,17 @@ export default function App() {
                   targetsFailed={inspector.targetsFailed}
                   review={activeSession ? review.review : undefined}
                   addReview={activeSession ? review.addReview : undefined}
+                />
+              )}
+              {inspectorTab === "tasks" && activeSession && (
+                <TasksPanel
+                  tabs={taskTabs}
+                  sessionId={activeSession.id}
+                  messages={transcripts[activeSession.id] ?? []}
+                  tasks={backgroundTasks.tasks}
+                  agentName={activeAgent?.name ?? "The agent"}
+                  isBusy={acp.isBusy(activeSession.id)}
+                  onStop={backgroundTasks.stop}
                 />
               )}
               {inspectorTab === "activity" && activeSession && (
