@@ -98,7 +98,8 @@ The step runs under the same per-target lock as the others (`lock_key`), so two
 jobs for the same agent and version cannot install at once.
 
 **Choosing the bin.** After the install, `<prefix>/bin/` holds one link per bin
-of the package. The rule is npx's own: the only entry, else the entry named like
+of the package. The rule is npx's own: the only entry (names that all link to one file, as Kilo's
+`kilo` and `kilocode` do, count as one, and the first by name is taken), else the entry named like
 the package without its scope (`qwen-code` for `@qwen-code/qwen-code`).
 Otherwise the step fails with "{Agent}'s package has no program Zorvo can pick."
 The name must be a single path part (`is_single_name`). The choice is a pure

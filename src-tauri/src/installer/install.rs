@@ -8,7 +8,6 @@
 //! downloads, unpacks, runs npm or waits for a lock.
 
 use std::collections::{BTreeSet, HashMap};
-use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
@@ -21,7 +20,7 @@ use super::archive::{ensure_agent_command, format_for_url, unpack, UnpackError, 
 use super::cleanup::{clean_up, CleanupInputs};
 use super::download::{download, DownloadError, DownloadLimits};
 use super::layout::{read_record, remove_path, CommitOutcome, InstallRecord, Staging, ToolsDir};
-use super::npm_bin::choose_bin;
+use super::npm_bin::choose_installed_bin;
 use super::plan::PlannedStep;
 use super::prerequisites::{
     npm_install_args, prerequisites_for, run_npm_install, NpmError, Prerequisite,
@@ -471,8 +470,8 @@ impl Installer {
         run.report(PHASE_NPM, 0, None);
         let args = npm_install_args(&staging.content_path(), package);
         run_npm_install(&npm, &args, &npm_env, NPM_INSTALL_TIMEOUT, run.cancel)?;
-        let bins = file_names_in(&staging.content_path().join(NPM_BIN_DIR));
-        let chosen = choose_bin(package, &bins).ok_or_else(|| {
+        let bin_dir = staging.content_path().join(NPM_BIN_DIR);
+        let chosen = choose_installed_bin(package, &bin_dir).ok_or_else(|| {
             StepError::Failed(format!(
                 "{}'s package has no program Zorvo can pick.",
                 run.name
@@ -664,18 +663,6 @@ fn record(source: &str, sha256: Option<&str>, bin: Option<&str>) -> InstallRecor
             .map_or(0, |d| d.as_secs()),
         bin: bin.map(String::from),
     }
-}
-
-/// The names of what is directly in `dir`, sorted; none when it cannot be read.
-fn file_names_in(dir: &Path) -> Vec<String> {
-    let mut names: Vec<String> = fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .collect();
-    names.sort();
-    names
 }
 
 /// True for exactly one plain path component, so a join stays one level down.

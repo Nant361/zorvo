@@ -1,6 +1,38 @@
 //! Which program of an npm package is the agent, by `npx`'s own rule.
 
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::Path;
+
 use super::install::is_single_name;
+
+/// The program to run among what an npm install linked into `bin_dir`, as
+/// `npx` picks it: names that all lead to one file are one program (the
+/// first by name is taken), otherwise [`choose_bin`] decides by name.
+pub fn choose_installed_bin(spec: &str, bin_dir: &Path) -> Option<String> {
+    let names = file_names_in(bin_dir);
+    let targets: BTreeSet<_> = names
+        .iter()
+        .map(|name| fs::canonicalize(bin_dir.join(name)).ok())
+        .collect();
+    let is_one_program = targets.len() == 1 && !targets.contains(&None);
+    match names.first() {
+        Some(first) if is_one_program && is_single_name(first) => Some(first.clone()),
+        _ => choose_bin(spec, &names),
+    }
+}
+
+/// The names of what is directly in `dir`, sorted; none when it cannot be read.
+fn file_names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+    names.sort();
+    names
+}
 
 /// The package's name without its scope and version:
 /// `qwen-code` for `@qwen-code/qwen-code@0.27.0`.
@@ -71,6 +103,53 @@ mod tests {
     fn a_name_with_a_path_part_is_never_chosen() {
         assert_eq!(choose_bin("tool@1.0.0", &names(&["../tool"])), None);
         assert_eq!(choose_bin("tool@1.0.0", &names(&["a/b"])), None);
+    }
+
+    fn temp_bin_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("zorvo-npm-bin-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn names_that_link_to_one_file_count_as_one_program() {
+        let dir = temp_bin_dir("aliases");
+        std::fs::write(dir.join("cli.js"), "").unwrap();
+        for name in ["kilocode", "kilo"] {
+            std::os::unix::fs::symlink("../cli.js", dir.join("bin").join(name)).unwrap();
+        }
+
+        let chosen = choose_installed_bin("@kilocode/cli@7.8.12", &dir.join("bin"));
+
+        assert_eq!(chosen, Some("kilo".into()), "the first by name");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn names_that_link_to_different_files_follow_the_package_name() {
+        let dir = temp_bin_dir("distinct");
+        for (name, target) in [("helper", "a.js"), ("tool", "b.js")] {
+            std::fs::write(dir.join(target), "").unwrap();
+            std::os::unix::fs::symlink(format!("../{target}"), dir.join("bin").join(name)).unwrap();
+        }
+
+        assert_eq!(
+            choose_installed_bin("@scope/tool@1.0.0", &dir.join("bin")),
+            Some("tool".into())
+        );
+        assert_eq!(
+            choose_installed_bin("@scope/cli@1.0.0", &dir.join("bin")),
+            None
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_missing_bin_folder_chooses_nothing() {
+        let dir = temp_bin_dir("missing");
+        assert_eq!(choose_installed_bin("tool@1.0.0", &dir.join("nope")), None);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
