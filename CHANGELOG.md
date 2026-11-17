@@ -4,6 +4,9 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **The website explains credits and leaves private mode for last.** A new docs page, Credits terms, says who sells private mode credits, what they cost, and what happens to a payment and a balance. Private mode is now one section, after everything Zorvo does for free, with the path of a private answer folded into it. The first Download says the build is not signed yet and links to how to open it, the header names Private mode apart from Privacy, the footer's Privacy opens its docs page, and the Control section no longer says you approve every step. On the page, the delegate scene ends with the report alone, and status dots and the terminal cursor stop moving after a few seconds.
 ## [0.12.0] - 2026-11-14
 
 ### Added

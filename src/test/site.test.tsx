@@ -9,6 +9,7 @@ import AgentsDocs from "../../site/app/docs/agents/page";
 import CompareDocs from "../../site/app/docs/compare/page";
 import InstallDocs from "../../site/app/docs/install/page";
 import PrivacyDocs from "../../site/app/docs/privacy/page";
+import CreditsDocs from "../../site/app/docs/credits/page";
 import QuickstartDocs from "../../site/app/docs/quickstart/page";
 import ReviewDocs from "../../site/app/docs/review/page";
 import SigningInDocs from "../../site/app/docs/signing-in/page";
@@ -103,7 +104,7 @@ describe("landing page", () => {
     return body.textContent ?? "";
   })();
 
-  it("has the thirteen approved sections in order, and no pricing", () => {
+  it("has the twelve sections in order, the paid extra after the free app, and no pricing", () => {
     const names = [...document.querySelectorAll("main > section")].map(
       (section) => section.id || section.getAttribute("aria-label"),
     );
@@ -113,12 +114,11 @@ describe("landing page", () => {
       "sessions",
       "compare",
       "delegate",
-      "private",
-      "near",
       "review",
       "control",
       "Long sessions",
       "features",
+      "private",
       "privacy",
       "download",
     ]);
@@ -199,7 +199,7 @@ describe("landing page", () => {
     expect(copy).not.toMatch(/Aider|Oh-My-Pi/);
   });
 
-  it("says Private mode is optional, with the NEAR AI mark at the three approved sizes", () => {
+  it("says Private mode is optional, with the NEAR AI mark at the approved sizes", () => {
     expect(document.querySelector("#top a")?.textContent).toContain("Optional private mode on NEAR AI Cloud");
     const logos = [...document.querySelectorAll('img[alt="NEAR AI"]')].map((image) => [
       image.getAttribute("src"),
@@ -209,8 +209,12 @@ describe("landing page", () => {
     expect(logos).toEqual([
       ["/near-ai-tile-white.svg", "32", "top"],
       ["/near-ai-wordmark-white.svg", "128", "private"],
-      ["/near-ai-wordmark-white.svg", "200", "near"],
     ]);
+    // One section explains private mode: the path of an answer and the credits terms live in it.
+    expect(document.querySelector("#private [data-flow]")).not.toBeNull();
+    expect(document.querySelector(`#private a[href="${LINKS.credits}"]`)?.textContent).toContain("credits terms");
+    // "No wallet" means none to connect; the checkout still takes USDC from any chain.
+    expect(document.querySelector("#private")?.textContent).toContain("no wallet to connect");
     for (const file of ["near-ai-tile-white.svg", "near-ai-wordmark-white.svg"]) {
       const svg = readFileSync(join(ROOT, "site", "public", file), "utf8");
       expect(svg, file).toMatch(/^<svg /);
@@ -267,6 +271,33 @@ describe("landing page", () => {
     expect(compare?.textContent).toContain("Pick Claude Code");
   });
 
+  it("names the private mode link apart from privacy, and sends the footer's Privacy to its docs page", () => {
+    const sections = [...document.querySelectorAll('header nav[aria-label="Sections"] a')].map((link) => link.textContent);
+    expect(sections).toEqual(["Compare", "Delegate", "Review", "Features", "Private mode", "Privacy"]);
+    const footerPrivacy = [...document.querySelectorAll("footer a")].find((link) => link.textContent === "Privacy");
+    expect(footerPrivacy?.getAttribute("href")).toBe(LINKS.privacyGuide);
+    expect(document.querySelector(`footer a[href="${LINKS.credits}"]`)).not.toBeNull();
+  });
+
+  it("warns beside the first Download that the build is not signed, with the way to open it", () => {
+    const smallPrint = document.querySelector(`#top a[href="${LINKS.firstOpen}"]`)?.parentElement;
+    expect(smallPrint?.textContent).toContain("not signed yet");
+    expect(LINKS.firstOpen).toBe(`${LINKS.installGuide}#download`);
+  });
+
+  it("does not claim the user approves every step, since an agent can be always allowed", () => {
+    expect(document.querySelector("#control-title")?.textContent).toBe("You decide what an agent may do.");
+    expect(document.querySelector("#control")?.textContent).toContain("Always allow");
+  });
+
+  it("ends the delegate scene with the report alone, as the app does", () => {
+    // The working status and the Delegate button are moments the scene passes through, hidden by CSS.
+    for (const hook of ["[data-dlg-status]", "[data-dlg-send]"]) {
+      expect(document.querySelector(hook)?.className.split(" "), hook).toContain("lp-brief");
+    }
+    expect(document.querySelector("[data-dlg-report]")?.className).not.toContain("lp-brief");
+  });
+
   it("points every in-page link at an element that exists", () => {
     for (const link of document.querySelectorAll('a[href^="#"]')) {
       const id = link.getAttribute("href")!.slice(1);
@@ -286,6 +317,12 @@ describe("landing page", () => {
       expect(script).toContain("(prefers-reduced-motion: reduce)");
     });
 
+    it("never loops: dots and the cursor stop on their own, so nothing needs a pause control", () => {
+      expect(script).not.toMatch(/repeat:\s*-1/);
+      const css = readFileSync(join(ROOT, "site", "app", "landing.css"), "utf8");
+      expect(css).not.toMatch(/\binfinite\b/);
+    });
+
     it("finds every hook it animates in the page", () => {
       const selectors = new Set([...script.matchAll(/["'`]((?:\[data-[\w-]+\]|\.lp-[\w-]+)[^"'`]*)["'`]/g)].map((match) => match[1]));
       expect(selectors.size).toBeGreaterThan(30);
@@ -301,7 +338,7 @@ describe("landing page", () => {
         "[data-dlg-pop]", "[data-dlg-send]", "[data-dlg-msg]", "[data-dlg-status]", "[data-dlg-dot]", "[data-dlg-b]",
         "[data-dlg-report]", "[data-prv]", "[data-prv-chip]", "[data-prv-item]", "[data-prv-check]", "[data-prv-badge]",
         "[data-flow-step]", "[data-flow-end]", "[data-term-type]", "[data-term-out]", ".lp-ln > span", ".lp-pulse", ".lp-bar i",
-        ".lp-st-a", ".lp-st-b",
+        ".lp-st-a", ".lp-st-b", ".lp-cursor",
       ].join(",");
       const motionHooks = [
         "[data-r]", "[data-hover]", "[data-press]", "[data-rev-row]", "[data-rev-comment]", "[data-rev-bar]", "[data-perm-item]",
@@ -313,7 +350,7 @@ describe("landing page", () => {
 
     it("starts hidden scenes by CSS, so the page is complete without the script", () => {
       const css = readFileSync(join(ROOT, "site", "app", "landing.css"), "utf8");
-      expect(css).toMatch(/\.lp-st-a, \.lp-pl-a, \.lp-pop, \.lp-wire-dot, \.lp-typed \{ opacity: 0; visibility: hidden; \}/);
+      expect(css).toMatch(/\.lp-st-a, \.lp-pl-a, \.lp-pop, \.lp-wire-dot, \.lp-typed, \.lp-brief \{ opacity: 0; visibility: hidden; \}/);
       // The finished state is what shows: Finished, the plan at 3/4, and the numbers at their end values.
       expect(copy + text).toContain("Finished · 2 min");
       expect(document.querySelector("[data-count='59']")?.textContent).toBe("59");
@@ -422,6 +459,7 @@ describe("docs pages", () => {
     "/docs/review": ReviewDocs,
     "/docs/terminal": TerminalDocs,
     "/docs/privacy": PrivacyDocs,
+    "/docs/credits": CreditsDocs,
     "/docs/troubleshooting": TroubleshootingDocs,
   };
   const parse = (href: string) =>

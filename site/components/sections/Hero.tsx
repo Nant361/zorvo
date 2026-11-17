@@ -44,8 +44,13 @@ export function Hero() {
             </svg>
           </a>
         </div>
-        <p className="text-[14px] leading-5.5 text-fg-subtle" data-hero-fade="">
-          Free and open source under Apache 2.0, for Macs with Apple silicon or Intel.
+        <p className="max-w-130 text-[14px] leading-5.5 text-fg-subtle" data-hero-fade="">
+          Free and open source under Apache 2.0, for Macs with Apple silicon or Intel. The build is not signed yet, so
+          macOS blocks the first launch.
+          {" "}
+          <a className="focus-ring whitespace-nowrap text-fg-secondary underline decoration-(--lp-strong) underline-offset-3" href={LINKS.firstOpen}>
+            How to open it
+          </a>
         </p>
       </div>
       <div className="lp-wrap mt-16">
