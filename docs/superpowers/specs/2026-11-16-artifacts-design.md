@@ -106,13 +106,11 @@ dialog or a toast would overlap the page's box, the child is hidden
 when the overlay closes. The viewer's own version menu, ⋯ menu, export panel
 and delete question all do this.
 
-**Room for comments later.** Comments on a page are a separate spec, after this
-one. They will need a small script of Zorvo's own added to each served page,
-which reports the selected text and the clicked element through a message
-handler given to the child webview for that purpose alone (it carries text,
-never a command). So the handler builds the body it serves in one function
-(today it returns the stored bytes unchanged), and export always writes the
-stored bytes, never the served body.
+**Comments.** Comments on a page are their own spec,
+`2026-11-17-artifact-comments-design.md`. They add a script of Zorvo's own to
+the child webview through `with_initialization_script`, not to the served body,
+and a message handler that carries data only (never a command). The handler
+still serves the stored bytes unchanged, and export always writes them.
 
 A page cannot open a window, download a file, show an `alert`, or keep anything
 between two openings.
