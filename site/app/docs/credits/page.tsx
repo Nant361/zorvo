@@ -44,7 +44,10 @@ export default function CreditsPage() {
         your payment details.
       </P>
       <UL>
-        <li>While you pay, your credits are held for 25 minutes. Closing checkout without paying charges nothing.</li>
+        <li>
+          While you pay, your credits are held until the checkout expires, plus ten minutes. Closing checkout without
+          paying charges nothing.
+        </li>
         <li>If a payment fails, no credits are added. If PingPay received part of it, PingPay handles the refund.</li>
         <li>
           If you pay after the hold ran out and the packs sold out meanwhile, your payment still counts: you are first in

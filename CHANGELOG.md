@@ -7,7 +7,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 ### Changed
 
 - **The website explains credits and leaves private mode for last.** A new docs page, Credits terms, says who sells private mode credits, what they cost, and what happens to a payment and a balance. Private mode is now one section, after everything Zorvo does for free, with the path of a private answer folded into it. The first Download says the build is not signed yet and links to how to open it, the header names Private mode apart from Privacy, the footer's Privacy opens its docs page, and the Control section no longer says you approve every step. On the page, the delegate scene ends with the report alone, and status dots and the terminal cursor stop moving after a few seconds.
-- **The privacy docs name private mode's hosts.** Privacy and your data now lists what Zorvo contacts only while private mode is on (the Zorvo Credits server and NEAR AI Cloud, with what each is for), what your browser opens instead of Zorvo (PingPay's checkout and NEAR AI's Verification Center), and which secrets private mode keeps in your Keychain.
+- **The privacy docs name private mode's hosts.** Privacy and your data now lists private mode's two hosts and when each is contacted (the Zorvo Credits server from the first time you open Settings, Private mode, and at each start after that; NEAR AI Cloud during private sessions), what your browser opens instead of Zorvo (PingPay's checkout and NEAR AI's Verification Center), and which secrets private mode keeps in your Keychain.
 ## [0.12.0] - 2026-11-14
 
 ### Added

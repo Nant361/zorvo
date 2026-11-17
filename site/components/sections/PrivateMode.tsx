@@ -108,8 +108,11 @@ export function PrivateMode() {
                 <p>Give a session a credit limit. NEAR AI stops it there, even if Zorvo is closed.</p>
               </li>
               <li>
-                <h3>Off unless you turn it on</h3>
-                <p>Without it, Zorvo costs nothing, asks for no key and makes none of these requests.</p>
+                <h3>Off until you open it</h3>
+                <p>
+                  Without it, Zorvo costs nothing and asks for no key. It contacts none of these hosts until you open
+                  Settings, Private mode.
+                </p>
               </li>
             </ul>
           </div>

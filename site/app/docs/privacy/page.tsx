@@ -8,7 +8,7 @@ export const metadata = docsMetadata("/docs/privacy");
 const TOC: TocEntry[] = [
   { id: "sign-in", label: "Sign-in stays with the agents" },
   { id: "hosts", label: "A few hosts, all named" },
-  { id: "private-mode", label: "Only while private mode is on" },
+  { id: "private-mode", label: "Private mode's hosts" },
   { id: "data", label: "Where your data lives" },
   { id: "folders", label: "Folder limits" },
 ];
@@ -35,8 +35,8 @@ export default function PrivacyPage() {
 
       <H2 id="hosts">A few hosts, all named</H2>
       <P>
-        Zorvo&apos;s backend contacts these hosts, and only these, unless you turn on private mode (see{" "}
-        <DocLink href="#private-mode">Only while private mode is on</DocLink>):
+        Zorvo&apos;s backend contacts these hosts, and only these, until you open private mode (see{" "}
+        <DocLink href="#private-mode">Private mode&apos;s hosts</DocLink>):
       </P>
       <UL>
         <li>the ACP registry (<Chip isCode>cdn.agentclientprotocol.com</Chip>), to list agents and their versions, and to fetch their logos;</li>
@@ -62,21 +62,22 @@ export default function PrivacyPage() {
         talk to their own services as they always do.
       </P>
 
-      <H2 id="private-mode">Only while private mode is on</H2>
+      <H2 id="private-mode">Private mode&apos;s hosts</H2>
       <P>
-        Private mode is off until you turn it on for a Qwen Code session. While it is on, Zorvo&apos;s backend also
-        contacts:
+        Private mode adds two hosts. Zorvo contacts neither until you open Settings, Private mode, and NEAR AI only once
+        you run a private session or add your own NEAR AI key:
       </P>
       <UL>
         <li>
           the Zorvo Credits server (<Chip isCode>zorvo-credits-server.zkyxentertain.workers.dev</Chip>), run by
-          zorvolabs, to register this Mac, read your balance, the packs on offer and the models, start and check a
-          top-up, set a private session&apos;s spending cap, and move your credits when you use your recovery code on
-          another Mac. It never sees your prompts;
+          zorvolabs. Opening Settings, Private mode the first time registers this Mac with it and reads the packs on
+          offer and the models. From then on, Zorvo reads your balance from it each time it starts. It is also
+          contacted when you buy credits or redeem a code, start a private session with a spending cap, and use your
+          recovery code on another Mac. It never sees your prompts;
         </li>
         <li>
-          NEAR AI Cloud (<Chip isCode>cloud-api.near.ai</Chip>). Qwen Code sends its requests to Zorvo&apos;s proxy on
-          your Mac, which passes them on to NEAR AI. Zorvo also asks NEAR AI for each answer&apos;s signature and the
+          NEAR AI Cloud (<Chip isCode>cloud-api.near.ai</Chip>), during private sessions. Qwen Code sends its requests to
+          Zorvo&apos;s proxy on your Mac, which passes them on to NEAR AI. Zorvo also asks NEAR AI for each answer&apos;s signature and the
           model&apos;s attestation, to show Verified in TEE, reads what each call cost, and checks your own NEAR AI key if
           you add one.
         </li>
@@ -96,7 +97,8 @@ export default function PrivacyPage() {
         earlier builds used and leaves that folder as it was.
       </P>
       <P>
-        With private mode on, Zorvo keeps its secrets in your Keychain: the recovery code that identifies this Mac, the
+        Once you open private mode in Settings, Zorvo keeps its secrets in your Keychain: the recovery code that
+        identifies this Mac, the
         NEAR AI key the Credits server hands over (or your own key), and the key of each session with a spending cap.
       </P>
 
