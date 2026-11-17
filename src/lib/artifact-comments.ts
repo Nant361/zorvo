@@ -33,6 +33,7 @@ const TAG_WORDS: Readonly<Record<string, string>> = {
   a: 'Link',
   button: 'Button',
   canvas: 'Canvas',
+  div: 'Element',
   h1: 'Heading',
   h2: 'Heading',
   h3: 'Heading',
@@ -44,6 +45,7 @@ const TAG_WORDS: Readonly<Record<string, string>> = {
   li: 'List item',
   p: 'Paragraph',
   section: 'Section',
+  span: 'Element',
   svg: 'Graphic',
   table: 'Table',
 };

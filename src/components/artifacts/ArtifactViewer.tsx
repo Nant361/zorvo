@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronDown, ChevronLeft, Download, Maximize2, Minimize2, MoreHorizontal, RotateCw } from "lucide-react";
+import { ChevronDown, ChevronLeft, Download, Maximize2, MessageSquarePlus, Minimize2, MoreHorizontal, RotateCw } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { IconButton } from "../ui/IconButton";
@@ -9,6 +9,9 @@ import { RenameField } from "../ui/RenameField";
 import { hasVersion, newestVersion, versionLabel, type ViewedArtifact } from "../../lib/artifacts";
 import { formatShortTime } from "../../lib/relative-time";
 import type { Artifact } from "../../types";
+import type { ArtifactCommentsState } from "../../hooks/useArtifactComments";
+import type { AddArtifactReview } from "../../hooks/useReviewWiring";
+import { ArtifactCommentStrip } from "./ArtifactCommentStrip";
 import { ArtifactPageBox } from "./ArtifactPageBox";
 
 export interface ArtifactViewerProps {
@@ -22,14 +25,21 @@ export interface ArtifactViewerProps {
   isExpanded: boolean;
   onToggleExpanded: () => void;
   onError: (message: string) => void;
+  /** The session's artifact comments; absent (a popout), no Comment button and no strip. */
+  comments?: ArtifactCommentsState;
+  addReview?: AddArtifactReview;
+  /** The session's folder, for the source path in a comment's message. */
+  cwd?: string;
 }
+
+const NEWEST_ONLY = "Comments go on the newest version.";
 
 type Open = "versions" | "export" | "more" | null;
 
 const failure = (error: unknown, fallback: string) => (typeof error === "string" && error !== "" ? error : fallback);
 
 /** One artifact's page with what can be done to it: versions, reload, expand, export, rename, delete. */
-export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, isExpanded, onToggleExpanded, onError }: ArtifactViewerProps) {
+export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, isExpanded, onToggleExpanded, onError, comments, addReview, cwd }: ArtifactViewerProps) {
   const [open, setOpen] = useState<Open>(null);
   const [reload, setReload] = useState(0);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -41,6 +51,12 @@ export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, i
   const isOlder = shown !== newest;
   const label = versionLabel(shown, artifact);
   const toggle = (which: Exclude<Open, null>) => setOpen((current) => (current === which ? null : which));
+  const olderReasonId = useId();
+  const reloadPage = () => {
+    // A new view starts with comment mode off; the button must say so too.
+    if (comments?.isCommenting) comments.setCommenting(false);
+    setReload((count) => count + 1);
+  };
 
   const rename = (name: string | null) => {
     setIsRenaming(false);
@@ -110,9 +126,27 @@ export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, i
             </PopoverOption>
           ))}
         </Popover>
-        <IconButton label="Reload" size="row" disabled={!isStored} onClick={() => setReload((count) => count + 1)}>
+        <IconButton label="Reload" size="row" disabled={!isStored} onClick={reloadPage}>
           <RotateCw size={14} />
         </IconButton>
+        {comments && (
+          <IconButton
+            label="Comment"
+            size="row"
+            aria-pressed={comments.isCommenting}
+            disabled={isOlder || !isStored}
+            title={isOlder ? NEWEST_ONLY : "Comment"}
+            aria-describedby={isOlder ? olderReasonId : undefined}
+            onClick={() => comments.setCommenting(!comments.isCommenting)}
+          >
+            <MessageSquarePlus size={14} />
+          </IconButton>
+        )}
+        {comments && isOlder && (
+          <span id={olderReasonId} className="sr-only">
+            {NEWEST_ONLY}
+          </span>
+        )}
         <IconButton label={isExpanded ? "Shrink" : "Expand"} size="row" onClick={onToggleExpanded}>
           {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </IconButton>
@@ -186,6 +220,9 @@ export function ArtifactViewer({ sessionId, artifact, version, onBack, onView, i
           <span className="text-ui font-semibold text-fg">This version is no longer on this Mac.</span>
           <span className="text-ui text-fg-muted">Choose another version above.</span>
         </div>
+      )}
+      {comments && addReview && (
+        <ArtifactCommentStrip artifact={artifact} shownVersion={shown} cwd={cwd ?? ""} comments={comments} addReview={addReview} />
       )}
       {isConfirmingDelete && (
         <div role="alertdialog" aria-label="Delete artifact" className="flex shrink-0 flex-col gap-2.5 border-t border-border bg-surface-2 px-3.5 pt-3 pb-3.5">

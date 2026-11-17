@@ -197,6 +197,8 @@ describe('anchorSummary', () => {
     expect(anchorSummary(textAnchor)).toBe('"Annual plan saves 20%"');
     expect(anchorSummary(elementAnchor)).toBe('Button #export "Export CSV"');
     expect(anchorSummary({ kind: 'element', tag: 'my-card', classes: [], text: '', path: 'my-card' })).toBe('<my-card>');
+    expect(anchorSummary({ kind: 'element', tag: 'div', classes: [], text: 'groupByFolder 41 ms', path: 'div' })).toBe('Element "groupByFolder 41 ms"');
+    expect(anchorSummary({ kind: 'element', tag: 'span', classes: [], text: '', path: 'span' })).toBe('Element');
   });
 });
 

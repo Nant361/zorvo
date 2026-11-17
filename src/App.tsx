@@ -759,7 +759,7 @@ export default function App() {
   // The review wiring is built further down; its `forget` reaches the comments through this ref.
   const forgetReviewRef = useRef<((ids: readonly string[]) => void) | null>(null);
   const forgetInMessage = useCallback((ids: readonly string[]) => forgetReviewRef.current?.(ids), []);
-  useArtifactComments({
+  const artifactComments = useArtifactComments({
     sessionId: activeSession?.id,
     comments: activeSession?.artifactComments,
     update: updateArtifactComments,
@@ -2118,6 +2118,9 @@ export default function App() {
                     isExpanded
                     onToggleExpanded={() => inspector.setArtifactExpanded(false)}
                     onError={reportError}
+                    comments={artifactComments}
+                    addReview={review.addArtifactReview}
+                    cwd={activeSession.cwd}
                   />
                   {/* The chat, which draws the app's notice, is hidden under an expanded page: a failure here
                       (export, rename, delete, a page that cannot be shown) is said here. The page hides under it. */}
@@ -2225,6 +2228,9 @@ export default function App() {
                   isExpanded={false}
                   onToggleExpanded={() => inspector.setArtifactExpanded(true)}
                   onError={reportError}
+                  comments={artifactComments}
+                  addReview={review.addArtifactReview}
+                  cwd={activeSession.cwd}
                 />
               )}
               {inspectorTab === "private" && activeSession?.privateMode && (
