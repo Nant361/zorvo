@@ -129,16 +129,19 @@
     };
   }
 
+  // From the element up to the body, so a full path names one element from the
+  // body down. Each level is the element's local name, which keeps the case of
+  // SVG names (clipPath) that selectors match case-sensitively.
   function pathOf(element) {
     var levels = [];
     var node = element;
     while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.body && node !== document.documentElement) {
-      var tag = node.tagName.toLowerCase();
+      var tag = node.localName;
       var parent = node.parentElement;
       var same = [];
       if (parent) {
         for (var i = 0; i < parent.children.length; i++) {
-          if (parent.children[i].tagName === node.tagName) same.push(parent.children[i]);
+          if (parent.children[i].localName === node.localName) same.push(parent.children[i]);
         }
       }
       levels.unshift(same.length > 1 ? tag + ":nth-of-type(" + (same.indexOf(node) + 1) + ")" : tag);
@@ -196,12 +199,27 @@
     return mark;
   }
 
-  function findElement(anchor) {
+  function query(root, selector) {
     try {
-      return document.querySelector(anchor.path);
+      return Array.from(root.querySelectorAll(selector));
     } catch (error) {
-      return null;
+      return [];
     }
+  }
+
+  // The element whose text is the anchor's, else the first.
+  function choose(matches, anchor) {
+    for (var i = 0; i < matches.length; i++) {
+      if (cut(collapse(matches[i].textContent || ""), MAX_TEXT) === anchor.text) return matches[i];
+    }
+    return matches[0] || null;
+  }
+
+  // A full path is read from the body down; one cut to its nearest levels
+  // matches anywhere, and the anchor's text picks among the matches.
+  function findElement(anchor) {
+    var fromBody = document.body ? query(document.body, ":scope > " + anchor.path) : [];
+    return choose(fromBody.length > 0 ? fromBody : query(document, anchor.path), anchor);
   }
 
   function findText(page, anchor) {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import script from '../../src-tauri/src/artifacts/page_script.js?raw';
 
 /**
@@ -198,6 +198,60 @@ describe('the artifact page script', () => {
     click(document.querySelector('[data-zorvo-badge]')!);
 
     expect(posted).toEqual([]);
+  });
+
+  /** Gives each element a place by its text, since jsdom lays nothing out. */
+  function placeByText(places: Record<string, number>) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const left = places[(this.textContent ?? '').trim()] ?? 0;
+      return { left, top: 100, width: 50, height: 20, right: left + 50, bottom: 120, x: left, y: 100, toJSON: () => ({}) } as DOMRect;
+    });
+  }
+  const badgeLeft = () => (document.querySelector('[data-zorvo-badge]') as HTMLElement).style.left;
+
+  it('marks the element the path names from the body, not a nested one with the same tail', () => {
+    load('<div class="wrap"><section><div class="card"><p>Inner</p></div></section><p id="target">Outer</p></div>');
+    placeByText({ Inner: 300, Outer: 100 });
+    page.__zorvoCommentMode!(true);
+    click(document.querySelector('#target')!);
+    const pick = posted[0];
+    page.__zorvoCommentMode!(false);
+    posted = [];
+
+    page.__zorvoMarks!([{ n: 1, anchor: { kind: 'element', tag: pick.tag, classes: pick.classes, text: pick.text, path: pick.path } }]);
+
+    expect(posted).toEqual([{ kind: 'marks-missing', numbers: [] }]);
+    expect(badgeLeft()).toBe('91px');
+    vi.restoreAllMocks();
+  });
+
+  it('finds a cut path by its text when it matches more than one element', () => {
+    const chain = (word: string) => `${'<div>'.repeat(13)}<span>${word}</span>${'</div>'.repeat(13)}`;
+    load(chain('first') + chain('second'));
+    placeByText({ first: 300, second: 100 });
+    page.__zorvoCommentMode!(true);
+    click(document.querySelectorAll('span')[1]);
+    const pick = posted[0];
+    page.__zorvoCommentMode!(false);
+    posted = [];
+
+    page.__zorvoMarks!([{ n: 1, anchor: { kind: 'element', tag: 'span', classes: [], text: pick.text, path: pick.path } }]);
+
+    expect(badgeLeft()).toBe('91px');
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the case of SVG names in a path, so the mark is found', () => {
+    load('<svg><clipPath id="c"><rect width="4" height="4"></rect></clipPath></svg>');
+    page.__zorvoCommentMode!(true);
+    click(document.querySelector('rect')!);
+    const pick = posted[0];
+    page.__zorvoCommentMode!(false);
+    posted = [];
+
+    expect(pick).toMatchObject({ tag: 'rect', path: 'svg > clipPath > rect' });
+    page.__zorvoMarks!([{ n: 1, anchor: { kind: 'element', tag: 'rect', classes: [], text: '', path: pick.path } }]);
+    expect(posted).toEqual([{ kind: 'marks-missing', numbers: [] }]);
   });
 
   it('does not search script text for a mark', () => {
