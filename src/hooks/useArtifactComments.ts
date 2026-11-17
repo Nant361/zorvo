@@ -109,7 +109,6 @@ export function useArtifactComments({
       return next;
     });
   };
-  const dropCandidateRef = useLatest(dropCandidate);
 
   useEffect(() => {
     let isGone = false;
@@ -124,25 +123,34 @@ export function useArtifactComments({
         return;
       }
       if (!now.isCommenting) return;
-      const hasText = (bodies.current[page.sessionId] ?? '').trim() !== '';
+      const owner = page.sessionId;
+      // Whether text is typed is read when the update applies, not when the event arrived:
+      // a keystroke in between must not be overwritten.
+      const isBlank = () => (bodies.current[owner] ?? '').trim() === '';
       if (message.kind === 'cancel') {
-        if (!hasText) dropCandidateRef.current(page.sessionId);
+        setCandidates((prev) => {
+          if (!(owner in prev) || !isBlank()) return prev;
+          delete bodies.current[owner];
+          const next = { ...prev };
+          delete next[owner];
+          return next;
+        });
         return;
       }
       const anchor = anchorOfPick(message);
       if (anchor === null) return;
       setCandidates((prev) => {
-        const current = prev[page.sessionId];
-        if (current && hasText) return { ...prev, [page.sessionId]: { ...current, isPickHeld: true } };
-        bodies.current[page.sessionId] = '';
-        return { ...prev, [page.sessionId]: { page, anchor, isPickHeld: false } };
+        const current = prev[owner];
+        if (current && !isBlank()) return current.isPickHeld ? prev : { ...prev, [owner]: { ...current, isPickHeld: true } };
+        bodies.current[owner] = '';
+        return { ...prev, [owner]: { page, anchor, isPickHeld: false } };
       });
     });
     return () => {
       isGone = true;
       void unlisten.then((stop) => stop());
     };
-  }, [latest, dropCandidateRef]);
+  }, [latest]);
 
   const pageRef = useLatest(shownPage);
   const marksRef = useLatest(marks);

@@ -127,6 +127,34 @@ describe('useArtifactComments', () => {
     expect(result.current.state.candidateBody()).toBe('Half written');
   });
 
+  it('a keystroke between a pick and its render keeps the text and holds the pick', () => {
+    const { result } = renderComments({ shownPage: PAGE });
+    act(() => result.current.state.setCommenting(true));
+    deliver(textPick('first'));
+
+    act(() => {
+      (listeners.get('artifact-page-pick') ?? []).forEach((cb) => cb({ payload: textPick('second') }));
+      result.current.state.setCandidateBody('T');
+    });
+
+    expect(result.current.state.candidate?.anchor).toMatchObject({ quote: 'first' });
+    expect(result.current.state.candidate?.isPickHeld).toBe(true);
+    expect(result.current.state.candidateBody()).toBe('T');
+  });
+
+  it('a held candidate is not replaced by another object for each further pick', () => {
+    const { result } = renderComments({ shownPage: PAGE });
+    act(() => result.current.state.setCommenting(true));
+    deliver(textPick('first'));
+    act(() => result.current.state.setCandidateBody('Typed'));
+    deliver(textPick('second'));
+    const held = result.current.state.candidate;
+
+    deliver(textPick('third'));
+
+    expect(result.current.state.candidate).toBe(held);
+  });
+
   it('a pick replaces a candidate with a blank body', () => {
     const { result } = renderComments({ shownPage: PAGE });
     act(() => result.current.state.setCommenting(true));
