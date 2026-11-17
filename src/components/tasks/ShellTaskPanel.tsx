@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Terminal } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useNow } from "../../hooks/useNow";
-import { formatElapsed, type BackgroundTask } from "../../lib/background-tasks";
+import { formatElapsed, portsOf, type BackgroundTask } from "../../lib/background-tasks";
 import { escapeVisible, escapeVisibleLines } from "../../lib/visible-text";
 import { TaskHeader, TaskNote } from "./TaskHeader";
 
@@ -17,14 +17,12 @@ export interface ShellTaskPanelProps {
   onStop: (task: BackgroundTask) => Promise<boolean>;
 }
 
-const PORT = /^localhost:\d+$/;
-
 /** A command an agent started: what Zorvo knows about it, the output the agent reported, and Stop. */
 export function ShellTaskPanel({ task, output, isReporting, agentName, onStop }: ShellTaskPanelProps) {
   const now = useNow(1000);
   const [isStopping, setIsStopping] = useState(false);
   const command = escapeVisible(task.name);
-  const ports = (task.detail ?? "").split(" · ").filter((part) => PORT.test(part));
+  const ports = portsOf(task);
 
   const stop = () => {
     setIsStopping(true);

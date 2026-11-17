@@ -1,4 +1,4 @@
-import { openReplyIndex } from './acp-events';
+import { runningTurnReplyIndexes } from './acp-events';
 import type { ChatMessage, Session, ToolExecution } from '../types';
 
 /** What a background row stands for. */
@@ -44,7 +44,7 @@ const SUBAGENT_TOOLS = new Set(['task', 'agent']);
  * report plain reasoning as `think` too, so the adapter's own tool name decides,
  * with a title that names the subagent as the fallback for older adapters.
  */
-export function isSubagent(tool: ToolExecution): boolean {
+function isSubagent(tool: ToolExecution): boolean {
   const provider = tool.providerToolName?.toLowerCase();
   if (provider && SUBAGENT_TOOLS.has(provider)) return true;
   return /^(task|agent|subagent)\b/i.test(tool.name);
@@ -56,10 +56,10 @@ function toolKind(tool: ToolExecution): 'shell' | 'subagent' | undefined {
 }
 
 /**
- * The running tool calls in each session's open reply. A finished reply keeps a
- * running tool in the transcript (`closeTurn` leaves it alone), so scanning
- * older messages would keep a row after its turn ended. A command that outlives
- * its turn shows through its process instead.
+ * The running tool calls in each session's running turn. Every reply of the turn counts: an
+ * answered permission request closes its reply, and a subagent it holds keeps working there. A
+ * finished turn keeps a running tool in the transcript (`closeTurn` leaves it alone), so older
+ * turns are not scanned. A command that outlives its turn shows through its process instead.
  */
 export function runningToolTasks(
   transcripts: Readonly<Record<string, readonly ChatMessage[]>>,
@@ -67,24 +67,25 @@ export function runningToolTasks(
 ): BackgroundTask[] {
   return sessions.flatMap((session) => {
     const messages = transcripts[session.id] ?? [];
-    const index = openReplyIndex(messages);
-    if (index < 0) return [];
-    const message = messages[index];
-    return (message.tools ?? []).flatMap((tool): BackgroundTask[] => {
-      const kind = toolKind(tool);
-      if (tool.status !== 'running' || !kind) return [];
-      return [
-        {
-          id: `tool:${session.id}:${tool.id}`,
-          kind,
-          name: tool.name,
-          detail: session.name,
-          status: 'Running',
-          startedAt: tool.startedAt ?? message.timestamp,
-          sessionId: session.id,
-        },
-      ];
-    });
+    return runningTurnReplyIndexes(messages).reverse().flatMap((index) => toolTasksOf(session, messages[index]));
+  });
+}
+
+function toolTasksOf(session: Session, message: ChatMessage): BackgroundTask[] {
+  return (message.tools ?? []).flatMap((tool): BackgroundTask[] => {
+    const kind = toolKind(tool);
+    if (tool.status !== 'running' || !kind) return [];
+    return [
+      {
+        id: `tool:${session.id}:${tool.id}`,
+        kind,
+        name: tool.name,
+        detail: session.name,
+        status: 'Running',
+        startedAt: tool.startedAt ?? message.timestamp,
+        sessionId: session.id,
+      },
+    ];
   });
 }
 
@@ -190,6 +191,8 @@ export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessag
   const ownId = toolIdOf(task);
   if (ownId !== undefined) return tools.find((tool) => tool.id === ownId);
   const command = normalized(task.name);
+  // An empty command is contained in every title, so it names no work.
+  if (command === '') return undefined;
   return [...tools].reverse().find((tool) => {
     if (tool.kind !== 'execute') return false;
     const title = normalized(tool.command ?? tool.name);
@@ -213,6 +216,13 @@ export function findShellTask(
     const tool = task.pid === undefined ? undefined : shellToolFor(task, transcripts[task.sessionId] ?? []);
     return tool !== undefined && `${TOOL_TASK_PREFIX}${task.sessionId}:${tool.id}` === taskId;
   });
+}
+
+const PORT_PART = /^localhost:\d+$/;
+
+/** The `localhost:PORT` parts of a shell task's detail, which `backgroundTasksOf` writes. */
+export function portsOf(task: BackgroundTask): string[] {
+  return (task.detail ?? '').split(' · ').filter((part) => PORT_PART.test(part));
 }
 
 /** "45s", "2m 13s" or "1h 04m". */

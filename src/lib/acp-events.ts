@@ -237,14 +237,25 @@ function filedInTurn(
   file: (reply: ChatMessage, parentId: string) => ChatMessage | undefined,
 ): ChatMessage[] | undefined {
   if (parentId === undefined) return undefined;
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    // The turn began with the user's message, and a finished reply belongs to an earlier one.
-    if (message.role !== 'agent' || message.isComplete) return undefined;
-    const filed = file(message, parentId);
+  for (const index of runningTurnReplyIndexes(messages)) {
+    const filed = file(messages[index], parentId);
     if (filed) return messages.map((other, i) => (i === index ? filed : other));
   }
   return undefined;
+}
+
+/**
+ * The replies of the turn that runs now, newest first. The turn began with the user's message,
+ * and a finished reply belongs to an earlier one: `closeTurn` marks the turn's last reply complete.
+ */
+export function runningTurnReplyIndexes(messages: readonly ChatMessage[]): number[] {
+  const indexes: number[] = [];
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.role !== 'agent' || message.isComplete) break;
+    indexes.push(index);
+  }
+  return indexes;
 }
 
 /** Applies a tool_call_update: fields it carries replace the old ones (content as a whole), the rest stay. */

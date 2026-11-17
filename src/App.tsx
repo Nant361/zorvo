@@ -73,8 +73,7 @@ import { useBackgroundTasks } from "./hooks/useBackgroundTasks";
 import { useSessionTaskTabs } from "./hooks/useSessionTaskTabs";
 import type { TaskTab } from "./hooks/useTaskTabs";
 import { TasksPanel } from "./components/tasks/TasksPanel";
-import { ShellTaskRow } from "./components/chat/TaskRow";
-import { findShellTask } from "./lib/background-tasks";
+import { ShellTaskRows } from "./components/chat/TaskRow";
 import { useTranscripts } from "./hooks/useTranscripts";
 import { usePrivateCreditsRefresh } from "./hooks/usePrivateCreditsRefresh";
 import { usePrivateTopupRequests } from "./hooks/usePrivateTopupRequests";
@@ -1717,16 +1716,12 @@ export default function App() {
                       openTaskId={openTaskId}
                       tasksFooter={
                         activeSession && sessionShellTasks.length > 0 ? (
-                          <div className="flex flex-col gap-2">
-                            {sessionShellTasks.map((task) => (
-                              <ShellTaskRow
-                                key={task.id}
-                                task={task}
-                                isOpen={openShellTaskId !== undefined && findShellTask([task], openShellTaskId, transcripts) === task}
-                                onOpen={() => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
-                              />
-                            ))}
-                          </div>
+                          <ShellTaskRows
+                            tasks={sessionShellTasks}
+                            openTaskId={openShellTaskId}
+                            transcripts={transcripts}
+                            onOpen={(task) => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
+                          />
                         ) : undefined
                       }
                       onReply={(quote) => composerRef.current?.insertText(quote)}

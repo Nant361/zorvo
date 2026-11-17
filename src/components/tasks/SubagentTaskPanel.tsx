@@ -8,7 +8,7 @@ import { useNow } from "../../hooks/useNow";
 import { STICK_TO_BOTTOM_PX } from "../../hooks/useStickToBottom";
 import { formatElapsed } from "../../lib/background-tasks";
 import { formatRelativeTime } from "../../lib/relative-time";
-import type { SubagentTask } from "../../lib/task-view";
+import { stepsLabel, type SubagentTask } from "../../lib/task-view";
 import type { ChatMessagePart, ToolDetail, ToolExecution } from "../../types";
 import { TaskHeader, TaskNote } from "./TaskHeader";
 
@@ -29,7 +29,7 @@ function detailOf(task: SubagentTask, agentName: string, isLive: boolean): strin
     const started = task.startedAt === undefined ? undefined : formatRelativeTime(task.startedAt);
     return [...who, started && `started ${started === "Just now" ? "just now" : started}`].filter(Boolean).join(" · ");
   }
-  return [...who, task.stepCount === 1 ? "1 step" : `${task.stepCount} steps`].join(" · ");
+  return [...who, stepsLabel(task.stepCount)].join(" · ");
 }
 
 /** What a subagent did, as its agent reported it: its steps in order, followed live while it works. */

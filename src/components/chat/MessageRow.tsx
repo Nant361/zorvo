@@ -58,6 +58,19 @@ export interface MessageRowProps {
   waitingToolCallIds?: readonly string[];
 }
 
+type CallSegment = { kind: "tools"; tools: ToolExecution[] } | { kind: "task"; tool: ToolExecution };
+
+/** A run of tool calls as plain tool lists and subagent rows, in the order they were made. */
+function inCallOrder(tools: readonly ToolExecution[]): CallSegment[] {
+  return tools.reduce<CallSegment[]>((segments, tool) => {
+    if (tool.steps !== undefined) return [...segments, { kind: "task", tool }];
+    const last = segments[segments.length - 1];
+    return last?.kind === "tools"
+      ? [...segments.slice(0, -1), { kind: "tools", tools: [...last.tools, tool] }]
+      : [...segments, { kind: "tools", tools: [tool] }];
+  }, []);
+}
+
 /** A subagent's steps in the reply itself, for a window that has no inspector to open them in. */
 function SubagentSteps({ tool, message, isTurnOver }: { tool: ToolExecution; message: ChatMessage; isTurnOver: boolean }) {
   const { parts, tools } = stepsOf(tool, message);
@@ -146,18 +159,20 @@ export const MessageRow = memo(function MessageRow({
             if (listed.length === 0) return null;
             // A subagent whose steps are known is one row that opens its task. One the agent does not
             // mark stays a plain tool, so what it returned can still be read.
-            const tasks = listed.filter((tool) => tool.steps !== undefined);
-            const tools = listed.filter((tool) => tool.steps === undefined);
+            // Both keep the order the agent made the calls in: plain tools between two subagents stay between them.
             return (
               <div key={index} className="flex flex-col gap-2">
-                {tools.length > 0 && <ToolsPart tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />}
-                {tasks.map((tool) => {
+                {inCallOrder(listed).map((segment) => {
+                  if (segment.kind === "tools") {
+                    return <ToolsPart key={segment.tools[0].id} tools={segment.tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />;
+                  }
+                  const tool = segment.tool;
                   const task = subagentTaskOf(tool, message, { isTurnOver: showActions, waitingToolCallIds });
                   return (
                     <div key={tool.id} className="flex flex-col gap-2">
                       <TaskRow
                         task={task}
-                        secondLine={secondLine(task, agentName)}
+                        secondLine={secondLine(task)}
                         isOpen={openTaskId === tool.id}
                         onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
                       />

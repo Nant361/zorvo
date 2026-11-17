@@ -1,12 +1,13 @@
 import { ChevronRight, Terminal, Users } from "lucide-react";
 import { useNow } from "../../hooks/useNow";
-import { formatElapsed, type BackgroundTask } from "../../lib/background-tasks";
+import { findShellTask, formatElapsed, portsOf, type BackgroundTask } from "../../lib/background-tasks";
+import type { ChatMessage } from "../../types";
 import { escapeVisible } from "../../lib/visible-text";
-import type { SubagentTask, TaskStatus } from "../../lib/task-view";
+import { stepsLabel, type SubagentTask, type TaskStatus } from "../../lib/task-view";
 
 export interface TaskRowProps {
   task: SubagentTask;
-  /** The subagent's type and how much it did, or why there is nothing to open. */
+  /** The subagent's type and how much it did. */
   secondLine: string;
   /** Its task tab is the one on screen. */
   isOpen: boolean;
@@ -30,7 +31,7 @@ export function TaskRow({ task, secondLine, isOpen, onOpen }: TaskRowProps) {
   const isLive = task.status === "Working" || task.status === "Needs you";
   const now = useNow(1000, isLive && task.startedAt !== undefined);
   const elapsed = isLive && task.startedAt !== undefined ? formatElapsed(now - task.startedAt) : undefined;
-  const canOpen = Boolean(onOpen) && task.hasSteps;
+  const canOpen = Boolean(onOpen);
 
   const body = (
     <>
@@ -58,7 +59,7 @@ export function TaskRow({ task, secondLine, isOpen, onOpen }: TaskRowProps) {
       </div>
     );
   }
-  const steps = task.stepCount === 1 ? "1 step" : `${task.stepCount} steps`;
+  const steps = stepsLabel(task.stepCount);
   return (
     <button
       type="button"
@@ -73,13 +74,11 @@ export function TaskRow({ task, secondLine, isOpen, onOpen }: TaskRowProps) {
   );
 }
 
-const PORT = /^localhost:\d+$/;
-
 /** A command an agent left running, as a row at the end of the chat that opens its task. */
 export function ShellTaskRow({ task, isOpen, onOpen }: { task: BackgroundTask; isOpen: boolean; onOpen: () => void }) {
   const now = useNow(1000);
   const command = escapeVisible(task.name);
-  const ports = (task.detail ?? "").split(" · ").filter((part) => PORT.test(part));
+  const ports = portsOf(task);
   return (
     <button
       type="button"
@@ -104,5 +103,31 @@ export function ShellTaskRow({ task, isOpen, onOpen }: { task: BackgroundTask; i
       </span>
       <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-fg-muted" />
     </button>
+  );
+}
+
+export interface ShellTaskRowsProps {
+  /** The session's shell tasks. */
+  tasks: readonly BackgroundTask[];
+  /** The shell tab on screen, which may name the command's tool row after it became a process. */
+  openTaskId?: string;
+  transcripts: Readonly<Record<string, readonly ChatMessage[]>>;
+  onOpen: (task: BackgroundTask) => void;
+}
+
+/** The commands a session's agent left running, one row each, after the last message. */
+export function ShellTaskRows({ tasks, openTaskId, transcripts, onOpen }: ShellTaskRowsProps) {
+  if (tasks.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {tasks.map((task) => (
+        <ShellTaskRow
+          key={task.id}
+          task={task}
+          isOpen={openTaskId !== undefined && findShellTask([task], openTaskId, transcripts) === task}
+          onOpen={() => onOpen(task)}
+        />
+      ))}
+    </div>
   );
 }

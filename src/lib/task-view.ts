@@ -1,4 +1,3 @@
-import { isSubagent } from './background-tasks';
 import type { ChatMessage, ChatMessagePart, ToolExecution } from '../types';
 
 /**
@@ -16,8 +15,6 @@ export interface SubagentTask {
   stepCount: number;
   status: TaskStatus;
   startedAt?: number;
-  /** False when the agent does not mark its subagent's updates: there is nothing to open. */
-  hasSteps: boolean;
   /** The subagent's last text, which is what it handed back. */
   lastText?: string;
 }
@@ -25,11 +22,6 @@ export interface SubagentTask {
 /** The tools a reply lists itself: a subagent's own tools show under their parent. */
 export function shownTools(tools: readonly ToolExecution[]): ToolExecution[] {
   return tools.filter((tool) => tool.parentId === undefined);
-}
-
-/** Whether a tool call is a subagent: it has steps, or its agent names it as one. */
-export function isTaskTool(tool: ToolExecution): boolean {
-  return tool.steps !== undefined || isSubagent(tool);
 }
 
 function childrenOf(tool: ToolExecution, message: ChatMessage): ToolExecution[] {
@@ -56,8 +48,12 @@ export function waitingToolCallIds(messages: readonly ChatMessage[]): string[] {
  */
 export function isInRunningTurn(messages: readonly ChatMessage[], message: ChatMessage, isBusy: boolean): boolean {
   if (!isBusy) return false;
-  const index = messages.indexOf(message);
-  return index >= 0 && messages.slice(index + 1).every((later) => later.role !== 'user');
+  // Walk back from the end: the turn is short, the transcript may not be.
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index] === message) return true;
+    if (messages[index].role === 'user') return false;
+  }
+  return false;
 }
 
 export interface TaskContext {
@@ -91,7 +87,6 @@ export function subagentTaskOf(tool: ToolExecution, message: ChatMessage, on: Ta
     stepCount: childrenOf(tool, message).length,
     status: statusOf(tool, message, on),
     ...(tool.startedAt === undefined ? {} : { startedAt: tool.startedAt }),
-    hasSteps: tool.steps !== undefined,
     ...(lastText ? { lastText } : {}),
   };
 }
@@ -104,10 +99,14 @@ export function stepsOf(tool: ToolExecution, message: ChatMessage): { parts: Cha
   return { parts, tools: ids.flatMap((id) => byId.get(id) ?? []) };
 }
 
-/** The row's second line: the subagent's type and how much it did, or why there is nothing to open. */
-export function secondLine(task: SubagentTask, agentName: string): string {
-  if (!task.hasSteps) return `${agentName} doesn't report this subagent's steps`;
-  const steps = task.stepCount === 1 ? '1 step' : `${task.stepCount} steps`;
+/** "1 step" or "N steps": the tool calls a subagent made. */
+export function stepsLabel(count: number): string {
+  return count === 1 ? '1 step' : `${count} steps`;
+}
+
+/** The row's second line: the subagent's type and how much it did. */
+export function secondLine(task: SubagentTask): string {
+  const steps = stepsLabel(task.stepCount);
   return task.agentType ? `${task.agentType} · ${steps}` : steps;
 }
 

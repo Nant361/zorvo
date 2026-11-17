@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isInRunningTurn, isTaskTool, secondLine, shownTools, stepsOf, subagentTaskOf, waitingToolCallIds, type SubagentTask } from "../lib/task-view";
+import { isInRunningTurn, secondLine, shownTools, stepsOf, subagentTaskOf, waitingToolCallIds, type SubagentTask } from "../lib/task-view";
 import type { ActionCard, ChatMessage, ToolExecution } from "../types";
 
 const tool = (id: string, extra: Partial<ToolExecution> = {}): ToolExecution => ({ id, name: id, status: "completed", ...extra });
@@ -24,16 +24,10 @@ describe("the task view", () => {
     expect(shownTools([parent(), ...children, tool("x")]).map((t) => t.id)).toEqual(["p", "x"]);
   });
 
-  it("treats a tool with steps, or one named like a subagent, as a task", () => {
-    expect(isTaskTool(parent())).toBe(true);
-    expect(isTaskTool(tool("t", { providerToolName: "Task" }))).toBe(true);
-    expect(isTaskTool(tool("r", { kind: "read" }))).toBe(false);
-  });
-
   it("reads Done for a completed subagent, with its facts", () => {
     expect(taskOf(parent())).toEqual<SubagentTask>({
       toolId: "p", title: "Explore the tests", agentType: "Explore", stepCount: 2,
-      status: "Done", startedAt: 5, hasSteps: true, lastText: "Last.",
+      status: "Done", startedAt: 5, lastText: "Last.",
     });
   });
 
@@ -58,18 +52,17 @@ describe("the task view", () => {
     expect(taskOf(parent({ status: "running" }), false, { toolCallId: "other" }).status).toBe("Working");
   });
 
-  it("has no tab for a subagent whose agent marks no steps", () => {
+  it("counts no steps for a subagent whose agent marks none", () => {
     const bare = tool("t", { providerToolName: "Task", status: "running" });
 
-    expect(subagentTaskOf(bare, message([bare]), { isTurnOver: false })).toMatchObject({ hasSteps: false, stepCount: 0 });
+    expect(subagentTaskOf(bare, message([bare]), { isTurnOver: false })).toMatchObject({ stepCount: 0 });
   });
 
   it("words the second line", () => {
     const task = taskOf(parent());
-    expect(secondLine(task, "Codex")).toBe("Explore · 2 steps");
-    expect(secondLine({ ...task, agentType: undefined }, "Codex")).toBe("2 steps");
-    expect(secondLine({ ...task, stepCount: 1 }, "Codex")).toBe("Explore · 1 step");
-    expect(secondLine({ ...task, hasSteps: false }, "Codex")).toBe("Codex doesn't report this subagent's steps");
+    expect(secondLine(task)).toBe("Explore · 2 steps");
+    expect(secondLine({ ...task, agentType: undefined })).toBe("2 steps");
+    expect(secondLine({ ...task, stepCount: 1 })).toBe("Explore · 1 step");
   });
 
   it("returns a subagent's steps with its child tools in order", () => {

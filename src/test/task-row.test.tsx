@@ -7,7 +7,7 @@ import type { SubagentTask, TaskStatus } from "../lib/task-view";
 import type { ChatMessage, ToolExecution } from "../types";
 
 const task = (extra: Partial<SubagentTask> = {}): SubagentTask => ({
-  toolId: "p", title: "Explore the session list tests", agentType: "Explore", stepCount: 8, status: "Working", hasSteps: true, ...extra,
+  toolId: "p", title: "Explore the session list tests", agentType: "Explore", stepCount: 8, status: "Working", ...extra,
 });
 
 describe("TaskRow", () => {
@@ -25,13 +25,6 @@ describe("TaskRow", () => {
     expect(row).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(row);
     expect(onOpen).toHaveBeenCalledTimes(1);
-  });
-
-  it("is not a button without steps, and says the agent doesn't report them", () => {
-    render(<TaskRow task={task({ hasSteps: false, stepCount: 0 })} secondLine="Codex doesn't report this subagent's steps" isOpen={false} onOpen={vi.fn()} />);
-
-    expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText("Codex doesn't report this subagent's steps")).toBeInTheDocument();
   });
 
   it("is not a button where nothing can open it", () => {
@@ -126,6 +119,22 @@ describe("a subagent that cannot be opened", () => {
     ],
     parts: [{ kind: "tools", toolIds: ["p"] }],
   };
+
+  it("keeps a subagent's row between the tools made before and after it", () => {
+    const mixed: ChatMessage = {
+      ...withSteps,
+      tools: [
+        tool("r1", { name: "pnpm before", kind: "execute" }),
+        ...(withSteps.tools ?? []),
+        tool("r2", { name: "pnpm after", kind: "execute" }),
+      ],
+      parts: [{ kind: "tools", toolIds: ["r1", "p", "r2"] }],
+    };
+    renderMessage({ message: mixed, onOpenTask: vi.fn() });
+
+    // Finished commands read as a summary; before the fix both ran together ahead of the row.
+    expect(screen.getByTestId("chat-message-m1").textContent).toMatch(/Ran a command.*Explore the tests.*Ran a command/);
+  });
 
   it("keeps an unmarked subagent's own output in the reply's tools", () => {
     const bare: ChatMessage = {
