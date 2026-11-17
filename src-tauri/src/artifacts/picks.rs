@@ -24,6 +24,9 @@ pub const MAX_PATH_LEVELS: usize = 12;
 pub const MAX_PATH_CHARS: usize = 1000;
 pub const MAX_MARKS: usize = 200;
 pub const MAX_PER_SECOND: u32 = 5;
+/// Messages a page may send in a second, accepted or not, before it is ended.
+/// Zorvo's own script sends a few at most: one per click or selection, one per marks call.
+pub const MAX_MESSAGES_PER_SECOND: u32 = 200;
 const PATH_SEPARATOR: &str = " > ";
 const RATE_WINDOW: Duration = Duration::from_secs(1);
 
@@ -210,6 +213,49 @@ pub fn accepted_message(
     parse_page_message(raw)
         .filter(|message| is_accepted(message, state))
         .filter(|_| rate.allow(now))
+}
+
+/// What the view does with a message before reading it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Intake {
+    Read,
+    /// The page sends what Zorvo's script never would: end its process.
+    EndPage,
+    /// The page is being ended; nothing more of it is read.
+    Drop,
+}
+
+/// Counts every message a page sends, refused ones too. WebKit hands each one
+/// to the main thread, so a page that floods the handler would slow Zorvo's
+/// interface; the base design keeps pages in a process of their own so that
+/// one cannot. A body over `MAX_MESSAGE_BYTES`, or more than
+/// `MAX_MESSAGES_PER_SECOND` in a second, ends the page.
+#[derive(Debug, Default)]
+pub struct FloodGuard {
+    window_start: Option<Instant>,
+    count: u32,
+    is_ending: bool,
+}
+
+impl FloodGuard {
+    pub fn admit(&mut self, body_bytes: usize, now: Instant) -> Intake {
+        if self.is_ending {
+            return Intake::Drop;
+        }
+        let is_new_window = self
+            .window_start
+            .is_none_or(|start| now.saturating_duration_since(start) >= RATE_WINDOW);
+        if is_new_window {
+            self.window_start = Some(now);
+            self.count = 0;
+        }
+        self.count += 1;
+        if body_bytes > MAX_MESSAGE_BYTES || self.count > MAX_MESSAGES_PER_SECOND {
+            self.is_ending = true;
+            return Intake::EndPage;
+        }
+        Intake::Read
+    }
 }
 
 /// Lets `MAX_PER_SECOND` messages through in a window of one second, counted
@@ -504,6 +550,43 @@ mod tests {
         assert_eq!(
             accepted_message(&text_pick("a"), true, on, &mut limit, now),
             None
+        );
+    }
+
+    #[test]
+    fn a_body_over_16_kib_ends_the_page() {
+        let mut guard = FloodGuard::default();
+        let now = Instant::now();
+        assert_eq!(guard.admit(MAX_MESSAGE_BYTES, now), Intake::Read);
+        assert_eq!(guard.admit(MAX_MESSAGE_BYTES + 1, now), Intake::EndPage);
+        // Once the page is being ended, nothing else of it is read or ended again.
+        assert_eq!(guard.admit(10, now), Intake::Drop);
+    }
+
+    #[test]
+    fn two_hundred_messages_a_second_are_read_and_the_next_ends_the_page() {
+        let mut guard = FloodGuard::default();
+        let start = Instant::now();
+        for i in 0..MAX_MESSAGES_PER_SECOND {
+            let at = start + Duration::from_millis(u64::from(i));
+            assert_eq!(guard.admit(10, at), Intake::Read, "message {i}");
+        }
+        assert_eq!(
+            guard.admit(10, start + Duration::from_millis(900)),
+            Intake::EndPage
+        );
+    }
+
+    #[test]
+    fn a_new_second_counts_again() {
+        let mut guard = FloodGuard::default();
+        let start = Instant::now();
+        for _ in 0..MAX_MESSAGES_PER_SECOND {
+            assert_eq!(guard.admit(10, start), Intake::Read);
+        }
+        assert_eq!(
+            guard.admit(10, start + Duration::from_secs(1)),
+            Intake::Read
         );
     }
 

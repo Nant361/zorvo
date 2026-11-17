@@ -16,7 +16,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::page_script::{marks_script, mode_script, PAGE_SCRIPT};
 use super::picks::{
-    accepted_message, PageMark, PagePickEvent, RateLimit, ViewState, ARTIFACT_PAGE_PICK,
+    accepted_message, FloodGuard, Intake, PageMark, PagePickEvent, RateLimit, ViewState,
+    ARTIFACT_PAGE_PICK,
 };
 use super::protocol::{is_allowed_navigation, respond, SCHEME};
 use super::store::ArtifactStore;
@@ -76,6 +77,8 @@ thread_local! {
     static MARKS_SENT: Cell<u64> = const { Cell::new(0) };
     /// How many messages the view on screen has had through this second.
     static RATE: RefCell<RateLimit> = RefCell::new(RateLimit::default());
+    /// Every message the view on screen has sent, refused or not, to end a page that floods.
+    static FLOOD: RefCell<FloodGuard> = RefCell::new(FloodGuard::default());
 }
 
 /// Changes what decides the view's visibility and applies it. Main thread only.
@@ -144,6 +147,22 @@ fn apply_page_state() {
 /// What the page sent, once `picks.rs` accepts it, goes to the main webview with
 /// the page it came from. Main thread only (wry calls the handler there).
 fn on_page_message(app: &AppHandle, generation: u64, body: &str) {
+    if GENERATION.get() != generation {
+        return;
+    }
+    match FLOOD.with(|flood| flood.borrow_mut().admit(body.len(), Instant::now())) {
+        Intake::Read => {}
+        Intake::Drop => return,
+        Intake::EndPage => {
+            // Not from inside the view's own handler: the end runs once this call has returned.
+            let _ = app.run_on_main_thread(move || {
+                if GENERATION.get() == generation {
+                    end_current();
+                }
+            });
+            return;
+        }
+    }
     let Some(page) = shown_page() else {
         return;
     };
@@ -273,6 +292,7 @@ pub fn show(
         DISPLAY.set(Display::default());
         COMMENTING.set(false);
         RATE.with(|rate| *rate.borrow_mut() = RateLimit::default());
+        FLOOD.with(|flood| *flood.borrow_mut() = FloodGuard::default());
         let messages = handle.clone();
         let built = handle
             .get_webview_window(MAIN_WINDOW)
