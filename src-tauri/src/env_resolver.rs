@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -106,7 +106,7 @@ fn re_resolve(cell: &Mutex<Option<EnvResult>>, resolve: impl FnOnce() -> EnvResu
 /// Both streams are drained on helper threads and the reads share the exit deadline, so
 /// a backgrounded daemon that keeps stdout open cannot outlive `timeout`.
 fn run_with_timeout(program: &str, args: &[&str], timeout: Duration) -> Result<String, String> {
-    let mut child = Command::new(program)
+    let mut child = crate::spawn::command(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

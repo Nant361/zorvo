@@ -86,3 +86,25 @@ fn pty_command_goes_through_the_trampoline() {
     assert_eq!(argv[0], env!("CARGO_BIN_EXE_zorvo"));
     assert_eq!(&argv[1..], ["disclaim-exec", "--", "/bin/echo"]);
 }
+
+#[test]
+fn acp_agent_is_disclaimed() {
+    use std::sync::Arc;
+    use zorvo_lib::acp::connection::{AcpConnection, EventSink};
+
+    use_trampoline();
+    let launch = crate::common::fake_agent();
+    let connection = AcpConnection::spawn(
+        &launch.program,
+        &launch.args,
+        &crate::common::cwd(),
+        &[],
+        |_| -> EventSink { Arc::new(|_| {}) },
+    )
+    .unwrap();
+    let pid = connection.pid().unwrap();
+    wait_for_exec(pid, "node");
+    let responsible = spawn::responsible_pid(pid as i32);
+    connection.kill();
+    assert_eq!(responsible, Some(pid as i32));
+}

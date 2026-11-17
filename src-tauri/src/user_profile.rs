@@ -4,8 +4,6 @@
 //! real, so this module reads what git already knows about the user and reports
 //! `None` when git knows nothing — the UI then falls back to a neutral label.
 
-use std::process::Command;
-
 use serde::Serialize;
 
 use crate::git_info::git_binary;
@@ -54,7 +52,7 @@ pub fn current_user_profile() -> UserProfile {
 /// former has no binary to run, the latter exits non-zero. Neither is an error
 /// worth surfacing to the user, so both become `None`.
 fn read_git_global_config(key: &str) -> Option<String> {
-    let output = Command::new(git_binary())
+    let output = crate::spawn::command(git_binary())
         .args(["config", "--global", key])
         .output()
         .ok()?;

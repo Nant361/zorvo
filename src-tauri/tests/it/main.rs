@@ -2,6 +2,10 @@
 //! linked once instead of once per file. `installer_state_test.rs` stays
 //! apart: it sets process-wide installer state that other tests also read.
 
+// Tests start helper processes (git, shells) directly; production code must go
+// through `spawn` (clippy.toml).
+#![allow(clippy::disallowed_methods)]
+
 mod common;
 
 mod acp_jsonrpc_test;

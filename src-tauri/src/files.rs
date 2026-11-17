@@ -14,9 +14,6 @@ use tauri::State;
 use crate::attachments::MAX_PREVIEW_BYTES;
 use crate::store::AppStore;
 
-#[cfg(target_os = "macos")]
-use std::process::Command;
-
 /// Most entries returned for one directory, after sorting.
 pub const MAX_ENTRIES: usize = 2000;
 
@@ -229,7 +226,7 @@ pub fn open_path(store: State<'_, AppStore>, root: String, relative: String) -> 
 
 #[cfg(target_os = "macos")]
 fn open_with_default_app(path: &Path) -> Result<(), String> {
-    let status = Command::new("open")
+    let status = crate::spawn::command("open")
         .arg(path)
         .status()
         .map_err(|e| format!("Failed to run `open {}`: {}", path.display(), e))?;
@@ -607,7 +604,7 @@ mod tests {
     #[test]
     fn refuses_a_named_pipe_without_opening_it() {
         let ws = TempWorkspace::new("view-pipe");
-        let status = std::process::Command::new("mkfifo")
+        let status = crate::spawn::command("mkfifo")
             .arg(ws.path.join("pipe"))
             .status()
             .expect("run mkfifo");

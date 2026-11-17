@@ -176,7 +176,7 @@ const DROPPED_ENV: [&str; 5] = [
 /// `GITHUB_TOKEN`, `GH_CONFIG_DIR` and proxy settings count), without the
 /// variables in `DROPPED_ENV`, with colour and prompts off.
 fn gh_command(gh: &Path, user_env: &HashMap<String, String>) -> Command {
-    let mut command = Command::new(gh);
+    let mut command = crate::spawn::command(gh);
     command.envs(user_env);
     // After `envs`, and also for what the app itself inherited.
     for name in DROPPED_ENV {

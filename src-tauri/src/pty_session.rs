@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 
 /// Events produced by PTY sessions.
@@ -110,7 +110,7 @@ impl PtySessionManager {
             })
             .map_err(|e| format!("Failed to open PTY pair: {}", e))?;
 
-        let mut cmd = CommandBuilder::new(command);
+        let mut cmd = crate::spawn::pty_command(command);
         cmd.args(args);
         cmd.cwd(cwd);
 
@@ -485,7 +485,7 @@ mod tests {
     fn wait_until_reaped(pid: u32, timeout: Duration) -> bool {
         let deadline = std::time::Instant::now() + timeout;
         while std::time::Instant::now() < deadline {
-            let listed = std::process::Command::new("/bin/ps")
+            let listed = crate::spawn::command("/bin/ps")
                 .args(["-o", "stat=", "-p", &pid.to_string()])
                 .output()
                 .map(|out| !String::from_utf8_lossy(&out.stdout).trim().is_empty())
@@ -502,7 +502,7 @@ mod tests {
     fn wait_until_gone(pid: u32, timeout: Duration) -> bool {
         let deadline = std::time::Instant::now() + timeout;
         while std::time::Instant::now() < deadline {
-            let alive = std::process::Command::new("/bin/kill")
+            let alive = crate::spawn::command("/bin/kill")
                 .args(["-0", &pid.to_string()])
                 .stderr(std::process::Stdio::null())
                 .status()

@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::thread;
@@ -65,7 +65,7 @@ impl AcpConnection {
         env: &[(String, String)],
         make_sink: impl FnOnce(Weak<Self>) -> EventSink,
     ) -> Result<Arc<Self>, String> {
-        let mut child = Command::new(program)
+        let mut child = crate::spawn::command(program)
             .args(args)
             .current_dir(cwd)
             .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
