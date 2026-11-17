@@ -43,6 +43,7 @@ mod registry_history_test;
 mod registry_icons_test;
 mod registry_resolve_test;
 mod registry_schema_test;
+mod spawn_test;
 mod store_test;
 mod workspace_files_test;
 mod workspace_terminal_test;

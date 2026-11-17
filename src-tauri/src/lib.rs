@@ -22,6 +22,7 @@ pub mod profiles;
 pub mod pty_session;
 pub mod pull_requests;
 pub mod registry;
+pub mod spawn;
 pub mod store;
 pub mod user_profile;
 pub mod windows;
@@ -375,6 +376,10 @@ fn disable_web_text_substitutions() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Every process Zorvo starts gives up its macOS grants (spawn module).
+    if let Ok(exe) = std::env::current_exe() {
+        spawn::set_trampoline(exe);
+    }
     #[cfg(target_os = "macos")]
     disable_web_text_substitutions();
 

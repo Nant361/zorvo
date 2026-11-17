@@ -8,6 +8,10 @@ fn main() {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     match args.get(1).map(String::as_str) {
+        // Takes privileges away only, so it runs before the agent-environment guard.
+        Some(zorvo_lib::spawn::trampoline::MODE) => {
+            std::process::exit(zorvo_lib::spawn::trampoline::run(&args[2..]))
+        }
         Some("mcp-bridge") => std::process::exit(zorvo_lib::agent_tools::bridge::run()),
         Some("tools") => std::process::exit(zorvo_lib::agent_tools::cli::run(&args[2..])),
         // An agent that runs the program any other way (Pi tried `--help`) gets the
