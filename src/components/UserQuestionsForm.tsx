@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import type { PermissionChoice, UserQuestion } from "../types";
 import { EMPTY_DRAFT, answerOf, answersOf, questionName, submitHint, type QuestionDraft } from "../lib/user-questions";
 import { Button } from "./ui/Button";
+import { segmentedItem } from "./ui/segmented-style";
 import { UserQuestionField } from "./UserQuestionField";
 
 /** The typed answers of Qwen Code's `ask_user_question`: question number to text. */
@@ -20,8 +21,6 @@ export interface UserQuestionsFormProps {
   disabled: boolean;
 }
 
-const STEP =
-  "focus-ring inline-flex h-6.5 items-center gap-1.5 rounded-md border px-2.5 text-ui-sm transition-colors";
 
 /**
  * The questions one at a time: a step for each (only when there are several), the question
@@ -76,15 +75,14 @@ export function UserQuestionsForm({ questions, drafts, onChange, options, onChoo
           {questions.map((question, index) => {
             const isAnswered = answerOf(question, draftOf(index)) !== undefined;
             const isCurrent = index === current;
-            const name = questionName(question, index);
-            const tone = isCurrent
-              ? "border-border-strong bg-surface-hover text-fg"
-              : "border-border text-fg-muted hover:bg-surface-hover hover:text-fg";
+            const name = questionName(questions, index);
+            // A segmented item, outlined, as the steps sit on the card rather than in a track.
+            const outline = isCurrent ? "border-border-strong" : "border-border hover:bg-surface-hover";
             return (
               <li key={index}>
                 <button
                   type="button"
-                  className={`${STEP} ${tone}`}
+                  className={`${segmentedItem(isCurrent)} border ${outline}`}
                   aria-current={isCurrent ? "step" : undefined}
                   // The check mark is hidden from screen readers, so the name says it.
                   aria-label={isAnswered ? `${name} (answered)` : name}

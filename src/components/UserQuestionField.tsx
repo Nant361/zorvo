@@ -91,7 +91,16 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
     onChange(question.multiSelect ? { ...draft, otherChecked: true, otherText } : { picked: [], otherChecked: true, otherText });
 
   return (
-    <fieldset ref={ref} tabIndex={-1} className="flex min-w-0 flex-col gap-1.5 focus:outline-none">
+    <fieldset
+      ref={ref}
+      tabIndex={-1}
+      className="focus-ring flex min-w-0 flex-col gap-1.5 rounded-lg"
+      // Any key clears a pointer pick that fired no change (a click on an Other already picked), so a
+      // later pick of Other by the arrow keys from another option never pulls the focus into the box.
+      onKeyDownCapture={() => {
+        isPointerPick.current = false;
+      }}
+    >
       <legend className="mb-1.5 flex flex-col gap-0.5">
         {showsHeader && question.header && <span className="text-caption font-medium text-fg-muted">{question.header}</span>}
         <span className="whitespace-pre-line text-ui font-semibold text-fg">{question.question}</span>
@@ -124,9 +133,6 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
             checked={draft.otherChecked}
             disabled={disabled}
             onChange={toggleOther}
-            onKeyDown={() => {
-              isPointerPick.current = false;
-            }}
           />
           <span className="text-fg">Other</span>
         </label>
@@ -144,7 +150,9 @@ export function UserQuestionField({ question, draft, onChange, disabled, showsHe
               disabled={disabled}
               onChange={(e) => typeOther(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                // WebKit sends the Enter that commits an IME composition with isComposing false and keyCode 229.
+                const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
+                if (e.key === "Enter" && !isComposing) {
                   e.preventDefault();
                   onEnter();
                 }

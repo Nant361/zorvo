@@ -238,6 +238,11 @@ describe("submitHint", () => {
     expect(submitHint([colours, unnamed, editor], [])).toBe("Answer Colours, Question 2 and Editor to submit.");
   });
 
+  it("numbers a header two questions share, so the hint can tell them apart", () => {
+    const scope = { ...editor, header: "Scope" };
+    expect(submitHint([scope, colours, scope], [])).toBe("Answer Scope 1, Colours and Scope 3 to submit.");
+  });
+
   it("speaks of the question when there is only one", () => {
     expect(submitHint([editor], [])).toBe("Answer the question to submit.");
   });
@@ -366,6 +371,35 @@ describe("ActionCard with questions", () => {
 
     expect(within(editor()).getByRole("textbox")).toBeDefined();
     expect(document.activeElement).toBe(other);
+  });
+
+  it("does not pull the focus into the box after a click on Other that changed nothing", () => {
+    render(<ActionCard card={questionCard()} onChoose={() => {}} />);
+    fireEvent.click(next());
+    const other = within(editor()).getByRole("radio", { name: "Other" });
+    const vim = within(editor()).getByRole("radio", { name: "Vim" });
+    fireEvent.click(other);
+    // A click on Other while it is picked: the pointer goes down, but a picked radio fires no change.
+    fireEvent.pointerDown(other);
+    fireEvent.click(vim);
+
+    vim.focus();
+    fireEvent.keyDown(vim, { key: "ArrowDown" });
+    fireEvent.click(other);
+
+    expect(document.activeElement).toBe(vim);
+  });
+
+  it("leaves Enter alone while it commits an IME composition", () => {
+    const onChoose = vi.fn();
+    render(<ActionCard card={questionCard()} onChoose={onChoose} />);
+    fireEvent.click(within(colours()).getByRole("checkbox", { name: "Other" }));
+    const box = within(colours()).getByRole("textbox");
+    fireEvent.change(box, { target: { value: "赤" } });
+
+    fireEvent.keyDown(box, { key: "Enter", keyCode: 229 });
+
+    expect(colours()).toBeDefined();
   });
 
   it("takes Enter in the Other box as Next, and as Submit once every question has an answer", () => {

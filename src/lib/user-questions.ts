@@ -147,9 +147,15 @@ export function shownLabel(label: string): ShownLabel {
   return text === label || text === '' ? { text: label, isRecommended: false } : { text, isRecommended: true };
 }
 
-/** What names a question in its step and in the hint: its header, else its number. */
-export function questionName(question: UserQuestion, index: number): string {
-  return question.header || `Question ${index + 1}`;
+/**
+ * What names a question in its step and in the hint: its header, else its number. A header two
+ * questions share gets the number too, so the steps and the hint can tell them apart.
+ */
+export function questionName(questions: readonly UserQuestion[], index: number): string {
+  const { header } = questions[index];
+  if (!header) return `Question ${index + 1}`;
+  const isShared = questions.some((other, i) => i !== index && other.header === header);
+  return isShared ? `${header} ${index + 1}` : header;
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -163,7 +169,7 @@ function listOf(names: readonly string[]): string {
  */
 export function submitHint(questions: readonly UserQuestion[], drafts: readonly QuestionDraft[]): string | undefined {
   const open = questions.flatMap((question, index) =>
-    answerOf(question, drafts[index] ?? EMPTY_DRAFT) === undefined ? [questionName(question, index)] : [],
+    answerOf(question, drafts[index] ?? EMPTY_DRAFT) === undefined ? [questionName(questions, index)] : [],
   );
   if (open.length === 0) return undefined;
   return questions.length === 1 ? 'Answer the question to submit.' : `Answer ${listOf(open)} to submit.`;

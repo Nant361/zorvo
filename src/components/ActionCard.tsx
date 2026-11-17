@@ -9,8 +9,6 @@ import { usableQuestions } from "../lib/user-questions";
 import { settledWords, usableZorvoTool } from "../lib/agent-tool-card";
 import type { ActionCard as ActionCardType, PermissionChoice } from "../types";
 
-export type { QuestionAnswers } from "./UserQuestionsForm";
-
 /** A permission request from an agent, answered with one of the agent's own options. */
 export interface ActionCardProps {
   card: ActionCardType;
