@@ -38,7 +38,7 @@ describe('one slot for diff and artifact comments', () => {
   it('a message with a diff comment and an artifact comment marks both Sent', () => {
     const { result, markSent, markArtifactSent } = renderMessage();
     act(() => result.current.add('s-a', ['c-1'], 'head'));
-    act(() => result.current.addArtifact('s-a', ['ac-1']));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
 
     act(() => result.current.sendFrom('s-a', 'the text'));
 
@@ -51,34 +51,53 @@ describe('one slot for diff and artifact comments', () => {
     const { result } = renderMessage();
     act(() => result.current.add('s-a', ['c-1'], 'head'));
 
-    act(() => result.current.addArtifact('s-a', ['ac-1']));
-    act(() => result.current.addArtifact('s-a', ['ac-1', 'ac-2']));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
+    act(() => result.current.addArtifact('s-a', ['ac-1', 'ac-2'], 'a-1'));
 
-    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: ['c-1'], artifactCommentIds: ['ac-1', 'ac-2'], lastTarget: 'head' });
+    expect(result.current.slot).toEqual({
+      sessionId: 's-a',
+      commentIds: ['c-1'],
+      artifactCommentIds: ['ac-1', 'ac-2'],
+      lastTarget: null,
+      lastArtifactId: 'a-1',
+    });
     expect([...result.current.inMessageArtifact]).toEqual(['ac-1', 'ac-2']);
     expect([...result.current.inMessage]).toEqual(['c-1']);
   });
 
   it('an artifact add first leaves no diff target, so a later diff add writes its heading', () => {
     const { result } = renderMessage();
-    act(() => result.current.addArtifact('s-a', ['ac-1']));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
 
-    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-1'], lastTarget: null });
+    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-1'], lastTarget: null, lastArtifactId: 'a-1' });
     expect(result.current.needsHeading('s-a', 'head', 'heading')).toBe(true);
+  });
+
+  it('a diff add clears the last artifact, so the next artifact add writes its heading', () => {
+    const { result } = renderMessage();
+    act(() => result.current.onComposerText('artifact heading'));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
+    expect(result.current.needsArtifactHeading('s-a', 'a-1', 'artifact heading')).toBe(false);
+    expect(result.current.needsArtifactHeading('s-a', 'a-2', 'artifact heading')).toBe(true);
+
+    act(() => result.current.add('s-a', ['c-1'], 'head'));
+
+    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: ['c-1'], artifactCommentIds: ['ac-1'], lastTarget: 'head' });
+    expect(result.current.needsArtifactHeading('s-a', 'a-1', 'artifact heading')).toBe(true);
   });
 
   it('forget takes an artifact id out and keeps the slot', () => {
     const { result } = renderMessage();
-    act(() => result.current.addArtifact('s-a', ['ac-1', 'ac-2']));
+    act(() => result.current.addArtifact('s-a', ['ac-1', 'ac-2'], 'a-1'));
 
     act(() => result.current.forget(['ac-1']));
 
-    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-2'], lastTarget: null });
+    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-2'], lastTarget: null, lastArtifactId: 'a-1' });
   });
 
   it('restore of the sent text re-arms with both lists empty', () => {
     const { result, markArtifactSent } = renderMessage();
-    act(() => result.current.addArtifact('s-a', ['ac-1']));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
     act(() => result.current.sendFrom('s-a', 'the text'));
 
     act(() => result.current.onComposerRestored('the text'));
@@ -90,13 +109,13 @@ describe('one slot for diff and artifact comments', () => {
 
   it("giveBack keeps an existing slot's artifact ids", () => {
     const { result } = renderMessage();
-    act(() => result.current.addArtifact('s-a', ['ac-1']));
+    act(() => result.current.addArtifact('s-a', ['ac-1'], 'a-1'));
     act(() => result.current.sendFrom('s-a', 'the text'));
-    act(() => result.current.addArtifact('s-a', ['ac-2']));
+    act(() => result.current.addArtifact('s-a', ['ac-2'], 'a-1'));
 
     act(() => result.current.onComposerGivenBack('s-a', 'the text'));
 
-    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-2'], lastTarget: null });
+    expect(result.current.slot).toEqual({ sessionId: 's-a', commentIds: [], artifactCommentIds: ['ac-2'], lastTarget: null, lastArtifactId: 'a-1' });
   });
 });
 
@@ -184,6 +203,34 @@ describe('adding artifact comments to the message', () => {
     expect(updateArtifactComments).not.toHaveBeenCalled();
     expect(text()).not.toContain('ac-2');
     expect(result.current.addArtifactReview.inMessage.size).toBe(0);
+  });
+
+  it('artifact A, then artifact B, then A again writes each heading where its block starts', () => {
+    const { result, text } = renderWiring();
+    const other: Artifact = { ...artifact, id: 'a-fedcba9876543210', title: 'Other page' };
+
+    act(() => result.current.addArtifactReview.add([checked(pageComment('ac-1'))], artifact, '/w/api'));
+    act(() => result.current.addArtifactReview.add([checked(pageComment('ac-2', { artifactId: other.id }))], other, '/w/api'));
+    act(() => result.current.addArtifactReview.add([checked(pageComment('ac-3'), 2)], artifact, '/w/api'));
+
+    expect(text().split(artifactHeading(artifact, '/w/api'))).toHaveLength(3);
+    expect(text().trimEnd().endsWith('Make it a badge.')).toBe(true);
+  });
+
+  it('a diff add between two artifact adds puts the second under its own heading again', () => {
+    const { result, text } = renderWiring();
+    const diffComment = {
+      id: 'c-1', file: 'src/a.ts', side: 'new' as const, line: 3, lineHash: 'deadbeef', quote: 'x', target: 'head' as const,
+      body: 'Fix', createdAt: 1,
+    };
+
+    act(() => result.current.addArtifactReview.add([checked(pageComment('ac-1'))], artifact, '/w/api'));
+    act(() => result.current.addReview.add([{ comment: diffComment, status: 'current' }], 'head', { root: '/w/api', prefix: '', baseName: null }));
+    act(() => result.current.addArtifactReview.add([checked(pageComment('ac-2'), 2)], artifact, '/w/api'));
+    act(() => result.current.addReview.add([{ comment: { ...diffComment, id: 'c-2' }, status: 'current' }], 'head', { root: '/w/api', prefix: '', baseName: null }));
+
+    expect(text().split(artifactHeading(artifact, '/w/api'))).toHaveLength(3);
+    expect(text().split('Review comments on the diff against the last commit.')).toHaveLength(3);
   });
 
   it('Send marks the artifact comments Sent through updateArtifactComments', () => {

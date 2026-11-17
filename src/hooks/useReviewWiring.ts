@@ -138,11 +138,11 @@ export function useReviewWiring({
     if (!session || !composer || blockedReason || checked.length === 0) return;
     // The composer takes the focus below, so an expanded page must give it its place first.
     flushSync(() => collapseArtifact?.());
-    const withHeading = message.needsArtifactHeading(session.id, artifactHeading(artifact, cwd));
+    const withHeading = message.needsArtifactHeading(session.id, artifact.id, artifactHeading(artifact, cwd));
     composer.insertText(artifactMessage(checked, artifact, cwd, withHeading));
     const ids = checked.map(({ comment }) => comment.id);
     changeArtifact(session.id, ids, unsent);
-    message.addArtifact(session.id, ids);
+    message.addArtifact(session.id, ids, artifact.id);
   };
 
   const owner = blocksSend && slot ? sessions.find((candidate) => candidate.id === slot.sessionId) : undefined;

@@ -7,8 +7,10 @@ export interface ReviewSlot {
   commentIds: readonly string[];
   /** Artifact comments in the message; absent while there are none, so a diff-only slot keeps its shape. */
   artifactCommentIds?: readonly string[];
-  /** The diff target of the last diff add, or null when only artifact comments were added. */
+  /** The diff target of the last add, or null when the last add was an artifact's. */
   lastTarget: ReviewTarget | null;
+  /** The artifact of the last add, while that add was an artifact's; a diff add clears it. */
+  lastArtifactId?: string;
 }
 
 export interface ReviewMessage {
@@ -23,12 +25,12 @@ export interface ReviewMessage {
   isHeldFor: (sessionId: string) => boolean;
   /** Call it after the text went into the composer, so a composer that took nothing leaves no slot. */
   add: (sessionId: string, ids: readonly string[], target: ReviewTarget) => void;
-  /** The same for artifact comments; diff ids already in the slot stay. */
-  addArtifact: (sessionId: string, ids: readonly string[]) => void;
+  /** The same for one artifact's comments; diff ids already in the slot stay. */
+  addArtifact: (sessionId: string, ids: readonly string[], artifactId: string) => void;
   /** The composer's text already has `heading` only after an add for this session and target, and only while it still holds it. */
   needsHeading: (sessionId: string, target: ReviewTarget, heading: string) => boolean;
-  /** An artifact's heading is needed unless the slot is this session's and the composer still holds it. */
-  needsArtifactHeading: (sessionId: string, heading: string) => boolean;
+  /** An artifact's heading is needed unless the last add was this artifact's, for this session, and the composer still holds it. */
+  needsArtifactHeading: (sessionId: string, artifactId: string, heading: string) => boolean;
   /** Takes edited or deleted comments, of either kind, out. The slot stays, since their text stays in the composer. */
   forget: (ids: readonly string[]) => void;
   /** Lifts the slot when no text is left: `handleSend` sends nothing for spaces, so they count as empty. */
@@ -46,9 +48,21 @@ export interface ReviewMessage {
 /** Whether `block` stands alone in `text`: at either end or between blank lines, as messages given back together are joined. */
 const holdsBlock = (text: string, block: string) => `\n\n${text}\n\n`.includes(`\n\n${block}\n\n`);
 
-/** A slot, without the artifact list while it is empty. */
-function slotOf(sessionId: string, commentIds: readonly string[], artifactCommentIds: readonly string[], lastTarget: ReviewTarget | null): ReviewSlot {
-  return { sessionId, commentIds, ...(artifactCommentIds.length > 0 ? { artifactCommentIds } : {}), lastTarget };
+/** A slot, without the artifact fields while they are empty. */
+function slotOf(
+  sessionId: string,
+  commentIds: readonly string[],
+  artifactCommentIds: readonly string[],
+  lastTarget: ReviewTarget | null,
+  lastArtifactId?: string,
+): ReviewSlot {
+  return {
+    sessionId,
+    commentIds,
+    ...(artifactCommentIds.length > 0 ? { artifactCommentIds } : {}),
+    lastTarget,
+    ...(lastArtifactId === undefined ? {} : { lastArtifactId }),
+  };
 }
 
 const union = (kept: readonly string[], added: readonly string[]) => [...new Set([...kept, ...added])];
@@ -90,14 +104,16 @@ export function useReviewMessage({ activeSessionId, markSent, markArtifactSent, 
         const kept = prev?.sessionId === sessionId ? prev : null;
         return slotOf(sessionId, union(kept?.commentIds ?? [], ids), kept?.artifactCommentIds ?? [], target);
       }),
-    addArtifact: (sessionId, ids) =>
+    // The last add decides the heading: an artifact's add ends the diff's run of blocks, and a diff add the artifact's.
+    addArtifact: (sessionId, ids, artifactId) =>
       setSlot((prev) => {
         const kept = prev?.sessionId === sessionId ? prev : null;
-        return slotOf(sessionId, kept?.commentIds ?? [], union(kept?.artifactCommentIds ?? [], ids), kept?.lastTarget ?? null);
+        return slotOf(sessionId, kept?.commentIds ?? [], union(kept?.artifactCommentIds ?? [], ids), null, artifactId);
       }),
     needsHeading: (sessionId, target, heading) =>
       slot?.sessionId !== sessionId || slot.lastTarget !== target || !composerText.current.includes(heading),
-    needsArtifactHeading: (sessionId, heading) => slot?.sessionId !== sessionId || !composerText.current.includes(heading),
+    needsArtifactHeading: (sessionId, artifactId, heading) =>
+      slot?.sessionId !== sessionId || slot.lastArtifactId !== artifactId || !composerText.current.includes(heading),
     forget: (ids) =>
       setSlot(
         (prev) =>
@@ -107,6 +123,7 @@ export function useReviewMessage({ activeSessionId, markSent, markArtifactSent, 
             prev.commentIds.filter((id) => !ids.includes(id)),
             (prev.artifactCommentIds ?? []).filter((id) => !ids.includes(id)),
             prev.lastTarget,
+            prev.lastArtifactId,
           ),
       ),
     onComposerText: (text) => {
