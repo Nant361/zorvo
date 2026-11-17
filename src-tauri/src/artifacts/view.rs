@@ -1,8 +1,11 @@
 //! The artifact page's own webview: a child of the main window, placed over
 //! the box the main webview leaves for it.
 //!
-//! It is made with wry directly, so Tauri never sees it: no IPC script, no
-//! invoke key and no message handler exist inside it. It has its own web
+//! It is made with wry directly, so Tauri never sees it: no Tauri IPC script
+//! and no invoke key exist inside it. Its one initialization script and its
+//! one message handler are Zorvo's own, for comments (`page_script.js`,
+//! `picks.rs`): the handler carries data only, never a command, and every
+//! message is checked as the page's, since the page can call it too. It has its own web
 //! content process, so a page that never yields cannot stop Zorvo's interface
 //! (a frame inside the main webview does; see the spec's spike results).
 //! There is one at a time, and it lives on the main thread.
