@@ -207,13 +207,79 @@ page.
 
 ### `artifact_guide`
 
-No arguments. Returns the design guide: colours as tokens with light and dark
-values under `prefers-color-scheme`, type, a layout that holds at the
-inspector's narrow width and when expanded, no reliance on `localStorage`, how
-to draw charts and diagrams that read well. The text ships with Zorvo
+No arguments. Returns Zorvo's own design system, written for a page, so a page
+looks like part of Zorvo whichever agent wrote it. Every agent gets the same
+text: Claude Code, Codex, Qwen Code and Antigravity through the MCP server, Pi
+through `zorvo tools artifact_guide`. The text ships with Zorvo
 (`src/lib/artifact-guide.md`, imported as text) and is written for Zorvo, not
-copied. It is tested with real agents (Claude Code, Codex, Antigravity) and
-revised from what they produce; that revision is part of the work.
+copied.
+
+What it holds:
+
+1. **A block to paste.** A `:root` block with Zorvo's colour tokens as CSS
+   variables under their names in `docs/design-system/tokens.json` (`--sheet`,
+   `--fg-muted`, `--border-strong`), light values in `:root` and dark values in
+   `@media (prefers-color-scheme: dark)`, plus `--radius-md`, `--radius-lg`,
+   `--radius-panel`, `--font-sans` and `--font-mono`. Only the tokens a page
+   needs: `sheet`, `ground`, `surface-2`, `surface-hover`, `chip`, `border`,
+   `border-strong`, `fg`, `fg-secondary`, `fg-muted`, `fg-subtle`, `primary`,
+   `on-primary`, `focus-ring`, the status colours (`status-running`,
+   `status-attention`, `status-unread`, `status-merged`, `danger`),
+   `danger-surface`, `attention-surface`, `attention-border`, `diff-added`,
+   `diff-removed` and `selection`. Not the terminal, overlay or old surfaces.
+2. **Type.** Zorvo's sans stack (`-apple-system, BlinkMacSystemFont, …`), which
+   on a Mac is the face Zorvo's interface uses and needs no download. Geist
+   Mono for code, with the Google Fonts link to add; without it the stack falls
+   back to SF Mono. The app styles' sizes (`title` 20/28 600, `heading` 16/24
+   600, `body` 14/22, `ui` 13/18, `caption` 11/16).
+3. **Surfaces and text.** The page's background is `sheet` (the box it sits in
+   is a sheet); cards are `surface-2` with a `border` edge and `radius-lg`;
+   wells (code, a table's header band) are `ground`; tags are `chip`. Headings
+   `fg`, body `fg-secondary`, labels `fg-muted`, hints `fg-subtle`. One
+   `primary` action at most.
+4. **The rules from `docs/design-system/README.md` that a page can break.**
+   Monochrome; status colours only for a state and always next to a word;
+   sentence case; no emoji, no exclamation marks.
+5. **Charts and diagrams.** Series in the grey steps (`fg`, `fg-muted`,
+   `fg-subtle`, `border-strong`), labelled on the chart or with a legend; a
+   status colour only when a series is a state (passed, failed). More than four
+   series: label them directly or split the chart. Text on a chart stays
+   readable in both themes, so it uses the tokens, never a library's default
+   colours. Inline SVG for diagrams.
+6. **Tailwind.** For a page that loads Tailwind's CDN build, a
+   `tailwind.config` snippet that maps the same names to the variables, so
+   `bg-sheet`, `text-fg-muted` and `border-border-strong` mean what they mean
+   in Zorvo.
+7. **Limits.** One self-contained file with a `<title>`; a layout that holds
+   from 320 px (the inspector's narrow width) to expanded, with no horizontal
+   scroll; the CDN list with exact versions; no `fetch`, no `localStorage`, no
+   links that leave the page.
+
+**Why a block to paste and not a stylesheet Zorvo adds.** Export writes the
+stored bytes, and the served body is kept for the comments script (see "Room
+for comments later"). A page styled by something Zorvo injects would lose its
+colours once exported. With the tokens in the file, the page is the same in
+the tab and in a browser.
+
+**Kept in step with the app.** `src/test/artifact-guide.test.ts` reads the
+guide's `:root` and dark blocks and fails when a variable's value differs from
+the light or dark value of the token of the same name in `tokens.json`, when a
+token in the list above is missing, or when `--font-sans` or `--font-mono`
+differs from `type.families`. `design-system-docs.test.ts` already ties
+`tokens.json` to `globals.css`, so a colour changed in the app fails until the
+guide follows.
+
+**The theme.** The page follows `prefers-color-scheme`. Zorvo's Appearance
+setting (System, Light, Dark) goes through Tauri's `setTheme`, which sets the
+appearance for the whole app, and the child webview is expected to follow it.
+Task 11's real-app check confirms it with Appearance set against the Mac's
+own; if the child does not follow, the backend sets the child view's
+appearance to match whenever the setting changes.
+
+**What it does not guarantee.** It is guidance, as Claude's is: an agent can
+ignore it, and Zorvo never rewrites a page. The guide is tested with real
+agents (Claude Code, Codex, Antigravity) and revised from what they produce;
+that revision is part of the work.
 
 ### Checks on the path, in Rust
 
@@ -370,7 +436,7 @@ notice in plain words, never a path or an error from the backend.
 | 1 | Backend | Store, path checks, protocol with its CSP, sweep, export |
 | 2 | Tools | `show_artifact`, `artifact_guide`, Pi's command path |
 | 3 | Screens | Tab, viewer, versions, chat card, opening rules |
-| 4 | Gallery and guide | Gallery page; the guide revised from real agents' pages |
+| 4 | Gallery and guide | Gallery page; the guide revised from real agents' pages, its tokens kept equal to `tokens.json` |
 
 ## 8. Documents that change
 
