@@ -260,6 +260,22 @@ function withoutAssignments(command: string): string {
   return words.slice(index).join(' ');
 }
 
+/** A redirection word: `>`, `2>&1`, `>>out.log`, `&>`, `<`; one with no target takes the next word. */
+const REDIRECTION = /^(?:\d*>>?|&>>?|\d*<)(&\d+|.*)?$/;
+
+/** The command without its redirections and a trailing `&`, which no process shows in its arguments. */
+function withoutRedirections(command: string): string {
+  const words = command.split(' ');
+  const kept: string[] = [];
+  for (let index = 0; index < words.length; index++) {
+    const match = REDIRECTION.exec(words[index]);
+    if (!match) kept.push(words[index]);
+    else if (!match[1]) index++;
+  }
+  if (kept[kept.length - 1] === '&') kept.pop();
+  return kept.join(' ');
+}
+
 /**
  * The last command of a list (`cd /tmp && sleep 300`, a `;` after it too), which a shell may replace
  * itself with, without an `exec` in front of it, which does the same.
@@ -278,7 +294,7 @@ function lastCommand(command: string): string {
 function launchForms(command: string): string[] {
   const each = (forms: readonly string[], change: (form: string) => string) => [...forms, ...forms.map(change)];
   // The script first, so a list inside `bash -lc "cd x && pnpm dev"` yields its last command too.
-  const forms = each(each(each([command], scriptOf), lastCommand), withoutAssignments);
+  const forms = each(each(each(each([command], scriptOf), lastCommand), withoutRedirections), withoutAssignments);
   return [...new Set(each(forms, scriptOf).map(normalized).filter((form) => form !== ''))];
 }
 

@@ -270,6 +270,15 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("both", "cd /tmp && exec sleep 300", NOW - 60_000)))?.id).toBe("both");
   });
 
+  it("matches a launch that redirects its output or runs in the background", () => {
+    const at = (command: string) => shellToolFor(process("sleep 300", NOW - 59_000), one(launch("x", command, NOW - 60_000)))?.id;
+
+    expect(at("exec sleep 300 > /dev/null 2>&1")).toBe("x");
+    expect(at("sleep 300 >>out.log 2>/dev/null < /dev/null")).toBe("x");
+    expect(at("cd /tmp && sleep 300 &> log.txt &")).toBe("x");
+    expect(at("sleep 3000 > /dev/null")).toBeUndefined();
+  });
+
   it("keeps two scripts of one name apart when the launch names its path", () => {
     const a = launch("a", "/workspace/a/serve.py --port 8000", NOW - 60_000);
     const rel = launch("rel", "scripts/serve.py --port 8000", NOW - 60_000);
