@@ -1,0 +1,41 @@
+# Posts each published release to #activity on the Zorvolabs Discord.
+# Drafts (scripts/sign-release.mjs makes one before publishing) and prereleases post nothing.
+# It holds a repository secret, so it runs no project code and asks for no token permissions;
+# scripts/discord-release-workflow.test.mjs keeps it that way.
+name: Discord release post
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  post:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
+          TAG: ${{ github.event.release.tag_name }}
+          URL: ${{ github.event.release.html_url }}
+          BODY: ${{ github.event.release.body }}
+        run: |
+          jq -n --arg tag "$TAG" --arg url "$URL" --arg body "$BODY" '
+            {
+              allowed_mentions: { parse: [] },
+              embeds: [{
+                title: "Zorvo \($tag)",
+                url: $url,
+                description: (
+                  if ($body | length) > 1500
+                  then $body[0:1500] + "...\n\n[Read the full notes](\($url))"
+                  else $body
+                  end
+                )
+              }]
+            }' |
+            curl --silent --show-error --fail-with-body \
+              -H 'Content-Type: application/json' --data @- "$WEBHOOK"
