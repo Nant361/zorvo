@@ -72,7 +72,7 @@ pub fn handle_line(line: &str, caller: &Caller) -> Step {
         Some(_) => return error_step(Value::Null, INVALID_REQUEST, "Invalid request id."),
     };
     match method {
-        "initialize" => Step::Reply(result_reply(&id, initialize_result(params))),
+        "initialize" => Step::Reply(result_reply(&id, initialize_result(params, caller))),
         "ping" => Step::Reply(result_reply(&id, json!({}))),
         "tools/list" => Step::Reply(result_reply(&id, json!({ "tools": tools_for(caller) }))),
         "tools/call" => tools_call(id, params, caller),
@@ -92,16 +92,24 @@ fn notification(method: &str, params: &Value) -> Step {
     }
 }
 
-fn initialize_result(params: &Value) -> Value {
+/// Read by the agent at the start, unlike a tool's description, which an agent that loads its
+/// MCP tools on demand (Qwen Code) never sees before it answers.
+pub const ARTIFACT_INSTRUCTIONS: &str = "Zorvo shows web pages beside the chat. When your answer is better seen than read (a report, a summary of what changed, a comparison, a chart, a diagram, a dashboard, a mockup of a screen, or something the user can click through), show it as a page without being asked: call artifact_guide once, write one self-contained .html file, then call show_artifact with its path. If your tools are loaded on demand, look up show_artifact first. Keep short text and code answers in the chat.";
+
+fn initialize_result(params: &Value, caller: &Caller) -> Value {
     let requested = params.get("protocolVersion").and_then(Value::as_str);
     let version = requested
         .filter(|v| SUPPORTED_VERSIONS.contains(v))
         .unwrap_or(SUPPORTED_VERSIONS[0]);
-    json!({
+    let mut result = json!({
         "protocolVersion": version,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "zorvo", "version": env!("CARGO_PKG_VERSION") }
-    })
+    });
+    if caller.capabilities.agent_tools {
+        result["instructions"] = json!(ARTIFACT_INSTRUCTIONS);
+    }
+    result
 }
 
 /// The tools `caller` may see and call.
@@ -233,6 +241,33 @@ mod tests {
         );
         let none = reply(r#"{"jsonrpc":"2.0","id":2,"method":"initialize"}"#);
         assert_eq!(none["result"]["protocolVersion"], "2025-11-25");
+    }
+
+    #[test]
+    fn initialize_tells_a_session_with_agent_tools_when_to_show_a_page() {
+        // Agents that load MCP tools on demand never read a tool's description before they
+        // answer; the server's instructions are what they read at the start.
+        let line = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+        let Step::Reply(with_tools) = super::handle_line(line, &caller(true, false)) else {
+            panic!("initialize must reply");
+        };
+        let instructions = with_tools["result"]["instructions"]
+            .as_str()
+            .unwrap_or_default();
+        for words in [
+            "without being asked",
+            "show_artifact",
+            "artifact_guide",
+            "diagram",
+            "look up",
+        ] {
+            assert!(instructions.contains(words), "{words} in {instructions}");
+        }
+
+        let Step::Reply(without) = super::handle_line(line, &caller(false, true)) else {
+            panic!("initialize must reply");
+        };
+        assert!(without["result"].get("instructions").is_none());
     }
 
     #[test]

@@ -78,6 +78,8 @@ function handleStoreCommand(cmd: string, args: StoreArgs | undefined): Promise<u
       return Promise.resolve({
         // A test sets this to open sessions on a tools path ("mcp" or "command").
         toolsPath: (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__,
+        // A test sets this when the session has Zorvo's agent tools, not only computer use.
+        agentTools: (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__,
         acpSessionId:
           (args as { acpSessionId?: string })?.acpSessionId ?? `acp-${(args as { sessionId?: string })?.sessionId}`,
         agentCapabilities: { sessionCapabilities: { fork: {} } },

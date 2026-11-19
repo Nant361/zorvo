@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { useAcpEngine } from "../hooks/session-engine/useAcpEngine";
 import { fakeProfiles } from "./fixtures/agents";
 import type { ChatMessage, Session } from "../types";
-import { COMMAND_PATH_CONTEXT } from "../lib/agent-tools-context";
+import { COMMAND_PATH_CONTEXT, MCP_PATH_CONTEXT } from "../lib/agent-tools-context";
 
 type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
 
@@ -164,6 +164,27 @@ describe("useAcpEngine when a turn fails", () => {
       });
       expect(promptsSent(spy)).toEqual([`${COMMAND_PATH_CONTEXT}\n\nfix the parser`, "and the tests"]);
     } finally {
+      delete (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__;
+    }
+  });
+
+  it("tells an agent with Zorvo's MCP server when to show a page, once, with its first message", async () => {
+    // An agent that loads MCP tools on demand reads neither a tool's description nor the
+    // server's instructions before it answers; this is what reaches it.
+    (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__ = "mcp";
+    (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__ = true;
+    try {
+      const spy = vi.spyOn(tauriInternals(), "invoke");
+      const engine = renderEngine();
+      await act(async () => {
+        await engine.result.current.start(SESSION, { text: "draw the data flow" });
+      });
+      await act(async () => {
+        await engine.result.current.send("s-1", "and the store");
+      });
+      expect(promptsSent(spy)).toEqual([`${MCP_PATH_CONTEXT}\n\ndraw the data flow`, "and the store"]);
+    } finally {
+      delete (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__;
       delete (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__;
     }
   });

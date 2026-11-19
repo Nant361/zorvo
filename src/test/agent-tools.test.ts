@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { useAcpEngine } from "../hooks/session-engine/useAcpEngine";
 import { sessionGetsAgentTools } from "../lib/agent-tools";
-import { COMMAND_PATH_CONTEXT } from "../lib/agent-tools-context";
+import { COMMAND_PATH_CONTEXT, MCP_PATH_CONTEXT } from "../lib/agent-tools-context";
 import { NO_CHOICES } from "../lib/acp-draft";
 import { fakeProfiles } from "./fixtures/agents";
 import type { Session } from "../types";
@@ -252,8 +252,33 @@ describe("useAcpEngine and the command path context", () => {
     ]);
   });
 
-  it("sends nothing extra for an mcp session or a session without tools", async () => {
-    for (const path of ["mcp", undefined, "something-else"]) {
+  it("tells an mcp session with the agent tools when to show a page, with its first message", async () => {
+    withPath("mcp");
+    (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__ = true;
+    try {
+      const spy = vi.spyOn(tauriInternals(), "invoke");
+      const { result } = engine(SESSION);
+      await act(async () => {
+        await result.current.start(SESSION, { text: "plain" });
+      });
+      expect(promptTexts(spy)).toEqual([`${MCP_PATH_CONTEXT}\n\nplain`]);
+    } finally {
+      delete (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__;
+    }
+  });
+
+  it("tells an mcp session with computer use alone nothing about pages, which it cannot show", async () => {
+    withPath("mcp");
+    const spy = vi.spyOn(tauriInternals(), "invoke");
+    const { result } = engine(SESSION);
+    await act(async () => {
+      await result.current.start(SESSION, { text: "plain" });
+    });
+    expect(promptTexts(spy)).toEqual(["plain"]);
+  });
+
+  it("sends nothing extra for a session without tools", async () => {
+    for (const path of [undefined, "something-else"]) {
       withPath(path);
       const spy = vi.spyOn(tauriInternals(), "invoke");
       const { result, unmount } = engine(SESSION);

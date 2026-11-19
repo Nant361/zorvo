@@ -64,6 +64,8 @@ export interface AcpSessionInfo {
   reopenedWith?: 'resume' | 'load';
   /** How the session reaches Zorvo's tools; absent when it has none. */
   toolsPath?: 'mcp' | 'command';
+  /** It has Zorvo's agent tools, not only computer use; absent when it has not. */
+  agentTools?: true;
   isBusy: boolean;
 }
 
@@ -181,6 +183,7 @@ function toInfo(raw: unknown): AcpSessionInfo {
     canReopen: capabilities.loadSession === true || isObject(sessionCaps.resume),
     ...(reopenedWith ? { reopenedWith } : {}),
     ...(toolsPath ? { toolsPath } : {}),
+    ...(toolsPath && started.agentTools === true ? { agentTools: true as const } : {}),
     isBusy: false,
   };
 }

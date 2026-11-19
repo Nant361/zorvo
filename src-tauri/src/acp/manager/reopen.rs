@@ -90,6 +90,7 @@ impl AcpManager {
                 config_options: response["configOptions"].clone(),
                 reopened_with: Some(method),
                 tools_path: None,
+                agent_tools: false,
             })
         })
     }

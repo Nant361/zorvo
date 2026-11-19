@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **Agents can show a page without being asked.** When an answer is better seen than read, such as a report, a comparison, a chart or a diagram, the agent is now told it can show it as a page beside the chat. Whether it does is still the agent's choice: Qwen Code now shows a diagram as a page on its own.
+
 ## [0.13.0] - 2026-11-19
 
 ### Added
