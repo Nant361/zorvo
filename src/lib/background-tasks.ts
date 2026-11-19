@@ -278,11 +278,11 @@ function withoutRedirections(command: string): string {
 }
 
 /**
- * The last command of a list (`cd /tmp && sleep 300`, a `;` after it too, or one line after another), which a shell may replace
+ * The last command of a list (`cd /tmp && sleep 300`, `a || b`, a `;` after it too, or one line after another), which a shell may replace
  * itself with, without an `exec` in front of it, which does the same.
  */
 function lastCommand(command: string): string {
-  const parts = command.split(/\s*(?:&&|;|\n)\s*/).filter((part) => part.trim() !== '');
+  const parts = command.split(/\s*(?:&&|\|\||;|\n)\s*/).filter((part) => part.trim() !== '');
   const last = parts[parts.length - 1] ?? command;
   return last.startsWith('exec ') ? last.slice('exec '.length).trimStart() : last;
 }

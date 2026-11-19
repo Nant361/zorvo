@@ -268,6 +268,7 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("ended", "cd /tmp && sleep 300;", NOW - 60_000)))?.id).toBe("ended");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("exec", "exec sleep 300", NOW - 60_000)))?.id).toBe("exec");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("both", "cd /tmp && exec sleep 300", NOW - 60_000)))?.id).toBe("both");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("or", "test -d /nope || sleep 300", NOW - 60_000)))?.id).toBe("or");
   });
 
   it("matches a launch that redirects its output or runs in the background", () => {
