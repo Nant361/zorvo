@@ -251,6 +251,8 @@ function isExecOf(command: string, launched: string): boolean {
 }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** The options of `env` whose value is the next word (`-u NAME`, `-C DIR`, `-P PATH`, `-S STRING`). */
+const ENV_OPTIONS_WITH_VALUE = new Set(['-u', '-C', '-P', '-S', '--unset', '--chdir', '--split-string']);
 
 /**
  * The command's words as the shell splits them: a space inside quotes or after a backslash does
@@ -289,13 +291,15 @@ function shellWords(command: string): string[] {
 function withoutAssignments(command: string): string {
   const words = shellWords(command);
   let index = 0;
-  const skip = (test: (word: string) => boolean) => {
-    while (index < words.length - 1 && test(words[index])) index++;
-  };
-  skip((word) => ASSIGNMENT.test(word));
+  while (index < words.length - 1 && ASSIGNMENT.test(words[index])) index++;
   if ((words[index]?.split('/').pop() ?? '') === 'env' && index < words.length - 1) {
     index++;
-    skip((word) => ASSIGNMENT.test(word) || (word.startsWith('-') && word !== '-'));
+    while (index < words.length - 1) {
+      const word = words[index];
+      if (ENV_OPTIONS_WITH_VALUE.has(word)) index += 2;
+      else if (ASSIGNMENT.test(word) || (word.startsWith('-') && word !== '-')) index++;
+      else break;
+    }
   }
   return words.slice(index).join(' ');
 }

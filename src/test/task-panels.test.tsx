@@ -280,6 +280,7 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("v", `TAG="hello world" sleep 300`, NOW - 60_000)))?.id).toBe("v");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("env", "env TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("env");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envp", "/usr/bin/env -i TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("envp");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envu", "env -u TAG -C /tmp --unset OTHER sleep 300", NOW - 60_000)))?.id).toBe("envu");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("r", `exec sleep 300 > "/tmp/my log"`, NOW - 60_000)))?.id).toBe("r");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("e", "sleep 300 2>/tmp/my\\ log", NOW - 60_000)))?.id).toBe("e");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(tool("n", { name: "sleep 300", kind: "execute", startedAt: NOW - 60_000 })))?.id).toBe("n");
