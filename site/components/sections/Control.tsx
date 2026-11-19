@@ -6,7 +6,7 @@ export function Control() {
       <div className="lp-wrap lp-row">
         <div className="lp-col" data-reveal="">
           <p className="lp-eyebrow" data-r="">Control</p>
-          <h2 className="lp-h2" data-r="" id="control-title">You approve every step.</h2>
+          <h2 className="lp-h2" data-r="" id="control-title">You decide what an agent may do.</h2>
           <p className="lp-lead" data-r="">
             Permission requests arrive with the agent's own choices. Its plan stays in sight, and every step it took is in its activity.
           </p>

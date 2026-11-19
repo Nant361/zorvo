@@ -26,21 +26,25 @@ export function Delegate() {
                 {" "}
                 write tests for the discount totals
               </span>
-              <span className="flex items-center gap-2 text-fg-muted text-[12px]" data-dlg-status="">
-                <span className="lp-dot lp-pulse bg-status-running" />
-                Codex is working on the task you delegated
-              </span>
-              <span className="lp-card flex flex-col gap-1.5 py-3 px-3.5" data-dlg-report="">
-                <span className="flex items-center gap-2">
-                  <AgentTile agent="Codex" size="small" logo={12} />
-                  <b className="font-medium text-fg">From Codex</b>
+              {/* The status line holds the report's place while Codex works, and goes when the report
+                  arrives, as in the app. */}
+              <span className="lp-stack">
+                <span className="lp-brief self-start flex items-center gap-2 text-fg-muted text-[12px]" data-dlg-status="">
+                  <span className="lp-dot lp-pulse bg-status-running" />
+                  Codex is working on the task you delegated
                 </span>
-                <span>
-                  Added 6 tests in
-                  {" "}
-                  <span className="font-mono text-[12px]">totals.test.ts</span>
-                  {" "}
-                  for percent and fixed codes. All pass.
+                <span className="lp-card flex flex-col gap-1.5 py-3 px-3.5" data-dlg-report="">
+                  <span className="flex items-center gap-2">
+                    <AgentTile agent="Codex" size="small" logo={12} />
+                    <b className="font-medium text-fg">From Codex</b>
+                  </span>
+                  <span>
+                    Added 6 tests in
+                    {" "}
+                    <span className="font-mono text-[12px]">totals.test.ts</span>
+                    {" "}
+                    for percent and fixed codes. All pass.
+                  </span>
                 </span>
               </span>
             </span>
@@ -82,7 +86,7 @@ export function Delegate() {
                   </span>
                   <span className="lp-chip">Sonnet</span>
                   <span className="flex-1" />
-                  <span className="lp-pb" data-dlg-send="">Delegate to Codex</span>
+                  <span className="lp-brief lp-pb" data-dlg-send="">Delegate to Codex</span>
                 </span>
               </span>
             </span>

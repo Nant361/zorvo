@@ -15,13 +15,15 @@ export function SiteFooter({ anchorBase = "" }: { anchorBase?: "" | "/" }) {
           <a className="focus-ring min-h-8" href={`${anchorBase}#delegate`}>Delegate</a>
           <a className="focus-ring min-h-8" href={`${anchorBase}#review`}>Review</a>
           <a className="focus-ring min-h-8" href={`${anchorBase}#features`}>Features</a>
+          <a className="focus-ring min-h-8" href={`${anchorBase}#private`}>Private mode</a>
         </div>
         <div className="flex flex-col">
           <span className="text-fg-subtle pb-1.5">Docs</span>
           <a className="focus-ring min-h-8" href={LINKS.quickstart}>Quickstart</a>
           <a className="focus-ring min-h-8" href={LINKS.installGuide}>Install</a>
           <a className="focus-ring min-h-8" href={LINKS.signingIn}>Signing in</a>
-          <a className="focus-ring min-h-8" href={`${anchorBase}#privacy`}>Privacy</a>
+          <a className="focus-ring min-h-8" href={LINKS.privacyGuide}>Privacy</a>
+          <a className="focus-ring min-h-8" href={LINKS.credits}>Credits terms</a>
         </div>
         <div className="flex flex-col">
           <span className="text-fg-subtle pb-1.5">Project</span>
