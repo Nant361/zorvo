@@ -81,6 +81,11 @@ export const DOCS_NAV: DocsGroup[] = [
         summary: "Which hosts Zorvo contacts, what it never stores, and where your sessions live on disk.",
       },
       {
+        href: "/docs/credits",
+        label: "Credits terms",
+        summary: "Who sells private mode credits, what they cost, and what happens to your payment and your balance.",
+      },
+      {
         href: "/docs/troubleshooting",
         label: "Troubleshooting",
         summary: "What to try when an agent is not installed, needs you to sign in, a turn fails, an agent seems stuck or an update will not install.",
