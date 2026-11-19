@@ -369,8 +369,8 @@ export type ToolDetail =
    * session's transcript tens of megabytes, and the page froze each time it was saved.
    */
   | { kind: 'diff'; path: string; isNewFile: boolean; rows: DiffRow[] }
-  /** A diff too large to keep: the file stays named. */
-  | { kind: 'changed'; path: string };
+  /** A diff too large to keep: the file stays named, and so does whether the tool created it. */
+  | { kind: 'changed'; path: string; isNewFile?: boolean };
 
 /** One stretch of a reply, kept in the order the agent produced it. */
 export type ChatMessagePart =

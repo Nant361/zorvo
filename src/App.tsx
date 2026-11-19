@@ -47,6 +47,7 @@ import { useSecretGuard } from "./hooks/useSecretGuard";
 import { useTurnsEnded } from "./hooks/useTurnsEnded";
 import { usePullRequest } from "./hooks/usePullRequest";
 import { useWorkspacePullRequests } from "./hooks/useWorkspacePullRequests";
+import { createdFilesOf } from "./lib/created-files";
 import { newestSessionInFolder, pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
 import { currentPlan } from "./lib/plan";
 import { useRepoPullRequests } from "./hooks/useRepoPullRequests";
@@ -716,6 +717,10 @@ export default function App() {
   // The pages each session's agent showed; the backend owns them and says when they change.
   const artifacts = useArtifacts(useMemo(() => sessions.map((session) => session.id), [sessions]));
   const sessionArtifacts = useMemo(() => (activeSession ? artifacts.bySession.get(activeSession.id) ?? [] : []), [artifacts.bySession, activeSession]);
+  // The files the agent created in this session, listed in the Output tab under its pages.
+  const activeTranscript = activeSessionId ? transcripts[activeSessionId] : undefined;
+  const activeCwd = activeSession?.cwd;
+  const createdFiles = useMemo(() => createdFilesOf(activeTranscript ?? [], activeCwd), [activeTranscript, activeCwd]);
   const backgroundTasks = useBackgroundTasks({
     sessions,
     transcripts,
@@ -733,7 +738,6 @@ export default function App() {
     hasFolder: Boolean(filesFolder),
     isRepository,
     hasSession: Boolean(activeSession),
-    hasArtifacts: sessionArtifacts.length > 0,
     isPrivate: Boolean(activeSession?.privateMode),
     hasTaskTabs: taskTabs.tabs.length > 0,
   });
@@ -781,7 +785,7 @@ export default function App() {
   // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
   const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
   // The artifact page on screen, for its comments: the Artifacts tab's viewer shows it, expanded or not.
-  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact) : undefined;
+  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact, createdFiles.length) : undefined;
   const viewedVersion = inspector.viewedArtifact?.artifactId === shownArtifact?.id ? inspector.viewedArtifact?.version : null;
   const shownVersion = shownArtifact ? (viewedVersion ?? newestVersion(shownArtifact)) : 0;
   const shownPage =
@@ -2225,7 +2229,7 @@ export default function App() {
               tabs={inspectorTabs}
               width={inspector.width}
               maxWidth={maxInspectorWidth(windowWidth, !isSidebarHidden)}
-              counts={{ changes: inspector.changes.changes?.length, artifacts: sessionArtifacts.length, tasks: taskTabs.tabs.length || undefined }}
+              counts={{ changes: inspector.changes.changes?.length, artifacts: sessionArtifacts.length + createdFiles.length || undefined, tasks: taskTabs.tabs.length || undefined }}
               isViewingFile={inspectorTab === "files" && inspector.viewedFile !== null}
               onSelect={inspector.show}
               onResize={inspector.setWidth}
@@ -2312,11 +2316,24 @@ export default function App() {
                   viewed={inspector.viewedArtifact}
                   onView={inspector.viewArtifact}
                   isExpanded={false}
-                  onToggleExpanded={() => inspector.setArtifactExpanded(true)}
+                  onToggleExpanded={() => {
+                    // A page that opened by itself is pinned when it takes the chat's place: a file the agent
+                    // makes meanwhile would otherwise turn the tab back into a list under the expanded page,
+                    // and comments would lose the page they are on.
+                    if (!inspector.viewedArtifact && shownArtifact) inspector.viewArtifact({ artifactId: shownArtifact.id, version: null });
+                    inspector.setArtifactExpanded(true);
+                  }}
                   onError={reportError}
                   comments={artifactComments}
                   addReview={review.addArtifactReview}
                   cwd={activeSession.cwd}
+                  files={createdFiles}
+                  filesRoot={filesFolder?.path}
+                  agentName={activeAgent?.name}
+                  onOpenFile={(relative) => {
+                    inspector.viewFile(relative);
+                    inspector.show("files");
+                  }}
                 />
               )}
               {inspectorTab === "private" && activeSession?.privateMode && (

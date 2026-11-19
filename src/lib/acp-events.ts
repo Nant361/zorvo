@@ -146,7 +146,7 @@ function toDetails(content: unknown): ToolDetail[] | undefined {
       if (!path || newText === undefined) return [];
       const oldText = str(item.oldText) ?? null;
       if (newText.length + (oldText?.length ?? 0) > MAX_DIFF_TEXT) {
-        return [{ kind: 'changed', path }];
+        return [{ kind: 'changed', path, ...(oldText === null ? { isNewFile: true } : {}) }];
       }
       return [diffDetail(path, oldText, newText)];
     }
