@@ -1,6 +1,6 @@
 # Artifact comments: feedback on a page, sent to the agent
 
-Date: 2026-11-17. Status: design, waiting for review.
+Date: 2026-11-17. Status: built on `feat/artifact-comments`; checked in the real app on 2026-11-19 (see "Real-app check" under Testing).
 
 Builds on `2026-11-16-artifacts-design.md` (the artifact page, its child
 webview, its store). The code needs that work: it branches from
@@ -266,6 +266,33 @@ Send marks both kinds Sent.
   `window.ipc.postMessage` itself while comment mode is off makes nothing,
   and a comment reaches the composer. Nothing in it is timed by a timer in a
   page.
+
+### Real-app check (2026-11-19)
+
+A review build of `feat/artifact-comments`, Codex (codex-acp 2.2.2) showing two
+pages written for the check: one with Tailwind's CDN build, Chart.js and a
+counter button, and one that posts a pick through `window.ipc.postMessage`
+when its button is pressed.
+
+| Check | Result |
+| --- | --- |
+| A page's own pick while comment mode is off | Nothing: the page reported `window.ipc` present and two picks sent; no candidate appeared |
+| Comment mode stops the page's buttons | Pass on both pages: the counter stayed at 0 and the forge button sent nothing, and each click became a `pick-element` candidate |
+| Selecting text, clicking a Chart.js `canvas` | Each made a candidate (`"Annual plan saves 20% comp…"`, `Canvas #chart`) |
+| Numbered marks | 1, 2 and 3 drawn on the button, the text and the chart, under Tailwind's styles |
+| The message | `Add 3 to message` wrote the heading with the version and the absolute path (the file is outside the session's folder) and the three blocks; the rows read In message |
+| Send, then a new version | Codex changed the file and called `show_artifact` again; the viewer moved to Version 2 by itself, the comments read Sent with "Written on Version 1; the page is now Version 2." and **Add again**, and Version 2 drew no marks |
+
+**Found and fixed:** after a pick the page's view kept first responder, so
+the comment typed next went to the page (a space scrolled it) and never
+reached the strip. An accepted pick now makes Zorvo's webview first responder,
+and the candidate box takes focus; checked again on screen, the text went
+straight into the box (`300a19f8`).
+
+**Not a fault:** in a window behind another, WebKit holds back
+`requestAnimationFrame`, so the page's view did not follow the strip's height
+until the window came forward, and then did at once. A real-app check of
+layout needs the window in front.
 
 ## 6. Order of work
 

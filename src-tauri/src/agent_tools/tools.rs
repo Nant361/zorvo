@@ -1,20 +1,23 @@
-//! The five tools an agent can call, their JSON schemas, and the checks on
+//! The seven tools an agent can call, their JSON schemas, and the checks on
 //! their arguments. Only shapes are checked here; what a folder or an agent
 //! name means is decided later, with the webview and the store.
 
 use serde_json::{json, Map, Value};
 
-pub const TOOL_NAMES: [&str; 5] = [
+pub const TOOL_NAMES: [&str; 7] = [
     "list_agents",
     "delegate",
     "start_session",
     "read_session",
     "stop_session",
+    "show_artifact",
+    "artifact_guide",
 ];
 pub const MAX_TEXT_CHARS: usize = 20_000;
 pub const MAX_TITLE_CHARS: usize = 60;
 const MAX_NAME_CHARS: usize = 200;
 const MAX_FOLDER_CHARS: usize = 4096;
+const MAX_PATH_CHARS: usize = 4096;
 
 /// The `tools` array for `tools/list`.
 pub fn tool_list() -> Value {
@@ -81,6 +84,28 @@ pub fn tool_list() -> Value {
                 "required": ["handle"],
                 "additionalProperties": false
             }
+        },
+        {
+            "name": "show_artifact",
+            "description": "Show the user a web page you wrote, beside the chat. Write one self-contained .html file in this folder or the temporary folder, then call this with its path. Calling it again for the same path shows a new version. Scripts may come only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm/, unpkg.com, cdn.tailwindcss.com and code.jquery.com, with an exact version; fonts from Google Fonts; images as data URIs. The page cannot fetch anything or keep data. Call artifact_guide before your first page.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "maxLength": MAX_PATH_CHARS, "description": "The .html file, absolute or relative to this folder." },
+                    "title": { "type": "string", "maxLength": MAX_TITLE_CHARS, "description": "A short name for the page. Needed the first time a path is shown; later it renames." }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "artifact_guide",
+            "description": "How to design a page for show_artifact: colours for light and dark, layout, charts. Read it once before your first page.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
         }
     ])
 }
@@ -92,7 +117,8 @@ pub fn validate(tool: &str, args: &Value) -> Result<Value, String> {
         .as_object()
         .ok_or_else(|| "The arguments must be a JSON object.".to_string())?;
     let allowed: &[&str] = match tool {
-        "list_agents" => &[],
+        "list_agents" | "artifact_guide" => &[],
+        "show_artifact" => &["path", "title"],
         "delegate" => &["agent", "task"],
         "start_session" => &["agent", "brief", "title", "worktree", "folder"],
         "read_session" => &["handle", "max_chars"],
@@ -127,6 +153,10 @@ pub fn validate(tool: &str, args: &Value) -> Result<Value, String> {
             put_max_chars(&mut clean, object)?;
         }
         "stop_session" => put_name(&mut clean, object, "handle", true)?,
+        "show_artifact" => {
+            put_path(&mut clean, object)?;
+            put_title(&mut clean, object)?;
+        }
         _ => {}
     }
     Ok(Value::Object(clean))
@@ -236,6 +266,26 @@ fn put_folder(out: &mut Map<String, Value>, object: &Map<String, Value>) -> Resu
     Ok(())
 }
 
+/// The file an agent wants shown. Only its shape is checked here; where it
+/// may point is decided when it is read.
+fn put_path(out: &mut Map<String, Value>, object: &Map<String, Value>) -> Result<(), String> {
+    let Some(text) = string_of(object, "path", true)? else {
+        return Ok(());
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("path must not be empty.".to_string());
+    }
+    if text.chars().count() > MAX_PATH_CHARS {
+        return Err("path is too long.".to_string());
+    }
+    if text.chars().any(char::is_control) {
+        return Err("path must not contain control characters.".to_string());
+    }
+    out.insert("path".to_string(), json!(text));
+    Ok(())
+}
+
 fn put_max_chars(out: &mut Map<String, Value>, object: &Map<String, Value>) -> Result<(), String> {
     let value = match object.get("max_chars") {
         None | Some(Value::Null) => return Ok(()),
@@ -260,11 +310,96 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lists_exactly_the_five_tools() {
+    fn show_artifact_takes_a_path_and_an_optional_title() {
+        let args = validate(
+            "show_artifact",
+            &json!({"path": " out/report.html ", "title": " Report "}),
+        )
+        .unwrap();
+        assert_eq!(args, json!({"path": "out/report.html", "title": "Report"}));
+        let bare = validate("show_artifact", &json!({"path": "/tmp/a.html"})).unwrap();
+        assert_eq!(bare, json!({"path": "/tmp/a.html"}));
+    }
+
+    #[test]
+    fn show_artifact_needs_a_path() {
+        assert!(validate("show_artifact", &json!({"title": "Report"})).is_err());
+        assert!(validate("show_artifact", &json!({"path": "  "})).is_err());
+        assert!(validate("show_artifact", &json!({"path": 3})).is_err());
+    }
+
+    #[test]
+    fn show_artifact_refuses_an_unknown_argument() {
+        let refused = validate("show_artifact", &json!({"path": "a.html", "html": "<p>"}));
+        assert!(refused
+            .unwrap_err()
+            .contains("show_artifact takes: path, title"));
+    }
+
+    #[test]
+    fn show_artifact_refuses_a_path_over_the_cap_without_repeating_it() {
+        let long = format!("{}.html", "secret-name".repeat(400));
+        let refused = validate("show_artifact", &json!({"path": long})).unwrap_err();
+        assert!(!refused.contains("secret-name"));
+        let control = validate("show_artifact", &json!({"path": "a\u{0}.html"})).unwrap_err();
+        assert!(!control.contains("a\u{0}"));
+    }
+
+    #[test]
+    fn show_artifact_caps_the_title() {
+        let long = "x".repeat(MAX_TITLE_CHARS + 1);
+        assert!(validate("show_artifact", &json!({"path": "a.html", "title": long})).is_err());
+    }
+
+    #[test]
+    fn artifact_guide_takes_no_arguments() {
+        assert_eq!(validate("artifact_guide", &json!({})).unwrap(), json!({}));
+        assert!(validate("artifact_guide", &json!({"topic": "charts"})).is_err());
+    }
+
+    #[test]
+    fn show_artifact_names_every_host_a_page_may_load_from() {
+        let list = tool_list();
+        let description = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "show_artifact")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for host in [
+            "cdnjs.cloudflare.com",
+            "cdn.jsdelivr.net/npm/",
+            "unpkg.com",
+            "cdn.tailwindcss.com",
+            "code.jquery.com",
+            "Google Fonts",
+            "artifact_guide",
+        ] {
+            assert!(description.contains(host), "{host}");
+        }
+    }
+
+    #[test]
+    fn lists_exactly_the_seven_tools() {
         let list = tool_list();
         let tools = list.as_array().unwrap();
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(names, TOOL_NAMES);
+        assert_eq!(
+            names,
+            [
+                "list_agents",
+                "delegate",
+                "start_session",
+                "read_session",
+                "stop_session",
+                "show_artifact",
+                "artifact_guide"
+            ]
+        );
         for tool in tools {
             assert_eq!(tool["inputSchema"]["type"], "object");
             assert_eq!(tool["inputSchema"]["additionalProperties"], false);

@@ -106,13 +106,11 @@ dialog or a toast would overlap the page's box, the child is hidden
 when the overlay closes. The viewer's own version menu, ⋯ menu, export panel
 and delete question all do this.
 
-**Room for comments later.** Comments on a page are a separate spec, after this
-one. They will need a small script of Zorvo's own added to each served page,
-which reports the selected text and the clicked element through a message
-handler given to the child webview for that purpose alone (it carries text,
-never a command). So the handler builds the body it serves in one function
-(today it returns the stored bytes unchanged), and export always writes the
-stored bytes, never the served body.
+**Comments.** Comments on a page are their own spec,
+`2026-11-17-artifact-comments-design.md`. They add a script of Zorvo's own to
+the child webview through `with_initialization_script`, not to the served body,
+and a message handler that carries data only (never a command). The handler
+still serves the stored bytes unchanged, and export always writes them.
 
 A page cannot open a window, download a file, show an `alert`, or keep anything
 between two openings.
@@ -179,6 +177,48 @@ Rust to the main page every 500 ms.
 | Storage | **Pass after a fix** | Without the `sandbox` directive the page's origin was `zorvo-artifact://localhost` and `localStorage` worked. With it the origin is `null` and it throws `SecurityError`. |
 | A page that never yields | **Pass** | The main page answered all 16 pings during 8 s of `while(true){}` in the child. Closing the child and opening another worked. |
 | Moving it | **Partly** | `set_bounds` succeeded and reported the new rectangle. **Not seen on screen**: the spike window was behind another window, so where it draws, how it follows a resize, the native layer over HTML, focus and scrolling are unverified until Task 8 checks them in a build in front. |
+
+**Found in the final review, then measured (2026-11-16):** closing the child
+did not end a looping page. wry keeps the `WKWebView` alive when its own view is
+dropped, so the page's web content process went on at 98% of a core, 16 s after
+the close, until the app quit. WebKit has no public call that ends the process
+of a page that does not yield. The view is therefore ended by sending the
+`WKWebView` `_killWebContentProcess`, only when it answers that selector; with
+it the process was gone within 13 s, the main page kept answering pings, and a
+new page opened. On a macOS where the selector is missing the page is only
+hidden, as before.
+
+**Seen on screen (2026-11-16)**, in a review build with its own identifier and
+seeded pages: the page draws exactly in its box (markers in the page's four
+corners sat on the box's corners); it follows a window resize and Expand /
+Shrink; it scrolls; keyboard focus goes into a field of the page and back to
+the composer; the version menu, the ⋯ menu and the export panel hide it and it
+returns; it is not drawn over Settings or the gallery and returns after them; a
+looping page left Zorvo usable, and going back to the list ended its process.
+Three faults were found and fixed: a new webview flashed white in a dark window
+before the page painted (the view is now made invisible and shown when the page
+has loaded, or after 3 s); the page's square corners covered the sheet's
+rounded bottom corners (the box now ends a panel radius above the sheet's
+edge); and the version menu cut "Version 2" short beside a long date (short
+dates, a wider menu). Not seen: a 2× / 1× display change, the inspector's own
+resize handle (the drag did not take), and a toast over the page. A page's own
+state (a typed field, a scroll position) was lost on Expand and Shrink at
+first, since each made a new view. It is kept now: the one view is shared by
+every box (`claimed` and `live` in `useArtifactView.ts`), a box that leaves
+only gives up its claim, and the view is closed only when no box claimed the
+page by the time the close's turn comes in the queue. The box that arrives
+with the same session, artifact and version moves the view to itself
+(`artifact_view_bounds`). Reload still makes a new view. Seen on screen on
+2026-11-17 with a page Codex wrote: a note typed in the page and its scroll
+position stayed through Expand and then Shrink.
+
+Real agents, same day, review build: Codex (codex-acp 2.2.2) called
+`artifact_guide`, wrote the page to a temporary folder and called
+`show_artifact`; the tab opened by itself, and a second `show_artifact` for
+the same path gave "Version 2 of 2" and a second card. Qwen Code 0.25.2 did
+the same in its Default mode, asking permission for each tool call. Google
+Antigravity could not be tried: the catalog offered it only from 23 November
+(the 7-day rule for a newly listed version).
 
 Also learned: a window behind another has its page timers throttled, so a
 real-app test must not time anything with timers in the page.

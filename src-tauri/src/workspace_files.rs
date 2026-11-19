@@ -7,7 +7,7 @@
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use tauri::State;
 
@@ -39,7 +39,7 @@ fn is_plain_name(path: &str) -> bool {
 /// outside a repository. git's output is read as it comes and git is
 /// stopped at the limit, so a huge repository costs no more than that.
 fn git_files(git: &Path, root: &Path, limit: usize) -> Option<Vec<String>> {
-    let mut child = Command::new(git)
+    let mut child = crate::spawn::command(git)
         .arg("-C")
         .arg(root)
         .args([

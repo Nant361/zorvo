@@ -115,6 +115,7 @@ function setup(overrides: Partial<Env> = {}) {
         stopTurn: (sessionId) => {
           env.stopped.push(sessionId);
         },
+        onArtifactShown: () => undefined,
       };
       return useAgentTools(deps);
     },

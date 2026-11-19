@@ -1,11 +1,13 @@
-> **NEAR HACKATHON: Zorvo Private.** The hackathon work is not on this branch. It lives on
-> [`hackathon/near-credits`](https://github.com/zakyirsyaad/zorvo/tree/hackathon/near-credits): a private
-> mode where Qwen Code runs only on NEAR AI Cloud models inside a TEE, each answer's signature is checked
-> on your Mac, and credits are bought with USDC on NEAR. Start with
-> [that branch's README](https://github.com/zakyirsyaad/zorvo/blob/hackathon/near-credits/README.md): it
-> has the steps to reproduce, a judge code, and what existed before the hackathon. To verify without a
-> Mac: `git clone -b hackathon/near-credits https://github.com/zakyirsyaad/zorvo && cd zorvo && pnpm install`,
-> then follow its "Reproduce" section.
+> **NEAR HACKATHON: Zorvo Private.** Private mode is in this repository: Qwen Code runs only on NEAR AI
+> Cloud models inside a TEE, each answer's signature is checked on your Mac, and credits are bought with
+> USDC on NEAR. Start with [docs/hackathon/README.md](docs/hackathon/README.md): it has the role of NEAR,
+> the steps to reproduce (with or without a Mac), a judge code, and what existed before the hackathon.
+> The submitted state is the tag
+> [`hackathon-submission`](https://github.com/zakyirsyaad/zorvo/tree/hackathon-submission).
+>
+> **Other submission by the author.** One other submission to this hackathon, independent of this one:
+> [Foundling](https://github.com/zakyirsyaad/foundling), a USDC vault on NEAR whose strategy runs sealed
+> in an OutLayer TEE. It shares no code, contract or service with Zorvo Private.
 
 <p align="center">
   <img src="docs/assets/zorvo-icon.png" alt="" width="112" height="112">
@@ -44,9 +46,10 @@
 > it. [Opening it the first time](#open-zorvo-the-first-time) takes one extra
 > step.
 
-**New in 0.9:** a redesigned window with one inspector beside the chat, a
-welcome screen, Settings as a full page, a model per agent when you compare
-them, and Qwen Code's setup inside Zorvo. See the [changelog](CHANGELOG.md).
+**New in 0.12:** Private mode, opt in. Qwen Code can run on NEAR AI models
+inside secure hardware (TEE), each answer's signature is checked on your Mac,
+and you pay with prepaid credits. See [Private mode](#private-mode) and the
+[changelog](CHANGELOG.md).
 
 ## Contents
 
@@ -101,15 +104,41 @@ them, and Qwen Code's setup inside Zorvo. See the [changelog](CHANGELOG.md).
   its turn is going and what it changed; **Pick** keeps one after you confirm.
   The others stop and are archived, and their worktrees stay.
 
+### Private mode
+
+Private mode is off until you turn it on, and works with Qwen Code.
+
+- **Models inside secure hardware.** Turn on the **Private** chip of a Qwen
+  Code draft and the session runs only on NEAR AI Cloud models that run in a
+  TEE. A private session never continues on another provider.
+- **Checked answers.** Each private reply carries a badge saying whether NEAR
+  AI signed every model call behind it, with a link to NEAR AI's Verification
+  Center for the hardware proof, which Zorvo does not check itself.
+- **Prepaid credits, no account.** Top up in **Settings → Private mode** with
+  USDC through PingPay, in your browser. The balance belongs to this Mac, and
+  a recovery code moves it to another one. You can also use your own NEAR AI
+  key instead.
+- **Limits you set.** A draft can cap what its session may spend, and a
+  low balance is shown before it runs out.
+- **Run by the maintainer.** The credits server is a small service the
+  maintainer runs; it never sees a prompt or an answer. Buy small amounts: it
+  is new, and it can be out of service.
+
 ### Stay in control
 
 - **Approve what the agent does.** Permission requests appear in the chat with
   the agent's own choices, and every new session starts in the safest mode its
   agent offers.
+- **See what the agent made, as a page.** An agent can show you a report, a
+  diagram or a small dashboard as a web page beside the chat. Ask for a change
+  and you get a new version; older versions stay, **Export** saves the page as
+  one HTML file, and **Artifacts** in the sidebar lists the pages of every
+  session.
 - **Reply to part of a reply.** Select text in the chat to copy it, or press
   **Reply** to quote it in your next message.
 - **One inspector beside the chat.** The top bar's **Inspector** button opens a
-  panel with four tabs: Changes, Activity, Files and Terminal. Drag its edge to
+  panel with four tabs: Changes, Activity, Files and Terminal, and a fifth,
+  Artifacts, once an agent has shown you a page. Drag its edge to
   resize it; Zorvo remembers the width.
 - **See what an agent did.** The Activity tab lists, turn by turn, the files it
   reported, the commands it ran and the permissions you answered, and shows
@@ -175,9 +204,11 @@ sooner, and never one the registry has withdrawn.
 ## Requirements
 
 - **A Mac** with Apple Silicon or Intel.
-- **Node.js 22 or newer** for the agents that run with `npx` (Claude Code,
-  Codex, Qwen Code and many others). If yours is missing or older, Zorvo
-  installs its own when you install such an agent.
+- **Node.js 22 or newer** for the agents that come as npm packages (Claude
+  Code, Codex, Qwen Code and many others). If yours is missing or older, Zorvo
+  installs its own when you install such an agent. Zorvo installs the agent's
+  package into its own folder with `npm` and starts it from there, so starting
+  a session downloads nothing.
 - **An account with at least one agent.** Each agent signs in with its own
   tools; Zorvo never asks for your API keys.
 
@@ -294,7 +325,24 @@ before it edits files or runs commands. Pick another mode in the composer.
 
 - **Your keys stay with the agents.** Zorvo never asks for or stores API keys
   or tokens. Agents sign in with their own tools, and pull request data comes
-  from your own `gh` login.
+  from your own `gh` login. The one exception is Private mode, which you turn
+  on yourself: Zorvo then keeps this Mac's credits secret, the NEAR AI key
+  its private Qwen Code sessions use, and a capped session's own key in your
+  macOS Keychain. If you paste your own NEAR AI key in Settings, Zorvo keeps
+  that in the Keychain too, after NEAR AI has checked it. A key never enters
+  the agent: each private launch gets a one-time token for a loopback proxy in
+  Zorvo's backend, which adds the key and forwards the agent's model requests
+  to NEAR AI.
+- **Private sessions get a small local MCP server.** It ships in Zorvo's app
+  bundle and answers the agent's `credits_balance` and `private_models` calls
+  by reading Zorvo's loopback proxy with that session's one-time token. It
+  never sees the NEAR AI key or this Mac's credits secret, and it contacts no
+  host of its own.
+- **A local secret check before private messages.** When you send in a private
+  session, Zorvo looks for keys and passwords in the message and its attached
+  files on this Mac. Nothing goes out until you choose Send anyway or Edit
+  message, and a match is never stored. Settings → Private mode turns the
+  check off.
 - **GitHub stays in your `gh`.** Zorvo asks your `gh` whether you are signed in
   to github.com and reads only your login and name, to show them in the sidebar
   and in Settings. It stores neither, never reads or keeps a token, and
@@ -310,6 +358,17 @@ before it edits files or runs commands. Pick another mode in the composer.
   brief it writes; in another folder Zorvo knows, that asks every time and is
   allowed once, never in advance. You can turn all of this off in
   **Settings → Agents**.
+- **A page an agent shows you is kept apart.** An agent can make a web page
+  and show it in the **Artifacts** tab. The page runs in a part of the window
+  of its own: it cannot call Zorvo, read your files, keep data, or open any
+  address but its own. It may load scripts from `cdnjs.cloudflare.com`,
+  `cdn.jsdelivr.net`, `unpkg.com`, `cdn.tailwindcss.com` and `code.jquery.com`
+  and fonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`),
+  and only when the page asks for them; it cannot send a request anywhere
+  else. Those hosts see that a file was asked for, as any website's would.
+  Zorvo's own interface still makes no request at all. Pages are stored on
+  this Mac and deleted with their session. A page you **Export** is an
+  ordinary HTML file: opened in a browser, it has none of these limits.
 - **No telemetry.** Zorvo sends nothing about you or your work anywhere.
 - **Only a few hosts, all named.** Zorvo itself contacts only:
   - the ACP registry (`cdn.agentclientprotocol.com`), to list agents, their
@@ -320,6 +379,16 @@ before it edits files or runs commands. Pick another mode in the composer.
     missing or older than 22;
   - `uv`'s releases on GitHub, when you install an agent that runs with `uvx`
     and you have no `uvx`;
+  - the Zorvo Credits server (`zorvo-credits-server.zkyxentertain.workers.dev`),
+    only for Private mode: once you open Settings →
+    Private mode or turn on a draft's Private chip, and then at start to read
+    your balance and to follow a top-up still waiting from before. It sees this
+    Mac's credits, never your prompts or code;
+  - NEAR AI Cloud (`cloud-api.near.ai`), only while a private session runs: the
+    loopback proxy forwards the agent's model requests there with the key.
+    Prompts go straight to NEAR AI; the Credits server never sees them. At a
+    turn's end Zorvo also asks NEAR AI what that turn's calls cost, with the
+    session's key; when billing cannot answer, it estimates from token counts;
   - this repository's releases on GitHub, to ask whether a newer Zorvo exists
     (`github.com/zakyirsyaad/zorvo`, shortly after Zorvo starts, then
     about once a day) and, when you click **Update & restart**, to download it
@@ -327,14 +396,19 @@ before it edits files or runs commands. Pick another mode in the composer.
     today `release-assets.githubusercontent.com`. The check sends no
     information about you or your work.
 
-  No agent, runtime or Zorvo update downloads until you click **Install** or
-  **Update & restart**. Agent and runtime downloads are checked against a
-  SHA-256 hash pinned in advance. A Zorvo update must come from this
+  No agent, runtime or Zorvo update downloads until you click **Install**,
+  **Update** or **Update & restart**, with one exception: when Zorvo opens, an
+  agent you have used (it has a session, is your default, or was seen signed
+  in) whose npm package is not in Zorvo's folder yet is installed without a
+  click, once (this is how agents from before this version move over). An agent
+  you never used is not downloaded until you click **Install**. Runtime and binary agent downloads are checked against a SHA-256
+  hash pinned in advance; an agent that comes as an npm package is installed by
+  `npm` at the exact version the registry pins, with npm's own integrity check. A Zorvo update must come from this
   repository's releases and is installed only if its signature matches the key
   built into Zorvo.
 
-  Your agents, and the `npm`, `npx` and `uvx` they run with, make their own
-  requests to their own services, and so does your `gh`, which Zorvo runs to
+  Your agents, the `npm` that installs them and the `uvx` some run with, make
+  their own requests to their own services, and so does your `gh`, which Zorvo runs to
   read your pull requests and your GitHub sign-in.
 - **Your data stays on your Mac.** Sessions and transcripts are stored in
   `~/Library/Application Support/xyz.zorvo.desktop/`, and session worktrees in

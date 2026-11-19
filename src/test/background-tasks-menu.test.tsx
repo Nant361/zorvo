@@ -95,10 +95,10 @@ describe("BackgroundTasksMenu", () => {
     expect(title.parentElement?.textContent).toBe("Background tasks2 running");
     const rows = within(dialog.getByRole("list", { name: "Running tasks" })).getAllByRole("listitem");
     expect(within(rows[0]).getByText("pnpm test:unit").classList.contains("font-mono")).toBe(true);
-    expect(within(rows[0]).queryByRole("button", { name: /^Open/ })).toBeNull();
+    expect(within(rows[0]).getByRole("button", { name: "Open pnpm test:unit" })).toBeTruthy();
     expect(within(rows[1]).getByText("Explore the migration").classList.contains("font-mono")).toBe(false);
     expect(within(rows[1]).getByRole("button", { name: "Open Explore the migration" })).toBeTruthy();
-    expect(dialog.getByText(/^Tasks keep running when you switch sessions\. Stop ends the process\.$/)).toBeTruthy();
+    expect(dialog.getByText(/^Tasks keep running when you switch sessions\. Open shows a task beside its chat\. Stop ends the process\.$/)).toBeTruthy();
   });
 
   it("marks the chip with a spinning arc, not the plan's checklist", () => {
@@ -188,6 +188,22 @@ describe("BackgroundTasksMenu", () => {
   it("runs no timer while closed", () => {
     setup({ isOpen: false });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("offers Open on a shell command too", () => {
+    const { props } = setup({ tasks: [devServer] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open npm run dev" }));
+
+    expect(props.onOpenTask).toHaveBeenCalledWith(devServer);
+  });
+
+  it("says what Open and Stop do", () => {
+    setup();
+
+    expect(
+      screen.getByText("Tasks keep running when you switch sessions. Open shows a task beside its chat. Stop ends the process."),
+    ).toBeTruthy();
   });
 
   it("opens a task and closes the menu", () => {

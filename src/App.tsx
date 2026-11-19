@@ -12,12 +12,23 @@ import { RemovedAgentPanel } from "./components/RemovedAgentPanel";
 import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
+import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
+import { ArtifactGallery } from "./components/artifacts/ArtifactGallery";
+import { useArtifactComments, useArtifactCommentSweep } from "./hooks/useArtifactComments";
+import { useArtifacts } from "./hooks/useArtifacts";
+import { useArtifactOpening } from "./hooks/useArtifactOpening";
+import { galleryRows, hasVersion, newestVersion, shownArtifactOf } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
 import { CompareRunPanel } from "./components/compare/CompareRunPanel";
 import { FailedTurnBanner } from "./components/FailedTurnBanner";
 import { SignInLayer } from "./components/SignInLayer";
+import { RecoveryCodeLayer } from "./components/private/RecoveryCodeLayer";
+import { SecretGuardDialog } from "./components/private/SecretGuardDialog";
+import { PrivateCreditsOutLayer } from "./components/private/PrivateCreditsOut";
+import { PrivateInspector } from "./components/private/PrivateInspector";
+import { PrivateLowBalanceRow } from "./components/private/PrivateLowBalanceRow";
 import { AgentInstallPanel } from "./components/AgentInstallPanel";
 import { installPanelAgentOf } from "./lib/install-panel";
 import { NewSessionBelow, NewSessionHeading } from "./components/workspace/NewSessionView";
@@ -31,6 +42,8 @@ import { Inspector } from "./components/inspector/Inspector";
 import { maxInspectorWidth, offeredTabs } from "./lib/inspector";
 import { useReviewComments } from "./hooks/useReviewComments";
 import { useReviewWiring } from "./hooks/useReviewWiring";
+import type { ReviewSlot } from "./hooks/useReviewMessage";
+import { useSecretGuard } from "./hooks/useSecretGuard";
 import { useTurnsEnded } from "./hooks/useTurnsEnded";
 import { usePullRequest } from "./hooks/usePullRequest";
 import { currentPlan } from "./lib/plan";
@@ -63,8 +76,23 @@ import {
 import { useAppearance } from "./hooks/useAppearance";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useBackgroundTasks } from "./hooks/useBackgroundTasks";
+import { useSessionTaskTabs } from "./hooks/useSessionTaskTabs";
+import type { TaskTab } from "./hooks/useTaskTabs";
+import { TasksPanel } from "./components/tasks/TasksPanel";
+import { ShellTaskRows } from "./components/chat/TaskRow";
 import { useTranscripts } from "./hooks/useTranscripts";
+import { usePrivateCreditsRefresh } from "./hooks/usePrivateCreditsRefresh";
+import { usePrivateTopupRequests } from "./hooks/usePrivateTopupRequests";
+import { PrivateTopupRequestCard } from "./components/private/PrivateTopupRequestCard";
+import { TopupProgress } from "./components/private/TopupProgress";
+import { isTopupActive } from "./lib/private-flow";
+import { usePrivateLowBalanceNotice } from "./hooks/usePrivateLowBalanceNotice";
+import { usePrivateUsage } from "./hooks/usePrivateUsage";
+import { usePrivateVerification } from "./hooks/usePrivateVerification";
+import { actionError, lowBalanceNote } from "./lib/private-credits";
 import { useAgentProfiles, useSuggestedFolders } from "./hooks/useDiscovery";
+import { useAutoInstall } from "./hooks/useAutoInstall";
+import { usedAgentIds } from "./lib/agent-catalog";
 import { useDraftInstall } from "./hooks/useDraftInstall";
 import { useWorkspaceSelection } from "./hooks/useWorkspaceSelection";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding";
@@ -86,6 +114,7 @@ import { AgentsMenu } from "./components/sidebar/AgentsMenu";
 import { useNavigationHistory } from "./hooks/useNavigationHistory";
 import { useUserProfile } from "./hooks/useUserProfile";
 import { useGithubConnection } from "./hooks/useGithubConnection";
+import { usePrivateContinue, usePrivateWiring } from "./hooks/usePrivateWiring";
 import { useWorkspaceDetails } from "./hooks/useWorkspaceDetails";
 import { useBranchPicker } from "./hooks/useBranchPicker";
 import { usePopoutHost } from "./hooks/usePopoutHost";
@@ -143,7 +172,7 @@ import {
   type AgentOptions,
   type ProbedOptions,
 } from "./lib/acp-draft";
-import type { AgentProfile, ReviewComment, Session, SessionWorktree, Settings } from "./types";
+import type { AgentProfile, ArtifactCard, ArtifactComment, ReviewComment, Session, SessionWorktree, Settings } from "./types";
 import { replyBlockedReason } from "./lib/reply-quote";
 
 const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folder chip by the message box.";
@@ -152,7 +181,7 @@ const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folde
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 export default function App() {
-  const { notice, setNotice } = useNotice();
+  const { notice, setNotice, offerNotice } = useNotice();
   /** The error each session's last turn failed with, shown with a way to try again while that session is open. */
   const [failedTurns, setFailedTurns] = useState<Readonly<Record<string, string>>>({});
   const clearFailedTurn = (sessionId: string) =>
@@ -171,6 +200,7 @@ export default function App() {
   /** Whether the next new session runs in its own worktree (a git repository only). */
   const [isWorktreeOn, setIsWorktreeOn] = useState(false);
   const [isCreatingWorktree, setIsCreatingWorktree] = useState(false);
+  const [isRaisingPrivateCap, setIsRaisingPrivateCap] = useState(false);
   /** Bumped after each of the active agent's turns, so its folder's branch is read again. */
   const [branchCheck, setBranchCheck] = useState(0);
   const [acpChoices, setAcpChoices] = useState<AcpChoices>(NO_CHOICES);
@@ -178,6 +208,8 @@ export default function App() {
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsPage = useSettingsPage(settingsButtonRef);
   const [isSidebarHidden, setSidebarHidden] = useState(false);
+  // The gallery of every session's artifacts takes the main sheet's place; picking anything in the sidebar leaves it.
+  const [isGalleryOpen, setGalleryOpen] = useState(false);
   const windowWidth = useWindowWidth();
   const composerRef = useRef<ComposerHandle>(null);
   // The top bar's Inspector button: focus goes back to it when the inspector closes from its own button.
@@ -195,6 +227,19 @@ export default function App() {
   const { state, isLoaded, updateState, getState, saveNow } = usePersistedState(reportError);
   useAppearance(state.settings.appearance, isLoaded, reportError);
   const { transcripts, transcriptStatus, ensureLoaded, updateMessages, saveSoon, removeTranscript, flush: flushTranscripts } = useTranscripts(reportError);
+  const updateSessionUsage = useCallback(
+    (sessionId: string, privateUsage: NonNullable<Session["privateUsage"]>) => {
+      updateState((prev) => patchSessionIn(prev, sessionId, { privateUsage }));
+    },
+    [updateState],
+  );
+  const privateUsage = usePrivateUsage({ sessions: state.sessions, updateSession: updateSessionUsage });
+  const privateVerification = usePrivateVerification({
+    updateMessages,
+    saveSoon,
+    isKnownSession: (id) => state.sessions.some((session) => session.id === id),
+    onCheck: privateUsage.refresh,
+  });
   const {
     agents,
     isLoaded: areAgentsLoaded,
@@ -245,6 +290,12 @@ export default function App() {
   const isActiveRunning = activeSession?.status === "running";
   // Only the agents in use are offered: the defaults and installed ones.
   const agentsInUse = agents.filter((agent) => isInUse(agent, state.settings));
+  // After an update of Zorvo, the npm packages of the agents you have used are installed without a click.
+  useAutoInstall({
+    agentsInUse,
+    usedIds: usedAgentIds(state.settings, state.sessions),
+    isReady: isLoaded && areAgentsLoaded && state.settings.onboardingCompleted,
+  });
   // A saved session of a removed agent stays readable; once it stops, its composer offers to add the agent again.
   const activeAgentRemoved = removedAgentNameFor(activeSession, agents, state.settings);
   // Hidden, not unmounted: a look at either must not cost the message being written.
@@ -295,6 +346,67 @@ export default function App() {
     onSingle: setPickedAgentId,
   });
   const newSessionAgent = agents.find((a) => a.id === (compare.agentIds[0] ?? primaryAgentId));
+  const {
+    credits: privateCredits,
+    recoveryDialog,
+    draft: privateDraft,
+    isPrivateLaunch,
+    onCreditsOut,
+    refusesSend,
+  } = usePrivateWiring({
+    isTopupShown: settingsPage.section === "private",
+    setNotice,
+    offerNotice,
+    draftAgentIds: isNewSessionDraft && newSessionAgent ? (compare.isCompare ? compare.agentIds : [newSessionAgent.id]) : [],
+    draftAgentName: isNewSessionDraft ? newSessionAgent?.name : undefined,
+    paymentSource: state.settings.paymentSource ?? "credits",
+    activeSession,
+  });
+  const topupRequests = usePrivateTopupRequests();
+  const [chatTopupSession, setChatTopupSession] = useState<string | null>(null);
+  const [isAnsweringTopup, setIsAnsweringTopup] = useState(false);
+  /** The user's answer to an agent's ask; an approval starts the existing checkout flow. */
+  const answerTopupRequest = useCallback(
+    async (sessionId: string, requestId: string, approve: boolean) => {
+      const request = topupRequests.requests[sessionId];
+      if (!request || request.requestId !== requestId || isAnsweringTopup) return;
+      setIsAnsweringTopup(true);
+      const ok = await topupRequests.answer(sessionId, requestId, approve);
+      setIsAnsweringTopup(false);
+      if (!ok) {
+        setNotice("That top-up request is no longer waiting.", "warning");
+        return;
+      }
+      if (approve) {
+        setChatTopupSession(sessionId);
+        void privateCredits.buy(request.usd);
+      }
+    },
+    [isAnsweringTopup, privateCredits, setNotice, topupRequests],
+  );
+  const isPrivateSessionId = useCallback(
+    (sessionId: string) => sessions.some((session) => session.id === sessionId && session.privateMode !== undefined),
+    [sessions],
+  );
+  // A private turn's model calls change the balance: read it again, at most once a minute across sessions.
+  const refreshPrivateCredits = usePrivateCreditsRefresh(privateCredits.refresh, isPrivateSessionId);
+  const verifyPrivateTurn = privateVerification.verifyTurn;
+  const onPrivateTurnEnd = useCallback(
+    (sessionId: string) => {
+      verifyPrivateTurn(sessionId);
+      refreshPrivateCredits(sessionId);
+    },
+    [verifyPrivateTurn, refreshPrivateCredits],
+  );
+  // A private session's low-balance row needs its model's price, so the catalog loads when it opens.
+  const activePrivateModelId = activeSession?.privateMode?.modelId;
+  const privateModels = privateCredits.models;
+  const loadPrivateCatalog = privateCredits.loadCatalog;
+  useEffect(() => {
+    if (activePrivateModelId !== undefined && privateModels === null) {
+      void loadPrivateCatalog();
+    }
+  }, [activePrivateModelId, privateModels, loadPrivateCatalog]);
   // Several agents each run in their own worktree, so Worktree is on whatever it was set to.
   const isWorktreeActive = canUseWorktree && (isWorktreeOn || compare.isCompare);
   const branchPicker = useBranchPicker({
@@ -358,6 +470,19 @@ export default function App() {
       })),
     [updateState],
   );
+  const updateArtifactComments = useCallback(
+    (sessionId: string, change: (prev: ArtifactComment[]) => ArtifactComment[]) =>
+      updateState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) => {
+          if (s.id !== sessionId) return s;
+          const current = s.artifactComments ?? [];
+          const next = change(current);
+          return next === current ? s : { ...s, artifactComments: next };
+        }),
+      })),
+    [updateState],
+  );
   const reviewComments = useReviewComments(activeSession?.id, activeSession?.reviewComments, updateReviewComments);
   const unsentCommentCount = reviewComments.comments.filter((comment) => comment.sentAt === undefined).length;
 
@@ -369,6 +494,8 @@ export default function App() {
 
   /** Keeps a model or effort pick (as the agent settled it), so the agent's next session starts with it too. */
   const rememberPick = (profileId: string, configId: string, value: string, reported?: AcpConfigOption[]) => {
+    // A private session's or draft's options are its TEE model's: they never become the agent's for ordinary drafts.
+    if (isPrivateLaunch) return;
     const preferredConfig = rememberedChoice(state.agentOptions?.[profileId], configId, value, reported);
     if (!preferredConfig) return;
     // The lists on offer follow too (an effort list depends on its model), so the next draft offers the same.
@@ -376,8 +503,9 @@ export default function App() {
   };
 
   /** Keeps a model pick among an agent's `models`, so the agent's next session starts with it too. */
-  const rememberModelPick = (profileId: string, preferredModelId: string) =>
-    rememberAgentOptions(profileId, { preferredModelId });
+  const rememberModelPick = (profileId: string, preferredModelId: string) => {
+    if (!isPrivateLaunch) rememberAgentOptions(profileId, { preferredModelId });
+  };
 
   const isComposerHiddenRef = useLatest(isComposerHidden);
   /** Whatever its status: a composer on its way to hiding would carry a message into the next session on screen. */
@@ -401,6 +529,34 @@ export default function App() {
     activeSessionId,
     sessionIds: sessions.map((s) => s.id),
     isHeldFor: isMessageHeldFor,
+  });
+  /** Puts a held message's review comments back after its text returns, so Send still marks them. */
+  const rearmReviewRef = useRef<((slot: ReviewSlot) => void) | null>(null);
+  /** Edit message: back into the composer of the session it was written for, never another one's. */
+  const editSecretMessage = useCallback(
+    (
+      sessionId: string | undefined,
+      message: { text: string; attachments?: readonly string[] },
+      reviewSlot?: ReviewSlot,
+    ) => {
+      if (sessionId === undefined) {
+        // A draft has no review comments: restore into the draft's composer only.
+        composerRef.current?.restore(message.text, message.attachments);
+        return;
+      }
+      giveBackMessage(sessionId, message.text, message.attachments ?? []);
+      if (reviewSlot?.sessionId === sessionId) rearmReviewRef.current?.(reviewSlot);
+      if (sessionId !== activeSessionId) {
+        setNotice("Your message is back in that session's composer in the main window.");
+      }
+    },
+    [activeSessionId, giveBackMessage, setNotice],
+  );
+  const secretGuard = useSecretGuard({
+    isEnabled: isPrivateLaunch && state.settings.secretGuard !== false,
+    root: activeSession?.cwd ?? activeWorkspacePath,
+    agentName: activeAgent?.name ?? newSessionAgent?.name ?? "The agent",
+    onEdit: editSecretMessage,
   });
   // Read when an agent answers, seconds after the closure that waits for it was made.
   const activeSessionIdRef = useLatest(activeSessionId);
@@ -456,7 +612,7 @@ export default function App() {
   // A draft asks its ACP agent what it offers, and whether it needs a sign-in, before the first message.
   const agentCheck = useDraftAgentCheck({
     // Several agents are not asked: nothing starts until Send, and the chips they feed are hidden.
-    agent: isActiveRunning || !isDraftAgentReady || compare.isCompare ? undefined : draftAgent,
+    agent: isActiveRunning || !isDraftAgentReady || compare.isCompare || isPrivateLaunch ? undefined : draftAgent,
     cwd: shownFolderPath ?? undefined,
     agentOptions: state.agentOptions,
     rememberProbed,
@@ -466,6 +622,7 @@ export default function App() {
   });
   // Its sign-in panel is open (and not yet done): a message would only be refused.
   const draftNeedsSignIn =
+    !isPrivateLaunch &&
     draftAgent !== undefined &&
     signIn.auth.authRequest?.profileId === draftAgent.id &&
     signIn.auth.authRequest.status !== "signed-in";
@@ -494,6 +651,11 @@ export default function App() {
       error ? setFailedTurns((prev) => ({ ...prev, [sessionId]: error })) : clearFailedTurn(sessionId),
     // Read when a retry runs, long after the render that built the engine: the latest hook decides.
     promptBlockedReason: (sessionId) => delegationBlockedRef.current(sessionId),
+    // An own-key session's refusal is about the user's NEAR AI key, not about Zorvo's balance.
+    onPrivateCreditsOut: (sessionId, reason) =>
+      onCreditsOut(sessionId, reason, sessions.find((s) => s.id === sessionId)?.privateMode?.ownKey === true),
+    onPrivateTurnEnd,
+    giveBack: (sessionId, message) => giveBackMessage(sessionId, message.text, message.attachments),
   });
   // The one instance of Add, Update and Remove: Settings, saved sessions of a removed agent and popouts use it.
   const catalogActions = useAgentCatalogActions({
@@ -547,7 +709,30 @@ export default function App() {
   const isDraggingFiles = useFileDrop(handleDroppedFiles, reportError);
 
   const turnsEnded = useTurnsEnded(Boolean(activeSessionId) && isSessionBusy(activeSessionId));
-  const inspectorTabs = offeredTabs({ hasFolder: Boolean(filesFolder), isRepository, hasSession: Boolean(activeSession) });
+  // The pages each session's agent showed; the backend owns them and says when they change.
+  const artifacts = useArtifacts(useMemo(() => sessions.map((session) => session.id), [sessions]));
+  const sessionArtifacts = useMemo(() => (activeSession ? artifacts.bySession.get(activeSession.id) ?? [] : []), [artifacts.bySession, activeSession]);
+  const backgroundTasks = useBackgroundTasks({
+    sessions,
+    transcripts,
+    isBusy: acp.isBusy,
+    busySince: acp.busySinceOf,
+    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
+    // These three are declared further down and only ever called from a click.
+    onOpenSession: (id) => handleSelectSession(id),
+    onOpenTask: (id, tab) => openTask(id, tab),
+    stopAgent: (id) => handleInterrupt(id),
+    onError: reportError,
+  });
+  const taskTabs = useSessionTaskTabs({ sessionId: activeSessionId ?? null, transcripts, tasks: backgroundTasks.tasks });
+  const inspectorTabs = offeredTabs({
+    hasFolder: Boolean(filesFolder),
+    isRepository,
+    hasSession: Boolean(activeSession),
+    hasArtifacts: sessionArtifacts.length > 0,
+    isPrivate: Boolean(activeSession?.privateMode),
+    hasTaskTabs: taskTabs.tabs.length > 0,
+  });
   const inspector = useInspector(filesFolder?.path, isRepository, turnsEnded, reportError, {
     isSidebarShown: !isSidebarHidden,
     offered: inspectorTabs,
@@ -559,10 +744,66 @@ export default function App() {
       if (tab === "terminal" && filesFolder) terminalDrawer.ensureShell(filesFolder.path);
     },
   });
+  const onArtifactShown = useArtifactOpening({
+    activeSessionId: activeSession?.id ?? null,
+    viewed: inspector.viewedArtifact,
+    showTab: () => inspector.show("artifacts"),
+    view: inspector.viewArtifact,
+  });
+  const gallery = useMemo(
+    () => galleryRows(sessions, artifacts.bySession, (profileId) => agentNameOr(agents.find((agent) => agent.id === profileId))),
+    [sessions, artifacts.bySession, agents],
+  );
+  // The last artifact may go while the gallery is open: then there is nothing to show, and the chat is back.
+  const isGalleryShown = isGalleryOpen && gallery.length > 0;
+  const openFromGallery = (sessionId: string, artifactId: string) => {
+    handleSelectSession(sessionId);
+    // For the session about to show, whose id is its view: the one on screen now may be another.
+    inspector.viewArtifact({ artifactId, version: null }, sessionId);
+    inspector.show("artifacts");
+  };
+  const artifactIds = useMemo(() => new Set(sessionArtifacts.map((artifact) => artifact.id)), [sessionArtifacts]);
+  /** A chat card's Open: the version it marks, in the Artifacts tab (the newest is followed, not pinned). */
+  const openArtifactCard = (card: ArtifactCard) => {
+    const artifact = sessionArtifacts.find((candidate) => candidate.id === card.artifactId);
+    if (!artifact) return;
+    inspector.viewArtifact({ artifactId: card.artifactId, version: card.version === newestVersion(artifact) ? null : card.version });
+    inspector.show("artifacts");
+  };
   // Memoized: the stats object only changes when they are read again.
   const fileMarkers = useMemo(() => markersOf(inspector.headStats, inspector.filesPrefix), [inspector.headStats, inspector.filesPrefix]);
   // A tab that no longer applies (another folder, a draft) does not show.
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
+  // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
+  const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
+  // The artifact page on screen, for its comments: the Artifacts tab's viewer shows it, expanded or not.
+  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact) : undefined;
+  const viewedVersion = inspector.viewedArtifact?.artifactId === shownArtifact?.id ? inspector.viewedArtifact?.version : null;
+  const shownVersion = shownArtifact ? (viewedVersion ?? newestVersion(shownArtifact)) : 0;
+  const shownPage =
+    activeSession && shownArtifact && hasVersion(shownArtifact, shownVersion)
+      ? { sessionId: activeSession.id, artifactId: shownArtifact.id, version: shownVersion }
+      : null;
+  // The review wiring is built further down; its `forget` reaches the comments through this ref.
+  const forgetReviewRef = useRef<((ids: readonly string[]) => void) | null>(null);
+  const forgetInMessage = useCallback((ids: readonly string[]) => forgetReviewRef.current?.(ids), []);
+  const artifactComments = useArtifactComments({
+    sessionId: activeSession?.id,
+    comments: activeSession?.artifactComments,
+    update: updateArtifactComments,
+    shownPage,
+    forget: forgetInMessage,
+    onError: reportError,
+  });
+  useArtifactCommentSweep(sessions, artifacts.bySession, artifacts.readSessions, updateArtifactComments, forgetInMessage);
+  /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
+  const openTask = (sessionId: string, tab: TaskTab) => {
+    taskTabs.open(sessionId, tab);
+    inspector.show("tasks");
+  };
+  const openTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "subagent" ? taskTabs.selected.toolId : undefined;
+  const openShellTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "shell" ? taskTabs.selected.taskId : undefined;
+  const sessionShellTasks = backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId);
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -622,6 +863,7 @@ export default function App() {
     updateMessages,
     onAttention: (sessionId, reason) => notifyAttention(sessionId, reason),
     onNotice: (message) => setNotice(message),
+    onArtifactShown,
     messagesOf: async (sessionId) => {
       const live = transcripts[sessionId] ?? [];
       if (transcriptStatus[sessionId] === "ready") return live;
@@ -675,6 +917,11 @@ export default function App() {
       return;
     }
     rememberFolder(activeWorkspace);
+    // Read now: the draft, and its Private chip with it, is gone once the session starts.
+    const { privateMode } = privateDraft;
+    const sessionPrivateMode = privateMode
+      ? { ...privateMode, ...(state.settings.paymentSource === "ownKey" ? { ownKey: true } : {}) }
+      : undefined;
     const name = first ? titleFor(first) : nextSessionName(sessions);
     let worktree: SessionWorktree | null = null;
     let cwd = activeWorkspace.path;
@@ -707,7 +954,7 @@ export default function App() {
     }
     setPickedAgentId(null);
     compare.reset();
-    startSession({ agent: newSessionAgent, cwd, name, worktree }, message);
+    startSession({ agent: newSessionAgent, cwd, name, worktree, privateMode: sessionPrivateMode }, message);
     // The base was this session's: the next draft starts from the folder's own branch.
     if (worktree) branchPicker.reset();
   };
@@ -723,6 +970,7 @@ export default function App() {
    * the composer, and the agent starts with the first message.
    */
   const openNewSession = (path?: string, agentId?: string, options?: OpenNewSessionOptions) => {
+    setGalleryOpen(false);
     if (path) chooseFolder(path);
     setPickedAgentId(agentId ?? null);
     compare.reset();
@@ -743,7 +991,82 @@ export default function App() {
     onNotice: setNotice,
   });
 
+  const { creditsOutReason, creditsOutNote, continueAgents, continueWithAgent } = usePrivateContinue({
+    credits: privateCredits,
+    activeSession,
+    agents,
+    agentsInUse,
+    transcripts,
+    agentOptions: state.agentOptions,
+    openNewSession,
+    forkSession,
+  });
+
+  const handleRaisePrivateCap = async () => {
+    const session = activeSession;
+    const cap = session?.privateMode?.sessionCap;
+    if (!session?.privateMode || cap === undefined || isRaisingPrivateCap) return;
+    setIsRaisingPrivateCap(true);
+    try {
+      const raised = await invoke<number>("private_raise_session_cap", {
+        sessionId: session.id,
+        credits: cap * 2,
+      });
+      patchSession(session.id, {
+        privateMode: { ...session.privateMode, sessionCap: raised },
+      });
+      privateCredits.clearCreditsOut(session.id);
+    } catch (error) {
+      setNotice(actionError("raise", String(error)), "warning");
+    } finally {
+      setIsRaisingPrivateCap(false);
+    }
+  };
+
+  /** Starts a fresh private session from this one, with no cap. */
+  const handleNewPrivateSession = () => {
+    if (!activeSession?.privateMode) return;
+    const last = (transcripts[activeSession.id] ?? []).at(-1);
+    if (last) {
+      void forkSession(last.id, { uncappedPrivate: true });
+      return;
+    }
+    const agent = agents.find((candidate) => candidate.id === activeSession.profileId);
+    if (!agent) return;
+    startSession({
+      agent,
+      cwd: activeSession.cwd,
+      name: nextSessionName(sessions),
+      privateMode: { modelId: activeSession.privateMode.modelId },
+    });
+  };
+
+  /**
+   * Switches this Mac to Zorvo credits and starts a fresh credits session from this one: the running
+   * agent holds an own-key proxy token, so only a new process can pay with credits.
+   */
+  const handleSwitchToCredits = () => {
+    updateSettings({ paymentSource: "credits" });
+    const session = activeSession;
+    if (!session?.privateMode) return;
+    privateCredits.clearCreditsOut(session.id);
+    const last = (transcripts[session.id] ?? []).at(-1);
+    if (last) {
+      void forkSession(last.id, { creditsPrivate: true });
+      return;
+    }
+    const agent = agents.find((candidate) => candidate.id === session.profileId);
+    if (!agent) return;
+    startSession({
+      agent,
+      cwd: session.cwd,
+      name: nextSessionName(sessions),
+      privateMode: { modelId: session.privateMode.modelId },
+    });
+  };
+
   const handleSelectSession = (sessionId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId(sessionId);
     // An agent picked for a new session that was never started is forgotten.
     setPickedAgentId(null);
@@ -802,6 +1125,7 @@ export default function App() {
 
   /** Shows a run's panel in the chat's place; no session stays selected, or the panel would not show. */
   const openRun = (runId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId("");
     setPickedAgentId(null);
     compare.reset();
@@ -818,23 +1142,25 @@ export default function App() {
     else acp.interrupt(sessionId, transcripts[sessionId]);
   };
 
-  const backgroundTasks = useBackgroundTasks({
-    sessions,
-    transcripts,
-    isBusy: acp.isBusy,
-    busySince: acp.busySinceOf,
-    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
-    onOpenSession: handleSelectSession,
-    stopAgent: handleInterrupt,
-    onError: reportError,
-  });
-
   const navigateTo = (sessionId: string | null) => {
     if (sessionId) handleSelectSession(sessionId);
   };
 
   const updateSettings = (patch: Partial<Settings>) =>
     updateState((prev) => ({ ...prev, settings: { ...prev.settings, ...patch } }));
+
+  // The setting decides a new draft; a running session keeps the key it was launched with.
+  const activeIsOwnKey = activeSession?.privateMode
+    ? activeSession.privateMode.ownKey === true
+    : state.settings.paymentSource === "ownKey";
+  const ownKeySaved = privateCredits.status?.ownKey?.saved !== false;
+
+  usePrivateLowBalanceNotice({
+    credits: privateCredits.status?.balance?.credits ?? null,
+    notified: state.settings.privateLowBalanceNotified === true,
+    onNotified: (notified) => updateSettings({ privateLowBalanceNotified: notified }),
+    isOwnKey: activeIsOwnKey,
+  });
 
   const handleOnboardingComplete = ({ defaultAgentId, folder }: OnboardingResult) => {
     updateSettings({ onboardingCompleted: true, defaultAgentId });
@@ -857,8 +1183,10 @@ export default function App() {
     (sessionId: string) => {
       forgetQueued(sessionId);
       removeTranscript(sessionId);
+      // An artifact belongs to its session: its pages go with it. The session is deleted either way.
+      invoke("artifact_delete_session", { sessionId }).catch(() => reportError("Could not delete the session's artifacts."));
     },
-    [forgetQueued, removeTranscript],
+    [forgetQueued, removeTranscript, reportError],
   );
 
   const terminals = useWorkspaceTerminals(setNotice);
@@ -881,7 +1209,8 @@ export default function App() {
   const draftSessionList = useDraftSessionList({
     agent: isNewSessionDraft ? newSessionAgent : undefined, cwd: activeWorkspace?.path, sessions,
     activeSessionId,
-    isShown: Boolean(isNewSessionDraft && newSessionAgent && agentCheck.canListSessions(newSessionAgent.id) && !isWorktreeActive),
+    // An imported session runs as an ordinary one: a private draft does not offer them.
+    isShown: Boolean(isNewSessionDraft && newSessionAgent && agentCheck.canListSessions(newSessionAgent.id) && !isWorktreeActive && !privateDraft.isOn),
     listSessions: acp.listSessions, acp, choices: startChoices, onChoicesUsed: () => setAcpChoices(NO_CHOICES),
     recordSession, openSession: handleSelectSession, discardSession: sessionActions.discardSession, openNewSession, requestSignIn: signIn.auth.requestSignIn,
   });
@@ -1005,13 +1334,17 @@ export default function App() {
     sessions,
     comments: reviewComments,
     updateComments: updateReviewComments,
+    updateArtifactComments,
     composerRef,
     canContinue: isActiveRunning || isResumable,
     hasComposer: activeAgentRemoved === null,
     isComposerDisabled,
     collapseDiff: inspector.collapseDiff,
+    collapseArtifact: () => inspector.setArtifactExpanded(false),
     agentNameOf: (profileId) => agents.find((a) => a.id === profileId)?.name ?? profileId,
   });
+  rearmReviewRef.current = review.rearm;
+  forgetReviewRef.current = review.forget;
 
   /** What a delegation to an agent starts with: the picks, and the agent's remembered model and effort. */
   const delegationChoicesFor = (agentId: string): AcpChoices =>
@@ -1039,14 +1372,28 @@ export default function App() {
       giveBackMessage(activeSession.id, text, attachments);
       return;
     }
-    if (activeSession && isActiveRunning) {
-      review.sendFrom(activeSession.id, text);
-      sendFromComposer(activeSession.id, message);
-    } else if (activeSession && isResumable) {
-      review.sendFrom(activeSession.id, text);
-      resumeSession(activeSession, message);
-    } else if (compare.isCompare) handleNewRun(message);
-    else void handleNewSession(message);
+    // The composer empties on Send, which clears the slot; keep it so the comments still go with this
+    // message after a secret review, whether the user picks Send anyway or edits and sends again.
+    const reviewSlot = review.slot;
+    const deliver = () => {
+      if (reviewSlot) review.rearm(reviewSlot);
+      if (activeSession && isActiveRunning) {
+        review.sendFrom(activeSession.id, text);
+        sendFromComposer(activeSession.id, message);
+      } else if (activeSession && isResumable) {
+        review.sendFrom(activeSession.id, text);
+        resumeSession(activeSession, message);
+      } else if (compare.isCompare) handleNewRun(message);
+      else void handleNewSession(message);
+    };
+    // A private message pauses here when it may hold a secret; nothing goes out until the user picks.
+    secretGuard.check(message, deliver, {
+      isEnabled: isPrivateLaunch && state.settings.secretGuard !== false,
+      root: activeSession?.cwd ?? activeWorkspacePath,
+      agentName: activeAgent?.name ?? newSessionAgent?.name ?? "The agent",
+      sessionId: activeSession?.id,
+      ...(reviewSlot ? { reviewSlot } : {}),
+    });
   };
 
   /** What the @ list and the dialog say about an agent: its install and sign-in state, as the draft's rows do. */
@@ -1190,15 +1537,33 @@ export default function App() {
       contextUsage: acp.info[sessionId]?.usage,
       failures: acp.failuresOf(sessionId),
       sendBlockedReason: delegation.sendBlockedReason(sessionId),
+      privateCreditsOut: privateCredits.creditsOut[sessionId],
+      privateTopupRequest: topupRequests.requests[sessionId] ?? null,
     }),
     agentCatalog: { agents, settings: state.settings, addAgent: catalogActions.addAgent },
     onAction: (sessionId, action) => {
       if (action.kind === "send") {
         // A refusal cannot be given back here: a popout has no give-back action.
-        if (delegation.sendBlockedReason(sessionId) === null) void sendTo(sessionId, { text: action.text });
+        if (delegation.sendBlockedReason(sessionId) !== null) return;
+        const session = sessionById(sessionId);
+        secretGuard.check(
+          { text: action.text },
+          () => {
+            if (!refusesSend(sessionId)) void sendTo(sessionId, { text: action.text });
+          },
+          {
+            isEnabled: Boolean(session?.privateMode) && state.settings.secretGuard !== false,
+            root: session?.cwd,
+            agentName: agentNameOr(agents.find((agent) => agent.id === session?.profileId)),
+            sessionId,
+          },
+        );
       } else if (action.kind === "stop") handleInterrupt(sessionId);
       else if (action.kind === "answer-elicitation") acp.answerElicitation(sessionId, action.key, action.answer);
       else if (action.kind === "reopen-elicitation-url") acp.reopenElicitationUrl(sessionId, action.key);
+      else if (action.kind === "open-url") openLink(action.url);
+      else if (action.kind === "approve-topup") void answerTopupRequest(sessionId, action.requestId, true);
+      else if (action.kind === "decline-topup") void answerTopupRequest(sessionId, action.requestId, false);
       else chooseOption(sessionId, action.cardId, action.optionId, action.answers);
     },
   });
@@ -1218,16 +1583,36 @@ export default function App() {
     acp,
     onPick: rememberPick,
     onPickModel: rememberModelPick,
+    isPrivate: privateDraft.isOn,
   });
   // Several agents are not asked and nothing is picked for them yet: Send only waits for the single agent's install or sign-in.
   // The note promises one worktree each, so while the folder is not known to be a repository (still loading, or unreadable) Send waits too.
-  const isSendWaiting = compare.isCompare ? !canUseWorktree : draftNeedsInstall || draftNeedsSignIn;
-  const isSendBlocked = isSendWaiting || review.blocksSend || delegationBlock !== undefined;
+  const isSendWaiting = compare.isCompare
+    ? !canUseWorktree
+    : draftNeedsInstall || draftNeedsSignIn || privateDraft.blocksSend || creditsOutReason !== undefined;
+  // A draft's message is still being checked for secrets: a second Send would start a second session.
+  // Only Send waits; disabling the box would take the focus away from what the user types next.
+  const isCheckingDraftSecrets = isNewSessionDraft && secretGuard.isCheckingDraft;
+  const isSendBlocked = isSendWaiting || isCheckingDraftSecrets || review.blocksSend || delegationBlock !== undefined;
+  const privateModelId = activeSession?.privateMode?.modelId ?? privateDraft.privateMode?.modelId;
+  const privateModel = privateCredits.models?.find((model) => model.id === privateModelId);
+  const privateSessionCap = activeSession?.privateMode?.sessionCap;
+  const privateSessionLine =
+    activeSession && privateSessionCap !== undefined && !activeIsOwnKey
+      ? `${Math.floor(activeSession.privateUsage?.credits ?? 0)} of ${privateSessionCap} credits this session`
+      : undefined;
+  const livePrivateCredits = privateCredits.status?.balance?.credits;
+  const activeTopupRequest = activeSession ? topupRequests.requests[activeSession.id] : undefined;
+  const privateLowNote =
+    isPrivateLaunch && !activeIsOwnKey && livePrivateCredits !== undefined
+      ? lowBalanceNote(livePrivateCredits, privateModel)
+      : undefined;
   const composerNoteText = composerNote({
     reviewOwner: review.reviewOwner,
     compareCount: compare.agentIds.length,
     agentToInstall: draftNeedsInstall ? draftAgent?.name : undefined,
     agentToSignIn: draftNeedsSignIn ? draftAgent?.name : undefined,
+    privateNote: isPrivateLaunch ? privateDraft.note ?? creditsOutNote : undefined,
     delegationBlock,
     continuesSession: isResumable || Boolean(activeSession),
   });
@@ -1236,6 +1621,7 @@ export default function App() {
     liveCommands: acp.info[activeSessionId]?.commands,
     draftAgent,
     agentOptions: state.agentOptions,
+    isPrivate: isPrivateLaunch,
   });
 
   // Shown in the sessions' column, or on the Settings page while that hides the column; never both.
@@ -1276,6 +1662,9 @@ export default function App() {
         <Sidebar
           isHidden={isSidebarHidden}
           onHide={() => setSidebarHidden(true)}
+          artifactCount={gallery.length}
+          isGalleryOpen={isGalleryShown}
+          onOpenGallery={() => setGalleryOpen(true)}
           workspaces={workspaces}
           activeWorkspacePath={activeWorkspacePath}
           sessions={sessions}
@@ -1321,12 +1710,22 @@ export default function App() {
         />
 
         <div data-stage data-tauri-drag-region className={`flex min-w-0 flex-1 gap-2 py-2 pr-2${isSidebarHidden ? " pl-2" : ""}`}>
-          <div data-sheet="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet">
+          {isGalleryShown && (
+            <ArtifactGallery
+              rows={gallery}
+              onOpen={openFromGallery}
+              onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
+              notice={settingsPage.section === null && noticeToast}
+            />
+          )}
+          {/* Hidden, not unmounted, under the gallery: the composer keeps its text. */}
+          <div data-sheet="main" className={`${isGalleryShown ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet`}>
             <TopBar
               onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
               hasTrafficLights={isSidebarHidden}
               sessionId={activeSession?.id ?? activeRun?.id}
               sessionName={activeSession?.name ?? activeRun?.name}
+              isPrivate={Boolean(activeSession?.privateMode)}
               // A run's sessions share one title, so only a session of its own is renamed or archived here.
               onRename={sessionOfItsOwn ? (name) => sessionActions.renameSession(sessionOfItsOwn.id, name) : undefined}
               // Archiving ends the agent, so, as in the sidebar's menu, it waits until the agent is not working.
@@ -1380,7 +1779,7 @@ export default function App() {
             <div className="flex min-h-0 flex-1">
               {/* A still frame: the drop overlay is placed against it and the update banner sits on it, so both stay on
                   screen whatever the column under them is scrolled to. */}
-              <article className={`${isDiffOpen && inspector.isDiffExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
+              <article className={`${(isDiffOpen && inspector.isDiffExpanded) || isArtifactExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
                 {isDraggingFiles && <FileDropOverlay />}
                 <UpdateNotice
                   agents={agentUpdates.unnotified}
@@ -1420,7 +1819,22 @@ export default function App() {
                       agentName={activeAgent?.name}
                       agentProfileId={activeSession?.profileId}
                       onForkBranch={(messageId) => void forkSession(messageId)}
+                      onOpenTask={activeSession ? (toolId) => openTask(activeSession.id, { kind: "subagent", toolId }) : undefined}
+                      openTaskId={openTaskId}
+                      tasksFooter={
+                        activeSession && sessionShellTasks.length > 0 ? (
+                          <ShellTaskRows
+                            tasks={sessionShellTasks}
+                            openTaskId={openShellTaskId}
+                            transcripts={transcripts}
+                            onOpen={(task) => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
+                          />
+                        ) : undefined
+                      }
                       onReply={(quote) => composerRef.current?.insertText(quote)}
+                      onOpenUrl={openLink}
+                      privateModelId={activeSession?.privateMode?.modelId}
+                      privateModel={activeSession?.privateMode ? privateModel : undefined}
                       replyBlockedReason={replyBlockedReason({
                         isComposerHidden,
                         isComposerDisabled,
@@ -1492,6 +1906,8 @@ export default function App() {
                       onChooseOption={(cardId, optionId, answers) => chooseOption(activeSessionId, cardId, optionId, answers)}
                       onAnswerElicitation={(key, answer) => acp.answerElicitation(activeSessionId, key, answer)}
                       onReopenElicitationUrl={(key) => acp.reopenElicitationUrl(activeSessionId, key)}
+                      artifactIds={artifactIds}
+                      onOpenArtifact={openArtifactCard}
                       isWorking={isSessionBusy(activeSessionId) && !isAwaitingUser(currentMessages)}
                       failures={acp.failuresOf(activeSessionId)}
                       onStop={() => handleInterrupt(activeSessionId)}
@@ -1500,6 +1916,7 @@ export default function App() {
                     // The draft's heading, then its chips and card (the composer, below), then its sessions.
                     <NewSessionHeading
                       chipsSlot={setDraftChipsSlotElement}
+                      isPrivate={privateDraft.isOn}
                       unavailableReason={areAgentsLoaded && !agentsInUse.some(isAgentReady) ? noAgentNotice(agentsInUse) : undefined}
                     />
                   ) : isNewSessionDraft ? (
@@ -1541,15 +1958,66 @@ export default function App() {
                       <SignInLayer
                         signIn={signIn}
                         agents={agents}
-                        agentId={activeSession?.profileId ?? (activeRun ? undefined : newSessionAgent?.id)}
+                        // A request for the agent stays, unseen, while a private draft or session is on screen.
+                        agentId={isPrivateLaunch ? undefined : (activeSession?.profileId ?? (activeRun ? undefined : newSessionAgent?.id))}
                         showTerminal={settingsPage.section === null}
                         panelTarget={draftSignInSlot}
+                      />
+                      {activeTopupRequest && (
+                        <PrivateTopupRequestCard
+                          request={activeTopupRequest}
+                          model={privateModel}
+                          isBusy={isAnsweringTopup}
+                          canTopUp={!isTopupActive(privateCredits.flow)}
+                          onTopUp={() => void answerTopupRequest(activeTopupRequest.sessionId, activeTopupRequest.requestId, true)}
+                          onNotNow={() => void answerTopupRequest(activeTopupRequest.sessionId, activeTopupRequest.requestId, false)}
+                        />
+                      )}
+                      {!activeTopupRequest &&
+                        activeSession &&
+                        chatTopupSession === activeSession.id &&
+                        privateCredits.flow.kind !== "idle" && (
+                          <TopupProgress
+                            flow={privateCredits.flow}
+                            balanceCredits={livePrivateCredits ?? null}
+                            onOpenCheckout={privateCredits.openCheckout}
+                            onCancel={privateCredits.cancel}
+                            onDismiss={() => {
+                              privateCredits.dismiss();
+                              setChatTopupSession(null);
+                            }}
+                          />
+                        )}
+                      <PrivateCreditsOutLayer
+                        sessionId={activeSession?.id}
+                        reason={creditsOutReason}
+                        sessionCap={privateSessionCap}
+                        agents={continueAgents.map((agent) => ({ id: agent.id, name: agent.name }))}
+                        onOpenSettings={() => settingsPage.open("private")}
+                        onContinue={continueWithAgent}
+                        onNewSession={handleNewPrivateSession}
+                        onRaise={() => void handleRaisePrivateCap()}
+                        isRaising={isRaisingPrivateCap}
+                        paymentSource={activeIsOwnKey ? "ownKey" : "credits"}
+                        ownKeySaved={ownKeySaved}
+                        onSwitchToCredits={handleSwitchToCredits}
+                        onOpenDashboard={() => openLink("https://cloud.near.ai/")}
                       />
                       {installPanelAgent
                         ? draftInstallSlot
                           ? createPortal(<AgentInstallPanel agent={installPanelAgent} />, draftInstallSlot)
                           : <AgentInstallPanel agent={installPanelAgent} />
                         : null}
+                      {privateLowNote !== undefined &&
+                        livePrivateCredits !== undefined &&
+                        creditsOutNote === undefined &&
+                        privateDraft.note === undefined && (
+                          <PrivateLowBalanceRow
+                            credits={livePrivateCredits}
+                            model={privateModel}
+                            onTopUp={() => settingsPage.open("private")}
+                          />
+                        )}
                     </div>
                   </div>
                   {/* 24px at the sides and 20px under it, as the canvas draws the composer's dock. */}
@@ -1582,9 +2050,18 @@ export default function App() {
                       pasteScope={activeSessionId || "draft"}
                       isHidden={isComposerHidden || settingsPage.section !== null}
                       commands={compare.isCompare ? [] : composerCommands}
-                      sendLabel={delegationSendLabel ?? (compare.agentIds.length >= 2 ? `Start ${compare.agentIds.length} sessions` : undefined)}
+                      sendLabel={
+                        delegationSendLabel ??
+                        (privateDraft.isOn
+                          ? "Start private session"
+                          : compare.agentIds.length >= 2
+                            ? `Start ${compare.agentIds.length} sessions`
+                            : undefined)
+                      }
                       agentName={activeSession ? activeAgent?.name : newSessionAgent?.name}
                       sessionAgent={activeSession && activeAgent ? { profileId: activeAgent.id, name: activeAgent.name } : undefined}
+                      privateDraft={isNewSessionDraft ? privateDraft : undefined}
+                      privateSessionLine={privateSessionLine}
                       compareModels={
                         compare.isCompare
                           ? compareModelControls(
@@ -1659,10 +2136,37 @@ export default function App() {
                       }
                     />
                   </div>
+                  {isNewSessionDraft && privateDraft.isOn && (
+                    <div className="px-6">
+                      <p className="mx-auto w-full max-w-draft pt-1 text-ui-sm text-fg-subtle">
+                        Qwen Code sends your prompts straight to NEAR AI. Each answer comes with a signature
+                        from the secure hardware, so you can check where it ran.
+                      </p>
+                    </div>
+                  )}
                   {/* After the composer's slot, never around it: the composer keeps its place in the tree, and its text. */}
                   {isNewSessionDraft && <NewSessionBelow sessionList={draftSessionList.sessionList} />}
                 </div>
               </article>
+              {isArtifactExpanded && activeSession && (
+                <section aria-label="Artifact" className="relative flex min-w-0 flex-1 flex-col">
+                  <ArtifactsPanel
+                    sessionId={activeSession.id}
+                    artifacts={sessionArtifacts}
+                    viewed={inspector.viewedArtifact}
+                    onView={inspector.viewArtifact}
+                    isExpanded
+                    onToggleExpanded={() => inspector.setArtifactExpanded(false)}
+                    onError={reportError}
+                    comments={artifactComments}
+                    addReview={review.addArtifactReview}
+                    cwd={activeSession.cwd}
+                  />
+                  {/* The chat, which draws the app's notice, is hidden under an expanded page: a failure here
+                      (export, rename, delete, a page that cannot be shown) is said here. The page hides under it. */}
+                  {settingsPage.section === null && noticeToast && <ToastStack>{noticeToast}</ToastStack>}
+                </section>
+              )}
               {isDiffOpen && filesFolder && (
                 <DiffView
                   key={`${activeSession?.id ?? "draft"}:${filesFolder.path}`}
@@ -1680,13 +2184,13 @@ export default function App() {
               )}
             </div>
           </div>
-          {inspectorTab && (
+          {inspectorTab && !isArtifactExpanded && !isGalleryShown && (
             <Inspector
               tab={inspectorTab}
               tabs={inspectorTabs}
               width={inspector.width}
               maxWidth={maxInspectorWidth(windowWidth, !isSidebarHidden)}
-              counts={{ changes: inspector.changes.changes?.length }}
+              counts={{ changes: inspector.changes.changes?.length, artifacts: sessionArtifacts.length, tasks: taskTabs.tabs.length || undefined }}
               isViewingFile={inspectorTab === "files" && inspector.viewedFile !== null}
               onSelect={inspector.show}
               onResize={inspector.setWidth}
@@ -1715,6 +2219,17 @@ export default function App() {
                   targetsFailed={inspector.targetsFailed}
                   review={activeSession ? review.review : undefined}
                   addReview={activeSession ? review.addReview : undefined}
+                />
+              )}
+              {inspectorTab === "tasks" && activeSession && (
+                <TasksPanel
+                  tabs={taskTabs}
+                  sessionId={activeSession.id}
+                  messages={transcripts[activeSession.id] ?? []}
+                  tasks={backgroundTasks.tasks}
+                  agentName={activeAgent?.name ?? "The agent"}
+                  isBusy={acp.isBusy(activeSession.id)}
+                  onStop={backgroundTasks.stop}
                 />
               )}
               {inspectorTab === "activity" && activeSession && (
@@ -1754,6 +2269,30 @@ export default function App() {
                   }
                 />
               )}
+              {inspectorTab === "artifacts" && activeSession && (
+                <ArtifactsPanel
+                  key={activeSession.id}
+                  sessionId={activeSession.id}
+                  artifacts={sessionArtifacts}
+                  viewed={inspector.viewedArtifact}
+                  onView={inspector.viewArtifact}
+                  isExpanded={false}
+                  onToggleExpanded={() => inspector.setArtifactExpanded(true)}
+                  onError={reportError}
+                  comments={artifactComments}
+                  addReview={review.addArtifactReview}
+                  cwd={activeSession.cwd}
+                />
+              )}
+              {inspectorTab === "private" && activeSession?.privateMode && (
+                <PrivateInspector
+                  session={activeSession}
+                  credits={privateCredits}
+                  messages={currentMessages}
+                  onTopUp={() => settingsPage.open("private")}
+                  onOpenUrl={openLink}
+                />
+              )}
               {inspectorTab === "terminal" && filesFolder && (
                 <TerminalDrawer
                   folderPath={filesFolder.path}
@@ -1784,8 +2323,24 @@ export default function App() {
         notice={settingsPage.section !== null && noticeToast}
         github={github}
         agentSignIn={settingsSignIn}
+        privateCredits={privateCredits}
+        onShowRecoveryCode={recoveryDialog.show}
+        onRestoringChange={recoveryDialog.setIsRestoring}
         onOpenUrl={openLink}
       />
+      <RecoveryCodeLayer
+        credits={privateCredits}
+        request={recoveryDialog.request}
+        suppressStatusPrompt={recoveryDialog.suppressStatusPrompt}
+        onClose={recoveryDialog.close}
+      />
+      {secretGuard.review && (
+        <SecretGuardDialog
+          review={secretGuard.review}
+          onSendAnyway={secretGuard.sendAnyway}
+          onEdit={secretGuard.edit}
+        />
+      )}
       {delegateDialog.dialog !== null && (
         <DelegateDialog
           agents={delegateAgents}

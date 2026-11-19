@@ -192,6 +192,8 @@ describe("Session lifecycle", () => {
 
     expect(sidebar().queryByText("Refactor parser")).toBeNull();
     expect(spy).toHaveBeenCalledWith("delete_transcript", { sessionId: "s-old" }, undefined);
+    // Its pages go with it: an artifact belongs to its session.
+    expect(spy).toHaveBeenCalledWith("artifact_delete_session", { sessionId: "s-old" }, undefined);
   });
 
   it("shows an alert and does not append the message when sending fails", async () => {
@@ -273,6 +275,7 @@ describe("Session lifecycle", () => {
 
     expect(spy).toHaveBeenCalledWith("acp_stop_session", { sessionId }, undefined);
     expect(spy.mock.calls.some(([cmd]) => cmd === "delete_transcript")).toBe(false);
+    expect(spy.mock.calls.some(([cmd]) => cmd === "artifact_delete_session")).toBe(false);
     await waitFor(() => {
       const [saved] = fakeStore().state.sessions as { archivedAt?: number; status: string }[];
       expect(saved.archivedAt).toEqual(expect.any(Number));

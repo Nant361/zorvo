@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -167,7 +167,7 @@ pub fn user_node_major(env: &HashMap<String, String>, timeout: Duration) -> Opti
     let node = find_binary_in_path_str("node", path_var)?;
     find_binary_in_path_str("npx", path_var)?;
 
-    let mut child = Command::new(node)
+    let mut child = crate::spawn::command(node)
         .arg("--version")
         .env_clear()
         .envs(env)

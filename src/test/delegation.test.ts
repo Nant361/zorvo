@@ -154,6 +154,15 @@ describe("taskRoute", () => {
   it("is blocked without words for a source with no messages", () => {
     expect(taskRoute({ ...base, hasMessages: false })).toEqual({ kind: "blocked", reason: "" });
   });
+
+  it("is blocked for a private session, whose conversation would leave the TEE", () => {
+    const privateSource = session({ id: "s-p", privateMode: { modelId: "Qwen/Qwen3.8-27B" } });
+
+    expect(taskRoute({ ...base, source: privateSource, sessions: [privateSource] })).toEqual({
+      kind: "blocked",
+      reason: "A private session can't delegate: the task would leave the TEE.",
+    });
+  });
 });
 
 describe("sourceOf", () => {

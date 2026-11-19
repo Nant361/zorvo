@@ -2,6 +2,7 @@ pub mod acp;
 pub mod agent_tools;
 pub mod app_update;
 pub mod appearance;
+pub mod artifacts;
 pub mod attachment_paths;
 pub mod attachments;
 pub mod background_processes;
@@ -17,10 +18,12 @@ pub mod git_info;
 pub mod github;
 pub mod installer;
 pub mod pasted_images;
+pub mod private_mode;
 pub mod profiles;
 pub mod pty_session;
 pub mod pull_requests;
 pub mod registry;
+pub mod spawn;
 pub mod store;
 pub mod user_profile;
 pub mod windows;
@@ -215,6 +218,7 @@ fn end_orphaned_sessions(
     app: AppHandle,
     pty: State<'_, PtySessionManager>,
     acp: State<'_, acp::manager::AcpManager>,
+    private: State<'_, private_mode::service::PrivateMode>,
     tools: State<'_, Arc<agent_tools::AgentTools>>,
 ) -> usize {
     let terminals = pty.session_ids();
@@ -222,15 +226,22 @@ fn end_orphaned_sessions(
     // reopens a saved session under the same app session id, and that one
     // must not be what the thread below ends. (PTY ids are never reused.)
     let agent_ids = acp.session_ids();
-    let agents: Vec<_> = agent_ids.iter().map(|id| acp.detach(id)).collect();
+    let agents: Vec<_> = agent_ids
+        .iter()
+        .map(|id| {
+            private.release_proxy_token(id);
+            (id.clone(), acp.detach(id))
+        })
+        .collect();
     // The new UI reopens these under the same ids and is issued fresh tokens.
     agent_ids.iter().for_each(|id| tools.forget(id));
     let count = terminals.len() + agents.len();
     std::thread::spawn(move || {
         workspace_terminal::end_sessions(&app.state::<PtySessionManager>(), &terminals);
-        agents
-            .into_iter()
-            .for_each(acp::manager::DetachedSession::end);
+        // A capped session keeps its limit, as it does on Stop: the new UI reopens it under the
+        // same id, and ending the limit here would race that reopen and delete the key it just
+        // took over. A session nobody reopens is swept by the Worker after 24 hours.
+        agents.into_iter().for_each(|(_, session)| session.end());
     });
     count
 }
@@ -287,6 +298,20 @@ fn write_fork_handoff(
     path.into_os_string()
         .into_string()
         .map_err(|p| format!("Handoff path is not valid UTF-8: {}", p.to_string_lossy()))
+}
+
+/// The bundled MCP script in a packaged app, with the source tree as a dev fallback.
+fn private_mcp_script(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(dir) = app.path().resource_dir() {
+        candidates.push(dir.join("resources/zorvo-private-mcp.mjs"));
+        candidates.push(dir.join("_up_/resources/zorvo-private-mcp.mjs"));
+    }
+    candidates.push(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/zorvo-private-mcp.mjs"),
+    );
+    candidates.into_iter().find(|path| path.is_file())
 }
 
 /// The app's data dir; a debug build (`pnpm tauri dev`) gets its own, so
@@ -350,6 +375,10 @@ fn disable_web_text_substitutions() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Every process Zorvo starts gives up its macOS grants (spawn module).
+    if let Ok(exe) = std::env::current_exe() {
+        spawn::set_trampoline(exe);
+    }
     #[cfg(target_os = "macos")]
     disable_web_text_substitutions();
 
@@ -387,7 +416,14 @@ pub fn run() {
     }));
 
     let acp_holder = Arc::clone(&app_handle_holder);
+    // The loopback proxy private launches talk to. It starts on the first private launch; its
+    // tokens go when their session exits, and the listener goes with the app.
+    let private_proxy = Arc::new(private_mode::proxy::PrivateProxy::new());
+    let proxy_for_events = Arc::clone(&private_proxy);
     let acp_manager = AcpManager::new(Box::new(move |event| {
+        if let AcpEvent::Exited { session_id, .. } = &event {
+            proxy_for_events.release(session_id);
+        }
         if let Some(app) = acp_holder.lock().ok().and_then(|guard| guard.clone()) {
             // An agent that exited makes no more calls: whatever still holds its
             // session's token (a process it left behind) must not speak for it.
@@ -399,6 +435,21 @@ pub fn run() {
             let _ = app.emit(ACP_EVENT, event_payload(&event));
         }
     }));
+    // Agent tools accept a session's token only from its agent process or
+    // below it, so they learn each session's process as it starts.
+    let process_holder = Arc::clone(&app_handle_holder);
+    acp_manager.set_process_listener(Arc::new(move |session_id, pid| {
+        let Some(app) = process_holder.lock().ok().and_then(|guard| guard.clone()) else {
+            return;
+        };
+        let Some(process) = agent_tools::peer::ProcessId::of(pid as i32) else {
+            return;
+        };
+        if let Some(tools) = app.try_state::<Arc<agent_tools::AgentTools>>() {
+            tools.bind_process(session_id, process);
+        }
+    }));
+    let proxy_for_setup = Arc::clone(&private_proxy);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -425,9 +476,32 @@ pub fn run() {
             app.manage(AppInstaller::new(ToolsDir::new(&data_dir)));
             // Reads two small files; fetching and `npm` wait for the thread below.
             registry::install(Catalog::open(data_dir.clone(), registry::BUNDLED_HISTORY));
+            // An agent's top-up ask goes to the main window only; a popout gets it in its snapshot.
+            let topup_app = app.handle().clone();
+            proxy_for_setup
+                .topup_requests()
+                .set_sink(Box::new(move |request| {
+                    let _ = topup_app.emit_to(
+                        "main",
+                        // The literal the contract test reads; `TOPUP_REQUEST_EVENT` holds the same name.
+                        "private-topup-request",
+                        request,
+                    );
+                }));
+            // Builds clients only. The UI's first `private_status`, sent at start for
+            // every user, reads the Keychain items; the Worker is asked only once this
+            // Mac has a device.
+            app.manage(private_mode::commands::private_mode_for(
+                &data_dir,
+                proxy_for_setup,
+                private_mcp_script(app.handle()),
+            ));
             app.manage(start_agent_tools(app.handle(), &data_dir));
             let (store, migration) = data_migration::open_store(data_dir);
             app.manage(store);
+            app.manage(Arc::new(artifacts::store::ArtifactStore::new(
+                app.state::<store::AppStore>().root().join("artifacts"),
+            )));
             if let Err(error) = migration {
                 report_migration_failure(app.handle(), &error);
             }
@@ -449,10 +523,42 @@ pub fn run() {
                 );
             });
 
+            // Artifact folders of sessions that no longer exist. Skipped when the
+            // state cannot be read or lists no session: all would look orphaned.
+            let known_sessions = artifacts::commands::sessions_to_keep(
+                app.state::<store::AppStore>()
+                    .load_state()
+                    .ok()
+                    .map(|state| state.sessions.iter().map(|s| s.id.clone()).collect()),
+            );
+            if let Some(known_sessions) = known_sessions {
+                let artifacts =
+                    Arc::clone(app.state::<Arc<artifacts::store::ArtifactStore>>().inner());
+                std::thread::spawn(move || {
+                    artifacts.sweep_orphans(
+                        &known_sessions,
+                        std::time::SystemTime::now(),
+                        artifacts::commands::SWEEP_MIN_AGE,
+                    );
+                });
+            }
+
             refresh_catalog_in_background(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            artifacts::commands::artifact_show,
+            artifacts::commands::artifact_list,
+            artifacts::commands::artifact_rename,
+            artifacts::commands::artifact_delete,
+            artifacts::commands::artifact_delete_session,
+            artifacts::commands::artifact_export,
+            artifacts::commands::artifact_view_show,
+            artifacts::commands::artifact_view_bounds,
+            artifacts::commands::artifact_view_hide,
+            artifacts::commands::artifact_view_close,
+            artifacts::commands::artifact_comment_mode,
+            artifacts::commands::artifact_view_marks,
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_update_restart,
@@ -529,7 +635,28 @@ pub fn run() {
             installer::commands::update_agent,
             installer::commands::install_runtime,
             installer::commands::cancel_agent_install,
-            installer::commands::remove_agent_install
+            installer::commands::remove_agent_install,
+            private_mode::commands::private_status,
+            private_mode::commands::private_check_own_key,
+            private_mode::commands::private_set_own_key,
+            private_mode::commands::private_remove_own_key,
+            private_mode::commands::private_stock,
+            private_mode::commands::private_models,
+            private_mode::commands::private_create_topup,
+            private_mode::commands::private_open_checkout,
+            private_mode::commands::private_topup_status,
+            private_mode::commands::private_cancel_topup,
+            private_mode::commands::private_redeem_promo,
+            private_mode::commands::private_recovery_code,
+            private_mode::commands::private_mark_recovery,
+            private_mode::commands::private_recover,
+            private_mode::commands::private_forget_device,
+            private_mode::commands::private_verify,
+            private_mode::commands::private_session_usage,
+            private_mode::commands::private_raise_session_cap,
+            private_mode::commands::private_take_session_cap_reset,
+            private_mode::commands::private_answer_topup_request,
+            private_mode::commands::private_forget_session
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -540,6 +667,7 @@ pub fn run() {
                 let pty = app.state::<PtySessionManager>();
                 workspace_terminal::end_all_sessions(&pty);
                 app.state::<Arc<agent_tools::AgentTools>>().shutdown();
+                artifacts::view::close(app);
             }
         });
 }

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use zorvo_lib::installer::prerequisites::{
-    npm_install_args, prerequisites_for, run_npm_install, NpmError, Prerequisite,
+    npm_install_args, prerequisites_for, run_npm_install, NpmError,
 };
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -50,7 +50,10 @@ fn fake_npm(dir: &Path, body: &str) -> PathBuf {
 
 fn args() -> Vec<OsString> {
     let p = &prerequisites_for("pi-acp")[0];
-    npm_install_args(Path::new("/tmp/prefix"), p)
+    npm_install_args(
+        Path::new("/tmp/prefix"),
+        &format!("{}@{}", p.package, p.version),
+    )
 }
 
 #[test]
@@ -69,12 +72,10 @@ fn pi_acp_needs_pi_at_an_exact_version() {
 
 #[test]
 fn npm_install_args_keep_a_prefix_with_spaces_as_one_argument() {
-    let p = Prerequisite {
-        command: "pi",
-        package: "@earendil-works/pi-coding-agent",
-        version: "1.2.0",
-    };
-    let args = npm_install_args(Path::new("/tmp/Application Support/x"), &p);
+    let args = npm_install_args(
+        Path::new("/tmp/Application Support/x"),
+        "@earendil-works/pi-coding-agent@1.2.0",
+    );
     let expected: Vec<OsString> = [
         "install",
         "-g",

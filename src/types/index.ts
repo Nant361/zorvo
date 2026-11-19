@@ -168,6 +168,12 @@ export interface Session {
   openedBy?: OpenedByLink | null;
   /** Comments written on lines of the session's diff; absent when there are none. */
   reviewComments?: ReviewComment[];
+  /** Comments written on the session's artifact pages; absent when there are none. */
+  artifactComments?: ArtifactComment[];
+  /** Set when the session runs privately; the model it was started with, whose key it spends, and its credit cap. */
+  privateMode?: { modelId: string; ownKey?: boolean; sessionCap?: number };
+  /** The last total this session used, kept across restarts; records themselves are in memory. */
+  privateUsage?: { credits: number; estimated: boolean };
 }
 
 /** What a diff is compared with: the last commit, the base branch, or where the worktree started. */
@@ -209,8 +215,16 @@ export interface Settings {
   notifiedUpdates?: Record<string, string>;
   /** Agents last seen signed in, by agent id: what lets the sidebar say Ready without asking again. */
   signedInAgents?: string[];
+  /** Set once the live balance crossed below 50 and was handled; cleared when it reaches 50 again. */
+  privateLowBalanceNotified?: boolean;
+  /** Check private messages for secrets before sending; on unless the user turns it off. */
+  secretGuard?: boolean;
+  /** Which key private sessions spend: Zorvo credits or the user's own NEAR AI key. */
+  paymentSource?: 'credits' | 'ownKey';
   /** Whether sessions are told about Zorvo's own tools. Off unless true; kept so a save does not drop it. */
   agentTools?: boolean;
+  /** Whether agents may use apps on this Mac (computer use). Off unless `true`. */
+  computerUse?: boolean;
 }
 
 export interface RecentFolder {
@@ -241,6 +255,8 @@ export interface ActionCard {
   /** ACP permission requests: the agent's own choices and the request to answer. */
   options?: PermissionChoice[];
   requestId?: string | number;
+  /** The tool call the request is for, when the agent names it. */
+  toolCallId?: string;
   /** The option the user picked, once answered. */
   chosenOptionId?: string;
   /** The mode changed after the agent asked; the card still needs its answer. */
@@ -323,6 +339,16 @@ export interface ToolExecution {
   locations?: string[];
   /** The command it runs, when the agent gives one in its input. */
   command?: string;
+  /** The tool call that started the subagent this tool belongs to, when the agent says so. */
+  parentId?: string;
+  /** On a subagent's own tool call: its type as the agent names it ("Explore"), when reported. */
+  agentType?: string;
+  /** On a subagent's own tool call: what the subagent did, in the order it arrived. */
+  steps?: ChatMessagePart[];
+  /** On a subagent's own tool call: the subagent's visible reasoning. */
+  thinking?: string;
+  /** The subagent wrote more text than is kept. */
+  isTextCut?: boolean;
 }
 
 export type DiffRowKind = 'added' | 'removed' | 'context' | 'skipped';
@@ -357,6 +383,23 @@ export interface PlanEntry {
   priority?: string;
 }
 
+/** NEAR AI's signature check for one of a private reply's model calls. */
+export type VerificationState = 'verified' | 'didnt_verify' | 'not_signed' | 'checking';
+export type VerificationKind = 'provider_tee' | 'gateway' | 'unknown';
+
+/** The folded signature state of a private reply; hashes and prompts are never kept here. */
+export interface MessageVerification {
+  state: VerificationState;
+  kind?: VerificationKind;
+  signer?: string;
+  /** Calls NEAR AI signed, out of the calls this reply made. */
+  signed: number;
+  total: number;
+  /** Tokens the reply's calls sent and got back, summed; absent when no call reported any. */
+  promptTokens?: number;
+  completionTokens?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent';
@@ -385,6 +428,87 @@ export interface ChatMessage {
   delegationTask?: { agentName: string; agentId?: string };
   /** A question the agent asked the user (ACP elicitation); never holds the answer. */
   elicitation?: ElicitationCard;
+  /** The NEAR AI signature state of a private reply's model calls. */
+  verification?: MessageVerification;
+  /** Marks where the agent showed a page: Zorvo's own row, with the version shown then. */
+  artifactCard?: ArtifactCard;
+}
+
+/** One stored copy of an artifact's page. */
+export interface ArtifactVersion {
+  n: number;
+  /** When it was shown, in ms. */
+  at: number;
+  bytes: number;
+}
+
+/** A page an agent made, with its versions (oldest first). The backend owns it. */
+export interface Artifact {
+  id: string;
+  title: string;
+  /** The agent's file, which is the artifact's identity within its session. */
+  sourcePath: string;
+  versions: ArtifactVersion[];
+}
+
+/** Where a comment is on an artifact page: selected text with its context, or a clicked element. */
+export type ArtifactAnchor =
+  | { kind: 'text'; quote: string; before: string; after: string }
+  | {
+      kind: 'element';
+      tag: string;
+      elementId?: string;
+      classes: string[];
+      label?: string;
+      text: string;
+      path: string;
+    };
+
+/** A comment on an artifact page, for the agent. It never moves to another version. */
+export interface ArtifactComment {
+  id: string;
+  artifactId: string;
+  /** The version it was written on. */
+  version: number;
+  anchor: ArtifactAnchor;
+  body: string;
+  createdAt: number;
+  /** Send was pressed with it in the message, not that the agent acted. */
+  sentAt?: number;
+}
+
+/** One version of one artifact, as the page view shows it. */
+export interface PageRef {
+  sessionId: string;
+  artifactId: string;
+  version: number;
+}
+
+/** A comment's number and where it is, for the page to draw. */
+export interface PageMark {
+  n: number;
+  anchor: ArtifactAnchor;
+}
+
+/** What an artifact page reported through Zorvo's script. */
+export type PageMessage =
+  | { kind: 'pick-text'; quote: string; before: string; after: string }
+  | {
+      kind: 'pick-element';
+      tag: string;
+      elementId?: string;
+      classes: string[];
+      label?: string;
+      text: string;
+      path: string;
+    }
+  | { kind: 'cancel' }
+  | { kind: 'marks-missing'; numbers: number[] };
+
+export interface ArtifactCard {
+  artifactId: string;
+  title: string;
+  version: number;
 }
 
 export interface ElicitationChoice {

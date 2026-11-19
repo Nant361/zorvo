@@ -7,16 +7,23 @@ import { MessageActionBar } from "../MessageActionBar";
 import { UserMessageBar } from "./UserMessageBar";
 import { AttachmentChips } from "../composer/AttachmentChips";
 import { ToolsPart } from "./ToolsPart";
+import { TaskRow } from "./TaskRow";
+import { ToolDetails } from "./ToolDetails";
+import { secondLine, shownTools, stepsOf, subagentTaskOf } from "../../lib/task-view";
 import { PlanUpdatedRow, ThinkingBlock } from "./ReplyExtras";
+import { VerificationBadge } from "../private/VerificationBadge";
+import type { ModelPrice } from "../../lib/private-credits";
 import { partsOf } from "../../lib/acp-events";
 import { formatRelativeTime } from "../../lib/relative-time";
-import type { ChatMessage, ElicitationAnswer } from "../../types";
+import type { ChatMessage, ElicitationAnswer, ToolExecution } from "../../types";
 import { SELECTABLE_TEXT_ATTRIBUTE } from "../../hooks/useChatSelection";
 
 /** No label for a message replayed from the agent's history, which gives no per-message time. */
 function timeLabelOf(message: ChatMessage): string | undefined {
   return message.hasKnownTime === false ? undefined : formatRelativeTime(message.timestamp);
 }
+import { ArtifactCardRow } from "./ArtifactCardRow";
+import type { ArtifactCard } from "../../types";
 
 export interface MessageRowProps {
   message: ChatMessage;
@@ -39,6 +46,54 @@ export interface MessageRowProps {
   onChooseOption?: (cardId: string, optionId: string, answers?: Record<string, string>) => void;
   onAnswerElicitation?: (key: string, answer: ElicitationAnswer) => void;
   onReopenElicitationUrl?: (key: string) => void;
+  /** The ids of the session's artifacts: a card whose artifact is not among them reads Removed. Absent where they are unknown. */
+  artifactIds?: ReadonlySet<string>;
+  /** Shows an artifact card's version in the Artifacts tab. */
+  onOpenArtifact?: (card: ArtifactCard) => void;
+  /** Opens NEAR AI's Verification Center from a private reply's badge. */
+  onOpenUrl?: (url: string) => void;
+  /** The private model id, for the badge's popover. */
+  privateModelId?: string;
+  /** That model's listed price, for a reply's credits. */
+  privateModel?: ModelPrice | null;
+  /** Opens a subagent's task beside the chat; without it a task row is not a button. */
+  onOpenTask?: (messageId: string, toolId: string) => void;
+  /** The subagent whose task tab is on screen. */
+  openTaskId?: string;
+  /** The tool calls the turn's open permission requests are for, wherever in the turn they sit. */
+  waitingToolCallIds?: readonly string[];
+}
+
+type CallSegment = { kind: "tools"; tools: ToolExecution[] } | { kind: "task"; tool: ToolExecution };
+
+/** A run of tool calls as plain tool lists and subagent rows, in the order they were made. */
+function inCallOrder(tools: readonly ToolExecution[]): CallSegment[] {
+  return tools.reduce<CallSegment[]>((segments, tool) => {
+    if (tool.steps !== undefined) return [...segments, { kind: "task", tool }];
+    const last = segments[segments.length - 1];
+    return last?.kind === "tools"
+      ? [...segments.slice(0, -1), { kind: "tools", tools: [...last.tools, tool] }]
+      : [...segments, { kind: "tools", tools: [tool] }];
+  }, []);
+}
+
+/** A subagent's steps in the reply itself, for a window that has no inspector to open them in. */
+function SubagentSteps({ tool, message, isTurnOver }: { tool: ToolExecution; message: ChatMessage; isTurnOver: boolean }) {
+  const { parts, tools } = stepsOf(tool, message);
+  const byId = new Map(tools.map((child) => [child.id, child]));
+  return (
+    <div className="ml-[7px] flex flex-col gap-2 border-l border-border pl-3">
+      {parts.map((part, index) =>
+        part.kind === "text" ? (
+          <MarkdownRenderer key={index} content={part.text} />
+        ) : (
+          <ToolsPart key={index} tools={part.toolIds.flatMap((id) => byId.get(id) ?? [])} isCurrentTurn={false} isTurnOver={isTurnOver} />
+        ),
+      )}
+      {/* What its own tool call returned, which the task tab shows as its result. */}
+      {tool.details && tool.details.length > 0 && <ToolDetails details={tool.details} />}
+    </div>
+  );
 }
 
 /**
@@ -64,6 +119,14 @@ export const MessageRow = memo(function MessageRow({
   onChooseOption,
   onAnswerElicitation,
   onReopenElicitationUrl,
+  artifactIds,
+  onOpenArtifact,
+  onOpenUrl,
+  privateModelId,
+  privateModel,
+  onOpenTask,
+  openTaskId,
+  waitingToolCallIds,
 }: MessageRowProps) {
   const isUser = message.role === "user";
   const timeLabel = timeLabelOf(message);
@@ -100,9 +163,34 @@ export const MessageRow = memo(function MessageRow({
         <div className="space-y-4">
           {parts.map((part, index) => {
             if (part.kind === "text") return <MarkdownRenderer key={index} content={part.text} />;
-            const tools = part.toolIds.flatMap((id) => toolsById.get(id) ?? []);
-            if (tools.length === 0) return null;
-            return <ToolsPart key={index} tools={tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />;
+            const listed = shownTools(part.toolIds.flatMap((id) => toolsById.get(id) ?? []));
+            if (listed.length === 0) return null;
+            // A subagent whose steps are known is one row that opens its task. One the agent does not
+            // mark stays a plain tool, so what it returned can still be read.
+            // Both keep the order the agent made the calls in: plain tools between two subagents stay between them.
+            return (
+              <div key={index} className="flex flex-col gap-2">
+                {inCallOrder(listed).map((segment) => {
+                  if (segment.kind === "tools") {
+                    return <ToolsPart key={segment.tools[0].id} tools={segment.tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />;
+                  }
+                  const tool = segment.tool;
+                  const task = subagentTaskOf(tool, message, { isTurnOver: showActions, waitingToolCallIds });
+                  return (
+                    <div key={tool.id} className="flex flex-col gap-2">
+                      <TaskRow
+                        task={task}
+                        secondLine={secondLine(task)}
+                        isOpen={openTaskId === tool.id}
+                        onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
+                      />
+                      {/* Where no tab can open (a popout), the steps show here. */}
+                      {!onOpenTask && <SubagentSteps tool={tool} message={message} isTurnOver={showActions} />}
+                    </div>
+                  );
+                })}
+              </div>
+            );
           })}
         </div>
       )}
@@ -112,6 +200,7 @@ export const MessageRow = memo(function MessageRow({
         <ActionCard
           card={message.actionCard}
           agentName={agentName}
+          agentProfileId={agentProfileId}
           onChoose={
             onChooseOption
               ? (optionId, answers) =>
@@ -132,6 +221,15 @@ export const MessageRow = memo(function MessageRow({
           agentProfileId={agentProfileId}
           onAnswer={onAnswerElicitation}
           onReopen={onReopenElicitationUrl}
+        />
+      )}
+
+      {/* Where the agent showed a page */}
+      {message.artifactCard && (
+        <ArtifactCardRow
+          card={message.artifactCard}
+          state={artifactIds === undefined || artifactIds.has(message.artifactCard.artifactId) ? "open" : "removed"}
+          onOpen={onOpenArtifact}
         />
       )}
     </div>
@@ -183,6 +281,14 @@ export const MessageRow = memo(function MessageRow({
             {timeLabel && <span className="shrink-0 text-caption text-fg-subtle">{timeLabel}</span>}
           </div>
           {text}
+          {message.verification && (
+            <VerificationBadge
+              verification={message.verification}
+              modelId={privateModelId}
+              model={privateModel}
+              onOpenUrl={onOpenUrl}
+            />
+          )}
           {/* The reply's actions, once its turn has ended */}
           {showActions && (
             <MessageActionBar

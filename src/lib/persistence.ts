@@ -3,9 +3,11 @@ import {
   TRANSPORT_ACP,
   type ChatMessage,
   type ChatMessagePart,
+  type ToolExecution,
   type DelegationLink,
   type OpenedByLink,
   type DiffRow,
+  type MessageVerification,
   type PersistedState,
   type Session,
   type SessionWorktree,
@@ -16,7 +18,9 @@ import { settlePermissionCards } from './acp-events';
 import { diffDetail } from './diff-rows';
 import { normalizeAppearance } from './appearance';
 import type { AgentOptions } from './acp-draft';
+import { validArtifactComments } from './artifact-comments';
 import { validReviewComments } from './review-comments';
+import { parseArtifactCard } from './artifacts';
 import { toCommands, toConfigOptions, toModels, toModes } from '../hooks/useAcpSessions';
 
 export const STATE_VERSION = 2;
@@ -24,7 +28,7 @@ export const STATE_VERSION = 2;
 export function emptyPersistedState(): PersistedState {
   return {
     version: STATE_VERSION,
-    settings: { appearance: 'system', defaultAgentId: null, onboardingCompleted: false },
+    settings: { appearance: 'system', defaultAgentId: null, onboardingCompleted: false, secretGuard: true, paymentSource: 'credits' },
     recentFolders: [],
     sessions: [],
   };
@@ -73,6 +77,23 @@ function isWorktree(value: unknown): value is SessionWorktree {
   );
 }
 
+function isPrivateMode(value: unknown): value is { modelId: string; ownKey?: boolean; sessionCap?: number } {
+  return isObject(value) && typeof value.modelId === 'string' && value.modelId.length > 0;
+}
+
+/** A whole positive credit cap, or nothing; an old or malformed value drops only the cap. */
+function privateSessionCap(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** A saved usage total, with its estimated flag; malformed entries are dropped. */
+function toPrivateUsage(value: unknown): Session['privateUsage'] | undefined {
+  if (!isObject(value) || typeof value.credits !== 'number' || !Number.isFinite(value.credits) || value.credits < 0) {
+    return undefined;
+  }
+  return { credits: value.credits, estimated: value.estimated === true };
+}
+
 const SESSION_HANDLE = /^session-[1-9][0-9]{0,5}$/;
 
 /** The link with its handle only when that is one Zorvo could have issued. */
@@ -107,8 +128,11 @@ function withValidStartCommit(worktree: SessionWorktree): SessionWorktree {
 
 /** A session keeps everything else when one of its optional fields is malformed. */
 function withValidFields(session: Session): Session {
-  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, compareRunId, reviewComments, delegatedFrom, openedBy, ...rest } = session;
+  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
   const comments = validReviewComments(reviewComments);
+  const pageComments = validArtifactComments(artifactComments);
+  const usage = toPrivateUsage(privateUsage);
+  const sessionCap = isPrivateMode(privateMode) ? privateSessionCap(privateMode.sessionCap) : undefined;
   return {
     ...rest,
     ...(worktree == null ? { worktree } : isWorktree(worktree) ? { worktree: withValidStartCommit(worktree) } : {}),
@@ -121,6 +145,17 @@ function withValidFields(session: Session): Session {
     ...(delegatedFrom === null || isDelegationLink(delegatedFrom) ? { delegatedFrom } : {}),
     ...(isOpenedByLink(openedBy) ? { openedBy: withValidHandle(openedBy) } : {}),
     ...(comments.length > 0 ? { reviewComments: comments } : {}),
+    ...(pageComments.length > 0 ? { artifactComments: pageComments } : {}),
+    ...(isPrivateMode(privateMode)
+      ? {
+          privateMode: {
+            modelId: privateMode.modelId,
+            ...(privateMode.ownKey === true ? { ownKey: true } : {}),
+            ...(sessionCap !== undefined ? { sessionCap } : {}),
+          },
+        }
+      : {}),
+    ...(usage ? { privateUsage: usage } : {}),
   };
 }
 
@@ -229,8 +264,13 @@ export function normalizePersistedState(raw: unknown): PersistedState {
       agentVersions: toAgentVersions(settings.agentVersions),
       notifiedUpdates: toNotifiedUpdates(settings.notifiedUpdates),
       signedInAgents: toAgentIdList(settings.signedInAgents) ?? [],
+      privateLowBalanceNotified: settings.privateLowBalanceNotified === true,
+      secretGuard: settings.secretGuard !== false,
+      paymentSource: settings.paymentSource === 'ownKey' ? 'ownKey' : 'credits',
       // On unless the user turned it off: a state written before the setting existed has it on.
       agentTools: settings.agentTools !== false,
+      // Off unless the user turned it on: any other value reads as off.
+      computerUse: settings.computerUse === true,
     },
     recentFolders: Array.isArray(raw.recentFolders)
       ? raw.recentFolders.filter(
@@ -302,6 +342,39 @@ function withValidEndTime(message: ChatMessage): ChatMessage {
   return rest;
 }
 
+const VERIFICATION_STATES = new Set(['verified', 'didnt_verify', 'not_signed', 'checking']);
+const VERIFICATION_KINDS = new Set(['provider_tee', 'gateway', 'unknown']);
+
+function isVerification(value: unknown): value is MessageVerification {
+  return (
+    isObject(value) &&
+    typeof value.state === 'string' &&
+    VERIFICATION_STATES.has(value.state) &&
+    typeof value.signed === 'number' &&
+    Number.isFinite(value.signed) &&
+    value.signed >= 0 &&
+    typeof value.total === 'number' &&
+    Number.isFinite(value.total) &&
+    value.total >= 0 &&
+    (value.kind === undefined || (typeof value.kind === 'string' && VERIFICATION_KINDS.has(value.kind))) &&
+    (value.signer === undefined || typeof value.signer === 'string')
+  );
+}
+
+/**
+ * A verification that does not match the shape is dropped; the reply itself stays. One saved while
+ * still `checking` reads as not signed: the proxy's records are gone after a restart, so nothing
+ * would ever finish the check and the badge would spin for good.
+ */
+function withValidVerification(message: ChatMessage): ChatMessage {
+  if (!('verification' in message)) return message;
+  const { verification, ...rest } = message;
+  if (!isVerification(verification)) return rest;
+  return verification.state === 'checking'
+    ? { ...rest, verification: { ...verification, state: 'not_signed' } }
+    : message;
+}
+
 /** A report or task mark keeps a non-empty agent name and, when it is a string, the agent's id. */
 function withValidAgentMark(message: ChatMessage, key: 'delegationReport' | 'delegationTask'): ChatMessage {
   if (!(key in message)) return message;
@@ -312,6 +385,14 @@ function withValidAgentMark(message: ChatMessage, key: 'delegationReport' | 'del
   return typeof agentId === 'string'
     ? ({ ...rest, [key]: { agentName, agentId } } as ChatMessage)
     : ({ ...rest, [key]: { agentName } } as ChatMessage);
+}
+
+/** An artifact card keeps its three fields when they fit, else the message goes on without it. */
+function withValidArtifactCard(message: ChatMessage): ChatMessage {
+  if (!('artifactCard' in message)) return message;
+  const { artifactCard, ...rest } = message;
+  const card = parseArtifactCard(artifactCard);
+  return card === null ? (rest as ChatMessage) : { ...rest, artifactCard: card };
 }
 
 function withValidDelegationReport(message: ChatMessage): ChatMessage {
@@ -361,11 +442,74 @@ function withReadableDiffs(message: ChatMessage): ChatMessage {
   };
 }
 
+/** Whether `steps` is a subagent's steps: well-formed parts whose tools are this tool's own children. */
+function hasValidSteps(tool: Record<string, unknown>, byId: ReadonlyMap<string, Record<string, unknown>>): boolean {
+  const steps = tool.steps;
+  if (!Array.isArray(steps) || !steps.every(isMessagePart)) return false;
+  return steps.every(
+    (step) => step.kind !== 'tools' || step.toolIds.every((id) => byId.get(id)?.parentId === tool.id),
+  );
+}
+
+/**
+ * Keeps what a subagent did only where it holds together: a parent's steps must name its own
+ * children, and a child must be named by its parent. A tool that loses its parent is added to the
+ * reply's parts, so nothing a transcript holds stops showing.
+ */
+function withValidSubagentFields(message: ChatMessage): ChatMessage {
+  if (!Array.isArray(message.tools)) return message;
+  const raws = message.tools as unknown as Record<string, unknown>[];
+  const marked = ['parentId', 'steps', 'agentType', 'thinking', 'isTextCut'];
+  if (!raws.some((tool) => isObject(tool) && marked.some((key) => key in tool))) return message;
+
+  const objects = raws.filter(isObject);
+  const byId = new Map(objects.map((tool) => [String(tool.id), tool]));
+  // A parent is never a child itself: one level, so two tools cannot hide each other.
+  const parents = new Set(
+    objects.filter((tool) => tool.parentId === undefined && hasValidSteps(tool, byId)).map((tool) => tool.id),
+  );
+  const listed = new Set(
+    objects.flatMap((tool) =>
+      parents.has(tool.id) ? (tool.steps as ChatMessagePart[]).flatMap((step) => (step.kind === 'tools' ? step.toolIds : [])) : [],
+    ),
+  );
+  const orphans: string[] = [];
+  const tools = raws.map((raw) => {
+    if (!isObject(raw)) return raw;
+    const { parentId, steps, agentType, thinking, isTextCut, ...rest } = raw;
+    const isChild = typeof parentId === 'string' && parents.has(parentId) && listed.has(String(raw.id));
+    if (parentId !== undefined && !isChild) orphans.push(String(raw.id));
+    return {
+      ...rest,
+      ...(isChild ? { parentId } : {}),
+      ...(parents.has(raw.id) ? { steps } : {}),
+      ...(typeof agentType === 'string' ? { agentType } : {}),
+      ...(typeof thinking === 'string' ? { thinking } : {}),
+      ...(isTextCut === true ? { isTextCut } : {}),
+    };
+  }) as unknown as ToolExecution[];
+  const parts =
+    orphans.length && Array.isArray(message.parts)
+      ? [...message.parts, { kind: 'tools' as const, toolIds: orphans }]
+      : message.parts;
+  return { ...message, tools, ...(parts ? { parts } : {}) };
+}
+
+/** A message's tools without anything that is not a tool with an id: the rest of the app reads their fields. */
+function withOnlyTools(message: ChatMessage): ChatMessage {
+  if (!Array.isArray(message.tools)) return message;
+  const tools = message.tools.filter((tool) => isObject(tool) && typeof tool.id === 'string');
+  return tools.length === message.tools.length ? message : { ...message, tools };
+}
+
 export function normalizeTranscript(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
-  return raw.flatMap((raw): ChatMessage[] => {
-    if (!isMessage(raw)) return [];
-    const message = withValidDelegationReport(withReadableDiffs(withValidEndTime(raw)));
+  return raw.flatMap((entry): ChatMessage[] => {
+    if (!isMessage(entry)) return [];
+    const raw = withOnlyTools(entry);
+    const message = withValidArtifactCard(
+      withValidSubagentFields(withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw))))),
+    );
     if (!('parts' in message)) return [message];
     const { parts, ...rest } = message;
     const isWellFormed = Array.isArray(parts) && parts.length > 0 && parts.every(isMessagePart);

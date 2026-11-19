@@ -43,7 +43,7 @@ fn rig_with(tag: &str, timeout: Duration) -> Rig {
         move |id| end_tx.lock().unwrap().send(id).unwrap(),
     )
     .unwrap();
-    let entry = tools.servers_for("probe", true);
+    let entry = bound(&tools, "probe");
     let socket = env_value(&entry, "ZORVO_MCP_SOCKET");
     Rig {
         tools,
@@ -76,7 +76,7 @@ struct Client {
 
 impl Client {
     fn connect(rig: &Rig, session: &str) -> Client {
-        let entry = rig.tools.servers_for(session, true);
+        let entry = bound(&rig.tools, session);
         let token = env_value(&entry, "ZORVO_MCP_TOKEN");
         let mut stream = UnixStream::connect(&rig.socket).unwrap();
         stream
@@ -124,7 +124,7 @@ fn delegate(id: i64) -> Value {
 fn servers_for_is_empty_when_disabled_and_one_stdio_entry_when_enabled() {
     let rig = rig("servers");
     assert_eq!(rig.tools.servers_for("s1", false), json!([]));
-    let entry = rig.tools.servers_for("s1", true);
+    let entry = bound(&rig.tools, "s1");
     assert_eq!(entry.as_array().unwrap().len(), 1);
     assert_eq!(entry[0]["name"], "zorvo");
     assert_eq!(entry[0]["command"], "/bin/zorvo-test");
@@ -178,7 +178,7 @@ fn list_and_initialize_are_answered_without_an_event() {
     client.send(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
     assert_eq!(
         client.read()["result"]["tools"].as_array().unwrap().len(),
-        5
+        7
     );
     client.send(json!({"jsonrpc":"2.0","id":3,"method":"prompts/list"}));
     assert_eq!(client.read()["error"]["code"], -32601);
@@ -243,7 +243,7 @@ fn forget_closes_the_connection_reports_ended_and_a_late_respond_is_ignored() {
     rig.tools.respond(&emitted.call_id, true, "late");
     assert!(rig.ended.recv_timeout(QUIET).is_err());
     // The token is gone, so the same session cannot reconnect with it.
-    let entry = rig.tools.servers_for("other", true);
+    let entry = bound(&rig.tools, "other");
     assert_eq!(entry[0]["name"], "zorvo");
 }
 
@@ -347,7 +347,7 @@ fn shutdown_removes_the_socket_file_and_closes_connections() {
 #[test]
 fn nothing_logs_the_token_or_the_task() {
     let rig = rig("quiet");
-    let entry = rig.tools.servers_for("s1", true);
+    let entry = bound(&rig.tools, "s1");
     let token = env_value(&entry, "ZORVO_MCP_TOKEN");
     let task = "SECRET-TASK-TEXT-12345";
     let mut bridge = Command::new(env!("CARGO_BIN_EXE_zorvo"))
@@ -429,7 +429,7 @@ fn an_end_during_emit_is_reported_after_the_call_event_exactly_once() {
         },
     )
     .unwrap();
-    let entry = tools.servers_for("s1", true);
+    let entry = bound(&tools, "s1");
     let mut stream = UnixStream::connect(env_value(&entry, "ZORVO_MCP_SOCKET")).unwrap();
     let token = env_value(&entry, "ZORVO_MCP_TOKEN");
     stream
@@ -459,7 +459,7 @@ fn launch_env_is_empty_when_disabled() {
 #[test]
 fn launch_env_names_the_socket_a_token_and_the_program() {
     let rig = rig("envon");
-    let env = rig.tools.launch_env_for("s1", true);
+    let env = bound_env(&rig.tools, "s1");
     assert_eq!(env.len(), 3);
     assert_eq!(launch_value(&env, "ZORVO_MCP_SOCKET").unwrap(), rig.socket);
     assert_eq!(launch_value(&env, "ZORVO_MCP_TOKEN").unwrap().len(), 64);
@@ -472,7 +472,7 @@ fn launch_env_names_the_socket_a_token_and_the_program() {
 #[test]
 fn the_token_from_launch_env_authenticates_as_its_session() {
     let rig = rig("envauth");
-    let env = rig.tools.launch_env_for("s9", true);
+    let env = bound_env(&rig.tools, "s9");
     let token = launch_value(&env, "ZORVO_MCP_TOKEN").unwrap();
     let mut stream = UnixStream::connect(&rig.socket).unwrap();
     writeln!(stream, "{}", json!({ "token": token })).unwrap();
@@ -490,7 +490,7 @@ fn the_token_from_launch_env_authenticates_as_its_session() {
 #[test]
 fn forget_drops_a_launch_env_token() {
     let rig = rig("envforget");
-    let env = rig.tools.launch_env_for("s1", true);
+    let env = bound_env(&rig.tools, "s1");
     let token = launch_value(&env, "ZORVO_MCP_TOKEN").unwrap();
     rig.tools.forget("s1");
     let mut stream = UnixStream::connect(&rig.socket).unwrap();
@@ -502,4 +502,25 @@ fn forget_drops_a_launch_env_token() {
                "params": {"name": "list_agents", "arguments": {}}})
     );
     assert!(rig.calls.recv_timeout(QUIET).is_err());
+}
+
+/// Issues a session's entry and binds the session to this test process, which
+/// (or whose children) then connects as the session's agent would.
+fn bound(tools: &AgentTools, session: &str) -> serde_json::Value {
+    let entry = tools.servers_for(session, true);
+    tools.bind_process(
+        session,
+        zorvo_lib::agent_tools::peer::ProcessId::of(std::process::id() as i32).unwrap(),
+    );
+    entry
+}
+
+/// The same for the command path's environment.
+fn bound_env(tools: &AgentTools, session: &str) -> Vec<(String, String)> {
+    let env = tools.launch_env_for(session, true);
+    tools.bind_process(
+        session,
+        zorvo_lib::agent_tools::peer::ProcessId::of(std::process::id() as i32).unwrap(),
+    );
+    env
 }

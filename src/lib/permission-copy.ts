@@ -41,6 +41,21 @@ export function questionsTitle(agentName: string, count: number): string {
   return count === 1 ? `${agentName} has a question for you` : `${agentName} has ${count} questions for you`;
 }
 
+/** How a question card ended: sent with the allowing option, or turned down with another. */
+export type QuestionsEnd = 'answered' | 'cancelled';
+
+/**
+ * The line an answered question card keeps. What was answered is never kept, so it says only
+ * how the card ended.
+ */
+export function questionsOutcome(agentName: string, count: number, end: QuestionsEnd): string {
+  const noun = count === 1 ? 'question' : 'questions';
+  if (end === 'cancelled') return `You cancelled the ${noun}.`;
+  // ActionCard's fallback name starts a sentence; inside one it is lower case.
+  const owner = agentName === 'The agent' ? 'the agent' : agentName;
+  return `You answered ${owner}'s ${noun}.`;
+}
+
 /** Deny first, then Always allow, then Allow once: the safe choice is the first one you meet. */
 function rank(option: PermissionChoice): number {
   if (!option.kind.startsWith('allow')) return 0;

@@ -28,26 +28,9 @@ import { withToolsContext } from '../../lib/agent-tools-context';
 import { writeConversationHandoff } from '../../lib/session-handoff';
 import { applyElicitation, completeElicitation, dismissPendingElicitations } from '../../lib/acp-elicitation';
 import { elicitationActions, type InFlightAnswer } from './elicitation-actions';
-
-const NOT_ENDED_NORMALLY = new Set(['refusal', 'max_tokens', 'max_turn_requests']);
-
-function turnEndNotice(stopReason: string | undefined, error: string | undefined): string | null {
-  if (error) return `The agent's turn failed: ${error}`;
-  if (stopReason && NOT_ENDED_NORMALLY.has(stopReason)) return `The agent stopped early (${stopReason}).`;
-  return null;
-}
-
-function isCommandsUpdate(update: unknown): update is { availableCommands: unknown } {
-  return typeof update === 'object' && update !== null && (update as { sessionUpdate?: unknown }).sessionUpdate === 'available_commands_update';
-}
-
-/** The title in a session_info_update, if it carries a usable one. */
-function sessionTitleOf(update: unknown): string | undefined {
-  if (typeof update !== 'object' || update === null) return undefined;
-  const { sessionUpdate, title } = update as { sessionUpdate?: unknown; title?: unknown };
-  if (sessionUpdate !== 'session_info_update' || typeof title !== 'string') return undefined;
-  return title.trim() || undefined;
-}
+import { privateModelIdOf, privateOpenError, privateSessionCapOf, withoutModelChanges, type CreditsOutReason } from '../../lib/private-session';
+import { privateOpenOutcome, privateTurnRefusal } from './private-engine';
+import { isCommandsUpdate, sessionTitleOf, turnEndNotice } from './update-readers';
 
 /** The message a session starts (or resumes) with. */
 export interface FirstMessage {
@@ -99,6 +82,15 @@ export interface AcpEngineDeps extends EngineDeps {
   onTurnFailed?: (sessionId: string, error: string | null) => void;
   /** Writes the session's transcript in a moment rather than at its next interval: a turn ended, or the agent asks the user. */
   saveSoon?: (sessionId: string) => void;
+  /** A private session could not open, or a turn of it was refused, for lack of credits (`empty`) or a working key (`key`). */
+  onPrivateCreditsOut?: (sessionId: string, reason: CreditsOutReason) => void;
+  /** A private turn ended: check the signatures of the calls it made. */
+  onPrivateTurnEnd?: (sessionId: string) => void;
+  /**
+   * A refused prompt goes back into its session's composer: a private session's turn refused for credits,
+   * a key or a sign-in, which Zorvo, not the user, gives the agent. Without it the message is only taken off the chat.
+   */
+  giveBack?: (sessionId: string, message: FirstMessage) => void;
   /**
    * Why a retry must not prompt the agent now, or null. A retry sends without the
    * composer, so the same one-at-a-time rule that blocks Send applies here.
@@ -123,6 +115,9 @@ export function useAcpEngine({
   transcripts,
   onTurnFailed,
   saveSoon,
+  onPrivateCreditsOut,
+  onPrivateTurnEnd,
+  giveBack,
   promptBlockedReason,
 }: AcpEngineDeps) {
   const [starting, setStarting] = useState<ReadonlySet<string>>(new Set());
@@ -220,6 +215,22 @@ export function useAcpEngine({
       agentFailures.clear(sessionId);
       updateNow(sessionId, closeTurn);
       saveSoon?.(sessionId);
+      if (isPrivateSession(sessionId)) onPrivateTurnEnd?.(sessionId);
+      // Only a private session's agent is launched to report credits; an ordinary one's text is its own.
+      const refusal = isPrivateSession(sessionId)
+        ? privateTurnRefusal(
+            error,
+            privateSessionCapOf(sessions.find((candidate) => candidate.id === sessionId) ?? {}),
+          )
+        : null;
+      if (refusal) {
+        // The panel above the composer says credits ran out; a failure notice would only repeat it.
+        handBackRefused(sessionId);
+        if ('creditsOut' in refusal) onPrivateCreditsOut?.(sessionId, refusal.creditsOut);
+        else reportError(refusal.report);
+        onAttention?.(sessionId, 'failed');
+        return;
+      }
       const authMethods = parseAuthRequired(error);
       if (authMethods) {
         handBackForSignIn(sessionId, authMethods);
@@ -271,17 +282,55 @@ export function useAcpEngine({
     });
   }, []);
 
-  /** The agent opened the session but refused the prompt until the user signs in. */
-  const handBackForSignIn = (sessionId: string, methods: AuthMethod[]) => {
-    const session = sessions.find((s) => s.id === sessionId);
+  const isPrivateSession = (sessionId: string) =>
+    privateModelIdOf(sessions.find((s) => s.id === sessionId) ?? {}) !== undefined;
+
+  /**
+   * Takes a refused prompt off the chat and returns it, as the user wrote it; its hidden context waits
+   * for the next message. Undefined when the session had no prompt waiting.
+   */
+  const takeRefusedPrompt = (sessionId: string): FirstMessage | undefined => {
     const refused = lastPromptRef.current.get(sessionId);
     lastPromptRef.current.delete(sessionId);
+    failedPromptRef.current.delete(sessionId);
     const message = refused?.message;
     // The turn end before this one lands first; the message goes back at once.
     if (message) updateNow(sessionId, (prev) => withoutMessage(prev, message.id));
     if (refused?.context) unsentContextRef.current.set(sessionId, refused.context);
+    if (!message) return undefined;
+    return message.attachments ? { text: message.content, attachments: message.attachments } : { text: message.content };
+  };
+
+  /** Whether the agent answered or acted after `messageId`: a reply, a tool call or a card follows it in the chat. */
+  const hasWorkAfter = (sessionId: string, messageId: string): boolean => {
+    const messages = transcriptOf(sessionId) ?? [];
+    const index = messages.findIndex((message) => message.id === messageId);
+    return index !== -1 && index < messages.length - 1;
+  };
+
+  /**
+   * A private session's prompt refused for credits or a key: the message goes back to its composer,
+   * unless the agent already worked on it. Credits usually run out several model calls into a turn;
+   * the agent then holds the message in its own history, so it stays in the chat above what the agent
+   * did, and sending it again would give the agent the same prompt twice.
+   */
+  const handBackRefused = (sessionId: string) => {
+    const sent = lastPromptRef.current.get(sessionId)?.message;
+    // The turn end landed what the agent sent before this runs, so the transcript is current.
+    if (sent && hasWorkAfter(sessionId, sent.id)) {
+      lastPromptRef.current.delete(sessionId);
+      failedPromptRef.current.delete(sessionId);
+      return;
+    }
+    const unsent = takeRefusedPrompt(sessionId);
+    if (unsent) giveBack?.(sessionId, unsent);
+  };
+
+  /** The agent opened the session but refused the prompt until the user signs in. */
+  const handBackForSignIn = (sessionId: string, methods: AuthMethod[]) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    const unsent = takeRefusedPrompt(sessionId);
     if (!session) return;
-    const unsent = message ? { text: message.content, attachments: message.attachments } : undefined;
     onAuthRequired(session, methods, unsent);
   };
 
@@ -313,7 +362,9 @@ export function useAcpEngine({
       lastPromptRef.current.delete(sessionId);
       if (context) unsentContextRef.current.set(sessionId, context);
       updateNow(sessionId, (prev) => withoutMessage(prev, message.id));
-      reportError(`Failed to send the message: ${String(error)}`);
+      // A private session's refusal (a `/model` or `/auth` it keeps out) has plain words of its own.
+      const privateError = privateOpenError(error, isPrivateSession(sessionId));
+      reportError(privateError?.text ?? `Failed to send the message: ${String(error)}`);
       return false;
     }
   };
@@ -340,6 +391,7 @@ export function useAcpEngine({
     sessionId: string,
     info: AcpSessionInfo,
     options: LaunchOptions,
+    isPrivate: boolean,
   ): Promise<AcpOptions> => {
     let current: AcpOptions = info;
     const done = new Set<string>();
@@ -348,7 +400,9 @@ export function useAcpEngine({
     // One change at a time, each checked against the agent's latest state: what
     // is on offer can depend on what was just set (an effort on its model).
     for (;;) {
-      const change = changesToApply(current, options.choices, options.applySafeMode).find((c) => !done.has(keyOf(c)));
+      const changes = changesToApply(current, options.choices, options.applySafeMode);
+      // A private session stays on the model it was launched on, whatever was picked for the agent before.
+      const change = (isPrivate ? withoutModelChanges(changes, current) : changes).find((c) => !done.has(keyOf(c)));
       if (!change || isStopped(sessionId)) return current;
       done.add(keyOf(change));
       try {
@@ -377,12 +431,15 @@ export function useAcpEngine({
    * prompted for a reason other than a sign-in (reported); a refusal for a
    * sign-in hands the message back itself.
    */
+  const privateOwnKeyOf = (session: Session) => session.privateMode?.ownKey === true;
+
   const launch = async (session: Session, open: () => Promise<AcpSessionInfo>, options: LaunchOptions): Promise<boolean> => {
     // A session ended earlier and now resumed must hear from its agent again.
     stoppedRef.current.delete(session.id);
     refusedChoicesRef.current.delete(session.id);
     // Taken before the open starts: a later launch or stop supersedes this one.
     const gen = bumpLaunchGen(session.id);
+    const isPrivate = privateModelIdOf(session) !== undefined;
     const message = options.first ? userMessage(options.first.text, options.first.attachments) : null;
     if (message) updateNow(session.id, (prev) => [...prev, message]);
     // Busy until the first prompt is out: a message sent meanwhile would race it.
@@ -409,6 +466,19 @@ export function useAcpEngine({
         // The message's hidden context goes out with the next one.
         if (options.first?.context) unsentContextRef.current.set(session.id, options.first.context);
         patchSession(session.id, { status: 'terminated', endedAt: Date.now() });
+        // Zorvo Private's refusals are said in plain words, never as the backend's marker or code.
+        const outcome = privateOpenOutcome(
+          error,
+          isPrivate,
+          onPrivateCreditsOut !== undefined,
+          privateSessionCapOf(session),
+        );
+        if (outcome) {
+          // Marked out of credits, the panel above the composer says it: a notice would only repeat it.
+          if ('creditsOut' in outcome) onPrivateCreditsOut?.(session.id, outcome.creditsOut);
+          else reportError(outcome.report);
+          return false;
+        }
         const authMethods = parseAuthRequired(error);
         if (authMethods) {
           refusedChoicesRef.current.set(session.id, options.choices);
@@ -432,14 +502,28 @@ export function useAcpEngine({
         return true;
       }
       noteToolsPath(session.id, info);
-      // A reopened session may not repeat the models: what is remembered stays then.
-      rememberOptions(session.profileId, {
-        modes: info.modes,
-        configOptions: info.configOptions,
-        ...(info.models ? { models: info.models } : {}),
-      });
+      // A reopened session may not repeat the models: what is remembered stays then. A private session's
+      // options (its TEE model) are not what the agent offers an ordinary draft, so they are not remembered.
+      if (!isPrivate) {
+        rememberOptions(session.profileId, {
+          modes: info.modes,
+          configOptions: info.configOptions,
+          ...(info.models ? { models: info.models } : {}),
+        });
+      }
       if (info.acpSessionId) patchSession(session.id, { acpSessionId: info.acpSessionId });
-      const settled = await applyChanges(session.id, info, options);
+      if (isPrivate) {
+        const reset = await acp.takeSessionCapReset(session.id);
+        if (reset !== null && session.privateMode) {
+          patchSession(session.id, {
+            privateMode: { ...session.privateMode, sessionCap: reset },
+          });
+          reportError(
+            `The session's private key was gone. It restarted with its original ${reset}-credit limit.`,
+          );
+        }
+      }
+      const settled = await applyChanges(session.id, info, options, isPrivate);
       // Superseded while the picks were applied: a newer launch owns the session.
       if (!isCurrentLaunch(session.id, gen)) {
         // The message this launch showed was never prompted: take it back.
@@ -448,7 +532,7 @@ export function useAcpEngine({
       }
       // What the agent offers now, after the picks: an effort list follows its model,
       // and the next draft should offer what this session ended up with.
-      if (settled.configOptions !== info.configOptions) {
+      if (!isPrivate && settled.configOptions !== info.configOptions) {
         rememberOptions(session.profileId, { configOptions: settled.configOptions });
       }
       if (message && isCurrentLaunch(session.id, gen) && !isStopped(session.id)) {
@@ -464,7 +548,8 @@ export function useAcpEngine({
   };
 
   const start = (session: Session, first?: FirstMessage, choices: AcpChoices = NO_CHOICES) =>
-    launch(session, () => acp.start(session.id, session.cwd, session.profileId, sessionGetsAgentTools(session, sessions)), {
+    // A private session gets no agent tools: its launch already carries the credits server.
+    launch(session, () => acp.start(session.id, session.cwd, session.profileId, !session.privateMode && sessionGetsAgentTools(session, sessions), privateModelIdOf(session), privateOwnKeyOf(session), privateSessionCapOf(session)), {
       first,
       choices,
       applySafeMode: true,
@@ -473,7 +558,7 @@ export function useAcpEngine({
 
   /** Continues an ended session in a fresh agent process through the agent's own session/resume or session/load. */
   const resume = (session: Session, acpSessionId: string, first?: FirstMessage, choices: AcpChoices = NO_CHOICES) =>
-    launch(session, () => acp.reopen(session.id, session.cwd, session.profileId, acpSessionId, sessionGetsAgentTools(session, sessions)), {
+    launch(session, () => acp.reopen(session.id, session.cwd, session.profileId, acpSessionId, !session.privateMode && sessionGetsAgentTools(session, sessions), privateModelIdOf(session), privateOwnKeyOf(session), privateSessionCapOf(session)), {
       first,
       choices,
       applySafeMode: true,
@@ -589,12 +674,13 @@ export function useAcpEngine({
     const openNew = async () => {
       const context = hidden ? undefined : await handoffFor(session);
       if (context) unsentContextRef.current.set(sessionId, context);
-      return acp.start(session.id, session.cwd, session.profileId, sessionGetsAgentTools(session, sessions)).catch((error: unknown) => {
+      return acp.start(session.id, session.cwd, session.profileId, !session.privateMode && sessionGetsAgentTools(session, sessions), privateModelIdOf(session), privateOwnKeyOf(session), privateSessionCapOf(session)).catch((error: unknown) => {
         if (context) unsentContextRef.current.delete(sessionId);
         throw error;
       });
     };
-    const reopenSession = () => acp.reopen(session.id, session.cwd, session.profileId, acpSessionId, sessionGetsAgentTools(session, sessions));
+    const reopenSession = () =>
+      acp.reopen(session.id, session.cwd, session.profileId, acpSessionId, !session.privateMode && sessionGetsAgentTools(session, sessions), privateModelIdOf(session), privateOwnKeyOf(session), privateSessionCapOf(session));
     // A session refused at a prompt may have had no turn the agent kept: when the agent does not know it,
     // it starts anew. Any other failure keeps the session, whose conversation the agent may still have.
     const reopen = wasTerminated

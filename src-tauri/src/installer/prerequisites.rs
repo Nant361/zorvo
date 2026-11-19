@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -73,9 +73,10 @@ pub fn all_prerequisites() -> impl Iterator<Item = &'static Prerequisite> {
     PI_ACP.iter()
 }
 
-/// The `npm` arguments that install `p` globally under `prefix`. Each value is
-/// its own argument, so a prefix with spaces needs no quoting.
-pub fn npm_install_args(prefix: &Path, p: &Prerequisite) -> Vec<OsString> {
+/// The `npm` arguments that install the package `spec` (`name@version`)
+/// globally under `prefix`. Each value is its own argument, so a prefix with
+/// spaces needs no quoting.
+pub fn npm_install_args(prefix: &Path, spec: &str) -> Vec<OsString> {
     vec![
         "install".into(),
         "-g".into(),
@@ -83,7 +84,7 @@ pub fn npm_install_args(prefix: &Path, p: &Prerequisite) -> Vec<OsString> {
         prefix.as_os_str().to_owned(),
         "--no-audit".into(),
         "--no-fund".into(),
-        format!("{}@{}", p.package, p.version).into(),
+        spec.into(),
     ]
 }
 
@@ -100,7 +101,7 @@ pub fn run_npm_install(
         .last()
         .map(|a| a.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let mut child = Command::new(npm)
+    let mut child = crate::spawn::command(npm)
         .args(args)
         .env_clear()
         .envs(env)
@@ -161,7 +162,7 @@ fn stderr_tail(stderr: Option<mpsc::Receiver<std::io::Result<Vec<u8>>>>) -> Stri
 /// Kills npm's whole process group, then npm itself, and reaps it.
 fn stop(child: &mut Child) {
     let group = format!("-{}", child.id());
-    let _ = Command::new("/bin/kill")
+    let _ = crate::spawn::command("/bin/kill")
         .args(["-s", "KILL", "--", &group])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

@@ -33,7 +33,7 @@ export function Privacy() {
             </li>
           </ul>
           <p className="max-w-140 text-[14px] leading-5.5 text-fg-subtle" data-r="">
-            Private mode is the one exception, and only while you have it on: Zorvo then keeps a NEAR AI key in your Keychain and talks to NEAR AI and the credits server.
+            Private mode is the one exception: once you open it in Settings, Zorvo talks to the credits server and keeps its keys in your Keychain, and private sessions talk to NEAR AI.
             {" "}
             <a className="focus-ring text-fg-secondary underline decoration-(--lp-strong) underline-offset-3" href="#private">
               See Private mode

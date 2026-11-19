@@ -9,14 +9,17 @@ const LABELS: Record<InspectorTab, string> = {
   changes: "Changes",
   activity: "Activity",
   files: "Files",
+  artifacts: "Artifacts",
+  tasks: "Tasks",
   terminal: "Terminal",
+  private: "Private",
 };
-const ORDER: readonly InspectorTab[] = ["changes", "activity", "files", "terminal"];
+const ORDER: readonly InspectorTab[] = ["changes", "activity", "files", "artifacts", "tasks", "terminal", "private"];
 const ID_PREFIX = "inspector";
 
 export interface InspectorProps {
   tab: InspectorTab;
-  /** The tabs this session can show; the order is always Changes, Activity, Files, Terminal. */
+  /** The tabs this session can show; the order is always Changes, Activity, Files, Artifacts, Tasks, Terminal, Private. */
   tabs: readonly InspectorTab[];
   /** The remembered width; the Terminal tab shows at least `INSPECTOR_WIDTH.wide`. */
   width: number;
@@ -127,7 +130,16 @@ export function Inspector({ tab, tabs, width, counts, isViewingFile = false, max
       </div>
       <div data-sheet="inspector" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet">
         <div className="flex h-12 shrink-0 items-stretch justify-between border-b border-border pr-2 pl-3">
-          <Tabs tabs={items} selected={tab} onSelect={onSelect} label="Inspector" idPrefix={ID_PREFIX} className="self-center" />
+          {/* Five tabs need about 370px: tighter tabs fit the default width, and a narrower track scrolls, so no tab is cut. */}
+          <Tabs
+            tabs={items}
+            selected={tab}
+            onSelect={onSelect}
+            label="Inspector"
+            idPrefix={ID_PREFIX}
+            itemPadding="shrink-0 whitespace-nowrap px-2"
+            className="min-w-0 self-center overflow-x-auto"
+          />
           <div className="flex items-center">
             <IconButton label="Close inspector" size="sm" onClick={onClose}>
               <X size={14} />

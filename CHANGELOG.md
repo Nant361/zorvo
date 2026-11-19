@@ -4,6 +4,56 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+
+- **Artifacts.** An agent can show you a web page it made (a report, a diagram, a dashboard, a mockup) beside the chat, in the new **Artifacts** tab. Each time the agent changes the page you get a new version and can go back to an older one. **Export** saves the page as one HTML file, and **Artifacts** in the sidebar lists the pages of every session. A page runs in a window part of its own with no access to Zorvo or your files; it may load scripts from cdnjs, jsDelivr, unpkg, the Tailwind CDN and code.jquery.com and fonts from Google Fonts, and can send nothing anywhere. Pages stay on this Mac and are deleted with their session. Agents that get Zorvo's tools get this too; the switch in **Settings → Agents** turns it off.
+- **Comments on artifact pages.** Press **Comment** above a page, then select text or click a part of it, and write what should change. Comments are numbered on the page and listed under it; **Add to message** puts them in your message to the agent, with the file and version they are about, the same way diff comments go. A comment written on an older version says so. Your comment text never reaches the page.
+- **Background task tabs.** A subagent or a shell command an agent started opens as a tab beside the chat, and the chat shows one row per subagent instead of every step. With Claude Code and Qwen Code you can follow a subagent's steps as they arrive.
+
+### Changed
+
+- **A private session no longer delegates.** Delegating starts another agent on a handoff of the conversation, which would send a private session's code outside the TEE without asking. The ⋯ menu and an `@Agent` mention now say so; **Continue with another agent** still asks first.
+- **The private badge says what was checked.** "Verified in TEE" is kept for an answer the model's own TEE signed; one signed by NEAR AI's gateway reads "Signed by NEAR AI". The popover says that NEAR AI's attestation report lists the signer and that Zorvo does not check the hardware quote behind it.
+- **The website explains credits and leaves private mode for last.** A new docs page, Credits terms, says who sells private mode credits, what they cost, and what happens to a payment and a balance. Private mode is now one section, after everything Zorvo does for free, with the path of a private answer folded into it. The first Download says the build is not signed yet and links to how to open it, the header names Private mode apart from Privacy, the footer's Privacy opens its docs page, and the Control section no longer says you approve every step. On the page, the delegate scene ends with the report alone, and status dots and the terminal cursor stop moving after a few seconds.
+- **The privacy docs name private mode's hosts.** Privacy and your data now lists private mode's two hosts and when each is contacted (the Zorvo Credits server from the first time you open Settings, Private mode, and at each start after that; NEAR AI Cloud during private sessions), what your browser opens instead of Zorvo (PingPay's checkout and NEAR AI's Verification Center), and which secrets private mode keeps in your Keychain.
+- **Agents that come as npm packages are downloaded when you install or update them.** Zorvo now installs the package into its own folder and starts the agent from there, instead of letting `npx` fetch it when the first session starts. Starting a session no longer waits on a download or asks the npm registry anything, and two sessions starting at once can no longer leave a broken download behind. After this update Zorvo installs the agents you have used once, in the background; until an agent's row stops saying Installing, it cannot start a session. An agent you never used is not downloaded: its row offers Install. Zorvo also no longer puts an npm-package agent in use just because its package is installed globally.
+- **Qwen Code's questions read one at a time.** The card is a calm form with the agent's logo instead of a warning, shows one question per step with a step for each, and has Back and Next. Submit names the questions still unanswered, each option is a row you can click anywhere on, the agent's "(Recommended)" pick shows as a badge, and Other opens its text box only once you pick it.
+
+### Fixed
+
+- **A private session keeps its spending cap after a restart.** The cap was dropped whenever Zorvo saved its state, so a reopened session lost its limit, its Raise button and the key NEAR AI enforces the cap on.
+- **A window reload no longer ends or resets a capped session.** The cap, and what was spent of it, carry over to the reopened session.
+- **Running out of credits mid-turn keeps your message in the chat.** A message Qwen Code already worked on stays above what it did and is not put back in the box, where sending it again repeated the prompt.
+- **Your own NEAR AI key running out is no longer hidden by a Zorvo balance.** The card for the own key stays until the key changes or you come back to the window.
+- **Private sessions on your own key start while the credits server is down**, from the model list saved on this Mac.
+- **Private usage is counted once.** A window reload no longer doubles a session's total, a fork no longer repeats its source's usage, and a call that cannot be priced marks the total as an estimate instead of leaving it out.
+- **A signature check no longer sticks or fails for the wrong reason.** A reply saved while "Checking the signature" settles as not signed, an answer signed with a key NEAR AI rotated is checked against a fresh report, and "Not signed" no longer blames Stop when the signature could not be read.
+- **A stream NEAR AI cuts off reaches Qwen Code as a failure**, not as a short answer that looks complete.
+- **An agent's top-up request no longer blocks the session for good.** One nobody answered expires after ten minutes, and an ask for a package Zorvo does not sell lists the ones it does.
+- **Removing your own NEAR AI key removes it from stopped sessions too**, and forgetting this Mac's credits also deletes the keys of its capped sessions while your own key keeps its date.
+- **Errors raising a cap or starting a private session say what failed**, not that a checkout could not open.
+- **The secret check no longer holds up other sessions.** A message nothing scans goes out at once, and a draft cannot be sent twice while its first message is checked.
+- **Private model names show on older macOS**: a pattern Safari 13 cannot read is gone.
+- **The credits server limits top-ups per address** and shares each round of payment checks between open and expired checkouts, so unpaid checkouts cannot hold the stock, and neither kind can delay a real payment on the other.
+
+## [0.12.0] - 2026-11-14
+
+### Added
+
+- **Private mode, opt in.** Qwen Code can run on NEAR AI models inside secure hardware (TEE), paid with prepaid credits you top up in Settings → Private mode. Turn it on with the Private chip of a Qwen Code draft; until you do, nothing changes.
+- **Verified private answers.** Each private reply now carries a badge saying whether NEAR AI signed every model call behind it, with the signer and a link to NEAR AI's Verification Center.
+- **Low-credit warning.** Below 50 credits, a private session shows the balance left and, when it can price the model, about how many turns remain, with a Top up button; the inspector marks a low balance with an amber dot, and Zorvo notifies once if you are away.
+- **Private sessions can check their credits.** Qwen Code can read the balance and model prices through a small local server, so it can tell you when credits are low and suggest a cheaper model. The server talks only to Zorvo's loopback proxy and never sees the NEAR AI key.
+- **A secret check before private messages.** Before a private message goes out, Zorvo looks for keys and passwords in the text and its attached files on this Mac. It pauses on a match so you can send anyway or edit; Settings → Private mode turns the check off, and no match is stored.
+- **Per-session private usage.** The Private tab shows what this session used and its average per turn, and Settings' balance lists the total by model with the turns each model's price leaves. The total survives a restart.
+- **Use your own NEAR AI key.** If you stake NEAR in your own NEAR AI organization, Settings → Private mode can check and save your key in the Keychain and use it instead of Zorvo credits. Zorvo shows the session cost in dollars and no Zorvo balance; your credits stay and you can switch back.
+- **A spending cap for each private session.** A Qwen Code private draft can cap itself at 100, 200 or 500 credits. NEAR AI enforces the cap on a key of its own, so it stops the session even if Zorvo is closed; the composer and inspector show the cap and its progress, and a capped session offers New session or a doubled cap when it reaches it.
+- **An agent can ask for a top-up.** A private Qwen Code session can ask for one of the Worker's packages with one short reason; a card above the composer shows the package and the reason, and only the user's click starts their own PingPay checkout. **Not now** starts a five-minute cooldown. The agent never opens checkout, pays or sees a key.
+
+### Changed
+
+- **Private mode keeps its limits and its keys.** A capped session keeps its cap across Stop and reopen; caps are checked against live spend, and a swept session restarts on the draft's original cap. A revoked session key is replaced on the next launch, a failed raise can be retried without a stuck cap, and Switch to Zorvo credits starts a fresh credits session. A running session follows the key it launched with, removing the own key stops its tokens, and a refused or removed key gets its own card. Usage no longer drops after a reopen, and the secret check keeps its review comments, names attachments it could not read, and queues a second message instead of replacing the first.
+
 ## [0.11.2] - 2026-11-14
 
 ### Fixed
@@ -347,7 +397,8 @@ Tagged but never published; its fix shipped in 0.11.2.
 
 - Approval safety, terminal handling, the stream parser and working folders. ([#1])
 
-[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.10.1...v0.11.0
