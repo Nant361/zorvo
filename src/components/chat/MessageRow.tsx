@@ -192,6 +192,7 @@ export const MessageRow = memo(function MessageRow({
         <ActionCard
           card={message.actionCard}
           agentName={agentName}
+          agentProfileId={agentProfileId}
           onChoose={
             onChooseOption
               ? (optionId, answers) =>

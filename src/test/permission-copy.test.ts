@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { orderedChoices, permissionTitle, questionsTitle } from "../lib/permission-copy";
+import { orderedChoices, permissionTitle, questionsOutcome, questionsTitle } from "../lib/permission-copy";
 import type { PermissionChoice } from "../types";
 
 describe("permissionTitle", () => {
@@ -19,6 +19,19 @@ describe("questionsTitle", () => {
   it("counts the agent's questions", () => {
     expect(questionsTitle("Qwen Code", 1)).toBe("Qwen Code has a question for you");
     expect(questionsTitle("Qwen Code", 3)).toBe("Qwen Code has 3 questions for you");
+  });
+});
+
+describe("questionsOutcome", () => {
+  it("says the questions were answered, naming whose they were", () => {
+    expect(questionsOutcome("Qwen Code", 2, "answered")).toBe("You answered Qwen Code's questions.");
+    expect(questionsOutcome("Qwen Code", 1, "answered")).toBe("You answered Qwen Code's question.");
+    expect(questionsOutcome("The agent", 2, "answered")).toBe("You answered the agent's questions.");
+  });
+
+  it("says the questions were cancelled", () => {
+    expect(questionsOutcome("Qwen Code", 2, "cancelled")).toBe("You cancelled the questions.");
+    expect(questionsOutcome("Qwen Code", 1, "cancelled")).toBe("You cancelled the question.");
   });
 });
 

@@ -225,12 +225,16 @@ describe("ACP sessions in the app", () => {
         { optionId: "cancel", name: "Cancel", kind: "reject_once" },
       ],
     });
-    const submit = screen.getByRole("button", { name: "Submit" }) as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
     await act(async () => {
       fireEvent.click(screen.getByRole("checkbox", { name: "Blue" }));
       fireEvent.click(screen.getByRole("checkbox", { name: "Green" }));
-      fireEvent.change(screen.getByRole("textbox", { name: "Other answer for Editor" }), { target: { value: "Helix-9f3" } });
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    });
+    const submit = screen.getByRole("button", { name: "Submit" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: "Other" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Your own answer" }), { target: { value: "Helix-9f3" } });
     });
     expect(submit.disabled).toBe(false);
     await act(async () => {
@@ -243,7 +247,7 @@ describe("ACP sessions in the app", () => {
       optionId: "proceed_once",
       answers: { "0": "Blue, Green", "1": "Helix-9f3" },
     });
-    expect(screen.getByText(/You chose: Submit/)).toBeDefined();
+    expect(screen.getByText("You answered Qwen Code's questions.")).toBeDefined();
     // The typed text went to the agent and nowhere else: no other call (a transcript save, say) carries it.
     const others = spy.mock.calls.filter(([cmd]) => cmd !== "acp_respond_permission");
     expect(JSON.stringify(others)).not.toContain("Helix-9f3");

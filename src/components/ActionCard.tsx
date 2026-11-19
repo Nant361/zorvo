@@ -1,16 +1,13 @@
-import { useId, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { formatLineCount, MINUS } from "../lib/diff-stats";
 import { PathText } from "./ui/PathText";
 import { Button, type ButtonVariant } from "./ui/Button";
-import { UserQuestionFields } from "./UserQuestionFields";
-import { orderedChoices, permissionTitle, questionsTitle, titleHoldsPrompt } from "../lib/permission-copy";
-import { EMPTY_DRAFT, answersOf, usableQuestions, type QuestionDraft } from "../lib/user-questions";
+import { QuestionsCard } from "./QuestionsCard";
+import type { QuestionAnswers } from "./UserQuestionsForm";
+import { orderedChoices, permissionTitle, titleHoldsPrompt } from "../lib/permission-copy";
+import { usableQuestions } from "../lib/user-questions";
 import { settledWords, usableZorvoTool } from "../lib/agent-tool-card";
 import type { ActionCard as ActionCardType, PermissionChoice } from "../types";
-
-/** The typed answers of Qwen Code's `ask_user_question`: question number to text. */
-export type QuestionAnswers = Record<string, string>;
 
 /** A permission request from an agent, answered with one of the agent's own options. */
 export interface ActionCardProps {
@@ -20,6 +17,8 @@ export interface ActionCardProps {
   disabled?: boolean;
   /** Who asks, named in the card's title; "The agent" when unknown. */
   agentName?: string;
+  /** The asking agent, for the logo on a question card. */
+  agentProfileId?: string;
 }
 
 /** Shown on a request that came without options: only stopping the agent ends the wait. */
@@ -66,19 +65,12 @@ function PermissionChoices({
   card,
   disabled,
   onChoose,
-  asksQuestions,
-  answers,
 }: {
   card: ActionCardType;
   disabled: boolean;
-  onChoose?: (optionId: string, answers?: QuestionAnswers) => void;
-  /** The card shows questions: an allowing pick needs all of them answered, and sends the answers. */
-  asksQuestions: boolean;
-  answers: QuestionAnswers | undefined;
+  onChoose?: (optionId: string) => void;
 }) {
-  const hintId = useId();
   const options: PermissionChoice[] = orderedChoices(card.options ?? []);
-  const needsAnswers = asksQuestions && answers === undefined;
   if (card.status !== "pending" && usableZorvoTool(card.zorvoTool)) {
     return <p className="text-ui-sm text-fg-muted">{settledWords(card)}</p>;
   }
@@ -96,50 +88,41 @@ function PermissionChoices({
   // Right-aligned plain buttons, with no rule above them, as the canvas draws them.
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {needsAnswers && (
-        <p id={hintId} className="w-full text-right text-ui-sm text-fg-muted">
-          Answer every question to submit.
-        </p>
-      )}
-      {options.map((option) => {
-        const isAllow = option.kind.startsWith("allow");
-        const waitsForAnswers = isAllow && needsAnswers;
-        return (
-          <Button
-            key={option.optionId}
-            variant={choiceVariant(option.kind)}
-            tone="secondary"
-            disabled={disabled || waitsForAnswers}
-            aria-describedby={waitsForAnswers ? hintId : undefined}
-            onClick={() =>
-              isAllow && answers ? onChoose?.(option.optionId, answers) : onChoose?.(option.optionId)
-            }
-          >
-            {option.name}
-          </Button>
-        );
-      })}
+      {options.map((option) => (
+        <Button
+          key={option.optionId}
+          variant={choiceVariant(option.kind)}
+          tone="secondary"
+          disabled={disabled}
+          onClick={() => onChoose?.(option.optionId)}
+        >
+          {option.name}
+        </Button>
+      ))}
     </div>
   );
 }
 
-export function ActionCard({ card, onChoose, disabled = false, agentName = "The agent" }: ActionCardProps) {
+export function ActionCard({ card, onChoose, disabled = false, agentName = "The agent", agentProfileId }: ActionCardProps) {
   // A form needs a way to send it: a card with questions but no allowing option stays a plain card.
   // The questions come back from the saved transcript, so their shape is checked again.
   const questions = card.options?.some((o) => o.kind.startsWith("allow")) ? usableQuestions(card.questions) : undefined;
+  if (questions) {
+    return (
+      <QuestionsCard
+        card={card}
+        questions={questions}
+        agentName={agentName}
+        agentProfileId={agentProfileId}
+        onChoose={onChoose}
+        disabled={disabled}
+      />
+    );
+  }
   // A card Zorvo made for an agent's tool call carries its own title, and its prompt is the task.
   const zorvoTool = usableZorvoTool(card.zorvoTool);
-  const title = zorvoTool
-    ? card.title
-    : questions
-      ? questionsTitle(agentName, questions.length)
-      : permissionTitle(agentName, card.prompt);
-  const showsPrompt = !zorvoTool && (questions !== undefined || !titleHoldsPrompt(card.prompt));
-  // What is picked or typed lives here, in memory, so an answer that did not go through keeps it. It is never stored.
-  const [drafts, setDrafts] = useState<QuestionDraft[]>([]);
-  const answers = questions ? answersOf(questions, drafts) : undefined;
-  const setDraft = (index: number, draft: QuestionDraft) =>
-    setDrafts((prev) => (questions ?? []).map((_, i) => (i === index ? draft : (prev[i] ?? EMPTY_DRAFT))));
+  const title = zorvoTool ? card.title : permissionTitle(agentName, card.prompt);
+  const showsPrompt = !zorvoTool && !titleHoldsPrompt(card.prompt);
   return (
     <div
       data-testid={`action-card-${card.id}`}
@@ -195,17 +178,7 @@ export function ActionCard({ card, onChoose, disabled = false, agentName = "The 
         </p>
       )}
 
-      {questions && card.status === "pending" && (
-        <UserQuestionFields questions={questions} drafts={drafts} onChange={setDraft} disabled={disabled} />
-      )}
-
-      <PermissionChoices
-        card={card}
-        disabled={disabled}
-        onChoose={onChoose}
-        asksQuestions={questions !== undefined}
-        answers={answers}
-      />
+      <PermissionChoices card={card} disabled={disabled} onChoose={onChoose} />
     </div>
   );
 }
