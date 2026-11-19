@@ -254,6 +254,26 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("TAG=demo PORT=3001 sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
   });
 
+  it("matches the last command of a list, which the shell replaced itself with", () => {
+    const moved = launch("moved", "cd /tmp && sleep 300", NOW - 60_000);
+    const listed = launch("listed", "export PORT=3001; pnpm dev", NOW - 60_000);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(moved))?.id).toBe("moved");
+    expect(shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(listed))?.id).toBe("listed");
+    expect(shellToolFor(process("cd /tmp", NOW - 59_000), one(moved))).toBeUndefined();
+    expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(launch("wrapped", `bash -lc "cd web && pnpm dev"`, NOW - 60_000)))?.id).toBe("wrapped");
+  });
+
+  it("keeps two scripts of one name apart when the launch names its path", () => {
+    const a = launch("a", "/workspace/a/serve.py --port 8000", NOW - 60_000);
+    const rel = launch("rel", "scripts/serve.py --port 8000", NOW - 60_000);
+
+    expect(shellToolFor(process("python3 /workspace/b/serve.py --port 8000", NOW - 59_000), one(a))).toBeUndefined();
+    expect(shellToolFor(process("python3 /workspace/a/serve.py --port 8000", NOW - 59_000), one(a))?.id).toBe("a");
+    expect(shellToolFor(process("python3 /work/scripts/serve.py --port 8000", NOW - 59_000), one(rel))?.id).toBe("rel");
+    expect(shellToolFor(process("python3 /work/other/serve.py --port 8000", NOW - 59_000), one(rel))).toBeUndefined();
+  });
+
   it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
     const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
     const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });

@@ -223,18 +223,28 @@ function sameCommand(a: string, b: string): boolean {
 /** The most words an interpreter may put before a program that replaced its shell (`/usr/bin/env python3`). */
 const MAX_INTERPRETER_WORDS = 2;
 
-const baseName = (word: string): string => word.split('/').pop() ?? word;
+/**
+ * Whether a process's word is the program a launch named. A program named by an absolute path must
+ * be that path, one named by a relative path must end with it, and a bare name matches the file
+ * name, so two scripts of one name in different folders stay apart.
+ */
+function isSameProgram(word: string, program: string): boolean {
+  if (program.startsWith('/')) return word === program;
+  const path = program.replace(/^\.\//, '');
+  if (path.includes('/')) return word === path || word.endsWith(`/${path}`);
+  return (word.split('/').pop() ?? word) === path;
+}
 
 /**
  * Whether `command` is `launched` after its program replaced the shell under an interpreter:
  * `pnpm test:unit` shows as `node /app/pnpm test:unit`, `./serve.py` as `python3 /work/serve.py`.
- * The program must be the same file name and every argument the same.
+ * The program must be the same file (`isSameProgram`) and every argument the same.
  */
 function isExecOf(command: string, launched: string): boolean {
   const [program, ...args] = launched.split(' ');
   const words = command.split(' ');
   for (let index = 1; index <= MAX_INTERPRETER_WORDS && index < words.length; index++) {
-    if (baseName(words[index]) !== baseName(program)) continue;
+    if (!isSameProgram(words[index], program)) continue;
     if (words.slice(index + 1).join(' ') === args.join(' ')) return true;
   }
   return false;
@@ -250,14 +260,22 @@ function withoutAssignments(command: string): string {
   return words.slice(index).join(' ');
 }
 
+/** The last command of a list (`cd /tmp && sleep 300`), which a shell may replace itself with. */
+function lastCommand(command: string): string {
+  const parts = command.split(/\s*(?:&&|;)\s*/);
+  return parts[parts.length - 1] ?? command;
+}
+
 /**
  * The texts a process the launch started may show as: the command as given (an agent's own wrapper
- * keeps it whole), without its variables, and the script of either when it runs one with `-c`.
+ * keeps it whole), its last command when it is a list, either without the variables it sets first,
+ * and the script of each when it runs one with `-c`.
  */
 function launchForms(command: string): string[] {
-  const given = [command, withoutAssignments(command)];
-  const forms = [...given, ...given.map(scriptOf)].map(normalized).filter((form) => form !== '');
-  return [...new Set(forms)];
+  const each = (forms: readonly string[], change: (form: string) => string) => [...forms, ...forms.map(change)];
+  // The script first, so a list inside `bash -lc "cd x && pnpm dev"` yields its last command too.
+  const forms = each(each(each([command], scriptOf), lastCommand), withoutAssignments);
+  return [...new Set(each(forms, scriptOf).map(normalized).filter((form) => form !== ''))];
 }
 
 /** Whether a launch ran `command`, the scan's text for a process. */
