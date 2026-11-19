@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **Agents show a page without being asked.** When an answer is better seen than read, such as a report, a comparison, a chart or a diagram, the agent is told it can show it as a page beside the chat, so you no longer have to ask for one.
+
 ## [0.13.0] - 2026-11-19
 
 ### Added
