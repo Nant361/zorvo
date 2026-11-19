@@ -81,8 +81,10 @@ The existing `#general` and voice `General` are moved and renamed, never deleted
 - Post guidelines: "One post per Zorvolabs project, started by the team: what it is, its links and its status. Ask about a project in its post."
 - Tags, Team only: Official, Hackathon, In progress, Live, Archived.
 - A project's post is its home: what it is, its links (repository, demo, hackathon page), its status tag, and updates as replies. A finished project is tagged Archived, never deleted.
+- Sorted by creation date, newest on top. Posts are made oldest first, so the forum reads as a timeline.
+- The posts are the maintainer's hackathon projects from their GitHub organizations and personal repositories, each with the Hackathon tag: one post per project, so a project with several editions or repositories (Langclaw, wearelazydev, DARX) lists them in one post. The list lives in the setup data (`lib/ecosystem-posts.mjs`); a new project is one entry there, and applying it posts only what is missing.
 
-Product tags: each Zorvolabs project other than Zorvo is also a tag in `#help`, `#bugs` and `#ideas`, free for anyone, so a report about it does not mix with Zorvo's. Adding a project is one line in the setup data (`PRODUCTS`), which adds the tag to all three forums; the team then starts its post in `#ecosystem`. There are none yet; hackathon projects are expected to be the first.
+Questions and reports about a project go in its `#ecosystem` post. `#help`, `#bugs` and `#ideas` carry no per-project tags: Discord allows 20 tags per forum, `#help` already uses 5, and there are 20 projects. A project that draws many reports can get one tag of its own later.
 
 Discord forums have no form templates; the post guidelines text is what a poster sees.
 
@@ -245,3 +247,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - From the PR review: the release workflow listens to `released` instead of `published`, so a prerelease later marked as a release is posted; it cuts long notes at a line break, leaves the description out when the notes are empty (Discord refuses an empty one), and lets curl retry a 429 or 5xx three times.
 - Ecosystem section added on request: an ECOSYSTEM category with the `#ecosystem` forum (one post per Zorvolabs project, started by Team), product tags in the three support forums (none yet), a line in `#welcome` and `#ecosystem` among Onboarding's default channels.
 - Roles made by hand are left alone: the scripts keep any category overwrite for a role the spec does not know and reorder roles only when the spec's own roles are out of order. Member is shown apart, as the maintainer set it.
+- Product tags dropped before any were added: 20 projects do not fit Discord's 20-tag limit per forum. Project questions go in the project's own `#ecosystem` post. `#ecosystem` holds 20 posts, oldest first, sorted by creation date, each tagged Hackathon.
