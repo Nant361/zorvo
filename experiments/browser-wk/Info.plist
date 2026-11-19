@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>probe</string>
+<key>CFBundleIdentifier</key><string>xyz.zorvo.browser-spike</string>
+<key>CFBundleName</key><string>Zorvo Browser Spike</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>NSCameraUsageDescription</key><string>The spike verifies that pages cannot access the camera.</string>
+<key>NSMicrophoneUsageDescription</key><string>The spike verifies that pages cannot access the microphone.</string>
+<key>NSLocationUsageDescription</key><string>The spike verifies that pages cannot access location.</string>
+</dict></plist>

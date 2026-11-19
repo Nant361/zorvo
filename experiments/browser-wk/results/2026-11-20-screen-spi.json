@@ -1,0 +1,113 @@
+{
+  "os": "Version 27.0.1 (Build 26A434)",
+  "results": [
+    {
+      "evidence": {
+        "otherSession": "{\"cookie\":\"\"}",
+        "sameSession": "{\"cookie\":\"session=alpha\"}",
+        "storeA": "alpha",
+        "storeB": ""
+      },
+      "gate": "cookies per session",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "storeA": "alpha",
+        "storeB": "beta"
+      },
+      "gate": "no cookie overwrite across sessions",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "afterLiteralArgument": {
+          "count": 2,
+          "input": "'); globalThis.__zorvoProbe = null; //",
+          "source": "trusted",
+          "title": "WK browser spike"
+        },
+        "page": "forged",
+        "trusted": {
+          "count": 1,
+          "input": "original",
+          "source": "trusted",
+          "title": "WK browser spike"
+        }
+      },
+      "gate": "isolated content world",
+      "status": "pass"
+    },
+    {
+      "evidence": "No Tauri IPC script or page-world message handler installed",
+      "gate": "no app bridge in page world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "count": 1,
+        "input": "filled while hidden",
+        "source": "trusted",
+        "title": "WK browser spike"
+      },
+      "gate": "hidden tab works",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "delegateCalls": 2,
+        "result": "NotAllowedError"
+      },
+      "gate": "camera denied",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "delegateCalls": 2,
+        "result": "NotAllowedError"
+      },
+      "gate": "microphone denied",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "delegateCalls": 1,
+        "result": "1"
+      },
+      "gate": "geolocation denied",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "api": "function",
+        "delegateCalls": 1,
+        "limitation": "SPI is diagnostic only and requires a separate design decision and OS coverage.",
+        "result": "{\"camera\":\"NotAllowedError\",\"microphone\":\"NotAllowedError\",\"geolocation\":\"1\",\"screen\":\"NotAllowedError\",\"screenGesture\":{\"trusted\":true,\"active\":true}}",
+        "usesPrivateAPI": true
+      },
+      "gate": "screen capture denial",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "frames": 7,
+        "p95": 17,
+        "y": 1040
+      },
+      "gate": "native scroll smoke check",
+      "status": "pass"
+    },
+    {
+      "evidence": "Native input is a functional observation, not a trackpad comparison, CPU/RAM or simultaneous chat-stream benchmark.",
+      "gate": "scroll performance",
+      "status": "unverified"
+    }
+  ],
+  "harness": {
+    "collectedAt": "2026-11-19T23:34:08.574Z",
+    "arch": "arm64",
+    "sourceSha256": "ced91498addf5ea9f3763fbd6a569e4ca0d42f358713e16fa976f3c7695709e7",
+    "fixtureSha256": "62ca25ceb24206d690e90f4e126c9b25dd27a3d0a8bf780e70850fd680009d96",
+    "screenSPI": true
+  }
+}
