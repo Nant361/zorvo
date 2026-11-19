@@ -598,6 +598,7 @@ pub fn run() {
             branches::switch_branch,
             pull_requests::session_pull_request,
             pull_requests::repo_pull_requests,
+            pull_requests::workspace_pull_requests,
             changes::session_changes,
             changes::session_file_diff,
             diff_stats::session_diff_targets,

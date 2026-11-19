@@ -1,4 +1,6 @@
 import type { SessionNode } from "../../lib/session-helpers";
+import type { PullRequestStatus } from "../../hooks/usePullRequest";
+import type { Session } from "../../types";
 import { RunGroupRow } from "./RunGroupRow";
 import { SessionRow } from "./SessionRow";
 
@@ -18,6 +20,8 @@ export interface SessionListContext {
   onRenameSession?: (sessionId: string, name: string) => void;
   onPinSession?: (sessionId: string, isPinned: boolean) => void;
   onArchiveSession?: (sessionId: string, isArchived: boolean) => void;
+  /** The pull request a session's row shows in place of its time, when gh knows one for its branch. */
+  pullRequestOf?: (session: Session) => PullRequestStatus | null;
 }
 
 /** Sessions with their forks and delegated sessions nested beneath them, joined by a guide line. */
