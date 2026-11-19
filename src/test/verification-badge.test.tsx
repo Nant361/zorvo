@@ -27,7 +27,8 @@ function open(verification: MessageVerification, modelId = MODEL_ID) {
 describe("a reply whose calls have different signers", () => {
   it("says so in place of one signer", () => {
     render(<VerificationBadge verification={{ state: "verified", signed: 3, total: 3 }} modelId={MODEL_ID} />);
-    fireEvent.click(screen.getByRole("button", { name: /Verified in TEE/ }));
+    // Signers of more than one kind: Zorvo can say the answer is signed, not that a TEE signed it.
+    fireEvent.click(screen.getByRole("button", { name: /Signed by NEAR AI/ }));
     expect(screen.getByText("3 calls, more than one signer")).toBeInTheDocument();
   });
 });
@@ -94,7 +95,12 @@ describe("VerificationBadge", () => {
     expect(
       within(panel).getByText("The request and the answer match their signed hashes"),
     ).toBeInTheDocument();
-    expect(within(panel).queryByText(/attestation report/i)).toBeNull();
+    // The popover says what was not checked, so the badge does not claim more than Zorvo verified.
+    expect(
+      within(panel).getByText(
+        "NEAR AI's attestation report lists this signer. Zorvo doesn't check the hardware quote behind that report.",
+      ),
+    ).toBeInTheDocument();
     expect(within(panel).queryByText(/calls signed/i)).toBeNull();
     expect(within(panel).getByText("Model")).toHaveClass("w-24");
     expect(within(panel).getByText("Model").parentElement).toHaveClass("py-1.5");
@@ -120,7 +126,7 @@ describe("VerificationBadge", () => {
     const bodies = [
       [
         "not_signed",
-        "The answer was cut off before NEAR AI could sign it, for example when you pressed Stop. It ran on the same hardware; it just can't be proven.",
+        "Zorvo got no signature for this answer. That happens when the answer is cut off, for example when you pressed Stop, or when NEAR AI's signature could not be read. Without one, where it ran can't be proven.",
       ],
       ["didnt_verify", "The signature doesn't match this answer. Treat the answer as unverified."],
       ["checking", "Right after the answer ends, for a second or two."],

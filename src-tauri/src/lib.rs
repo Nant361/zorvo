@@ -2,6 +2,7 @@ pub mod acp;
 pub mod agent_tools;
 pub mod app_update;
 pub mod appearance;
+pub mod artifacts;
 pub mod attachment_paths;
 pub mod attachments;
 pub mod background_processes;
@@ -22,6 +23,7 @@ pub mod profiles;
 pub mod pty_session;
 pub mod pull_requests;
 pub mod registry;
+pub mod spawn;
 pub mod store;
 pub mod user_profile;
 pub mod windows;
@@ -236,12 +238,10 @@ fn end_orphaned_sessions(
     let count = terminals.len() + agents.len();
     std::thread::spawn(move || {
         workspace_terminal::end_sessions(&app.state::<PtySessionManager>(), &terminals);
-        agents.into_iter().for_each(|(id, session)| {
-            let _ = app
-                .state::<private_mode::service::PrivateMode>()
-                .end_session_cap(&id);
-            session.end();
-        });
+        // A capped session keeps its limit, as it does on Stop: the new UI reopens it under the
+        // same id, and ending the limit here would race that reopen and delete the key it just
+        // took over. A session nobody reopens is swept by the Worker after 24 hours.
+        agents.into_iter().for_each(|(_, session)| session.end());
     });
     count
 }
@@ -375,6 +375,10 @@ fn disable_web_text_substitutions() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Every process Zorvo starts gives up its macOS grants (spawn module).
+    if let Ok(exe) = std::env::current_exe() {
+        spawn::set_trampoline(exe);
+    }
     #[cfg(target_os = "macos")]
     disable_web_text_substitutions();
 
@@ -495,6 +499,9 @@ pub fn run() {
             app.manage(start_agent_tools(app.handle(), &data_dir));
             let (store, migration) = data_migration::open_store(data_dir);
             app.manage(store);
+            app.manage(Arc::new(artifacts::store::ArtifactStore::new(
+                app.state::<store::AppStore>().root().join("artifacts"),
+            )));
             if let Err(error) = migration {
                 report_migration_failure(app.handle(), &error);
             }
@@ -516,10 +523,42 @@ pub fn run() {
                 );
             });
 
+            // Artifact folders of sessions that no longer exist. Skipped when the
+            // state cannot be read or lists no session: all would look orphaned.
+            let known_sessions = artifacts::commands::sessions_to_keep(
+                app.state::<store::AppStore>()
+                    .load_state()
+                    .ok()
+                    .map(|state| state.sessions.iter().map(|s| s.id.clone()).collect()),
+            );
+            if let Some(known_sessions) = known_sessions {
+                let artifacts =
+                    Arc::clone(app.state::<Arc<artifacts::store::ArtifactStore>>().inner());
+                std::thread::spawn(move || {
+                    artifacts.sweep_orphans(
+                        &known_sessions,
+                        std::time::SystemTime::now(),
+                        artifacts::commands::SWEEP_MIN_AGE,
+                    );
+                });
+            }
+
             refresh_catalog_in_background(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            artifacts::commands::artifact_show,
+            artifacts::commands::artifact_list,
+            artifacts::commands::artifact_rename,
+            artifacts::commands::artifact_delete,
+            artifacts::commands::artifact_delete_session,
+            artifacts::commands::artifact_export,
+            artifacts::commands::artifact_view_show,
+            artifacts::commands::artifact_view_bounds,
+            artifacts::commands::artifact_view_hide,
+            artifacts::commands::artifact_view_close,
+            artifacts::commands::artifact_comment_mode,
+            artifacts::commands::artifact_view_marks,
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_update_restart,
@@ -628,6 +667,7 @@ pub fn run() {
                 let pty = app.state::<PtySessionManager>();
                 workspace_terminal::end_all_sessions(&pty);
                 app.state::<Arc<agent_tools::AgentTools>>().shutdown();
+                artifacts::view::close(app);
             }
         });
 }

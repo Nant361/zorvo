@@ -55,6 +55,22 @@ describe("normalizePersistedState", () => {
     expect(state.sessions[1]).not.toHaveProperty("reviewComments");
   });
 
+  it("keeps a session's artifact comments and drops a bad one", () => {
+    const good = {
+      id: "ac-1",
+      artifactId: "a-0123456789abcdef",
+      version: 2,
+      anchor: { kind: "text", quote: "Annual", before: "", after: "" },
+      body: "Badge",
+      createdAt: 1,
+    };
+    const state = normalizePersistedState({
+      sessions: [{ ...base, artifactComments: [good, { ...good, id: "ac-2", anchor: { kind: "frame" } }] }, { ...base, id: "s-2", artifactComments: "oops" }],
+    });
+    expect(state.sessions[0].artifactComments).toEqual([good]);
+    expect(state.sessions[1]).not.toHaveProperty("artifactComments");
+  });
+
   it("keeps a session's private mode when it names a model", () => {
     const state = normalizePersistedState({ sessions: [{ ...base, privateMode: { modelId: "a" } }] });
 
@@ -577,6 +593,13 @@ describe("a saved verification", () => {
     const [message] = normalizeTranscript([reply]);
 
     expect(message.verification).toEqual(reply.verification);
+  });
+
+  it("settles a check that was still running when the transcript was saved", () => {
+    // After a restart nothing is left to finish it: the badge must not spin for good.
+    const [message] = normalizeTranscript([{ ...reply, verification: { ...reply.verification, state: "checking" } }]);
+
+    expect(message.verification).toEqual({ ...reply.verification, state: "not_signed" });
   });
 
   it("drops a malformed verification but keeps the reply", () => {

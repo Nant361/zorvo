@@ -1,7 +1,7 @@
 // Zorvo Private in the session engine: the model a private session runs, the words for a private
 // refusal when a session opens, and the picks a private session never takes. Pure.
 import type { AcpChange } from './acp-draft';
-import { parsePrivateCredits, privateErrorText, PRIVATE_ERROR_CODES } from './private-credits';
+import { actionError, parsePrivateCredits, PRIVATE_ERROR_CODES } from './private-credits';
 import type { AcpOptions } from '../hooks/useAcpSessions';
 import type { Session } from '../types';
 
@@ -74,7 +74,7 @@ export function privateOpenError(error: unknown, isPrivate: boolean): PrivateOpe
   if (refusal) return { text: creditsOutText(refusal.reason), creditsOut: refusal.reason };
   const code = plainCodeOf(error);
   if (!PRIVATE_CODES.has(code)) return null;
-  return isPrivate || code === 'private_session' ? { text: privateErrorText(code) } : null;
+  return isPrivate || code === 'private_session' ? { text: actionError('open', code) } : null;
 }
 
 /**

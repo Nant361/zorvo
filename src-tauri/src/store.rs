@@ -226,6 +226,12 @@ pub struct SessionRecord {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub review_comments: Vec<ReviewCommentRecord>,
+    /// Comments the user wrote on the session's artifact pages.
+    #[serde(
+        deserialize_with = "lenient_artifact_comments",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub artifact_comments: Vec<ArtifactCommentRecord>,
     /// Set for a Zorvo Private session: the NEAR AI model it runs on. The key
     /// is never saved; the backend makes the launch again from the model.
     #[serde(
@@ -251,6 +257,25 @@ pub struct PrivateModeRecord {
     /// This session spends the user's own NEAR AI key rather than Zorvo credits.
     #[serde(default, skip_serializing_if = "is_false")]
     pub own_key: bool,
+    /// The spending limit the user gave this session, in credits. Without it
+    /// a restart would lose the limit and the session's own key with it.
+    #[serde(
+        default,
+        deserialize_with = "lenient_session_cap",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub session_cap: Option<u64>,
+}
+
+/// A saved limit, or none when it is not a whole positive number: the session
+/// stays private either way.
+fn lenient_session_cap<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value
+        .and_then(|value| value.as_u64())
+        .filter(|cap| *cap > 0))
 }
 
 fn is_false(value: &bool) -> bool {
@@ -263,6 +288,26 @@ fn is_false(value: &bool) -> bool {
 pub struct PrivateUsageRecord {
     pub credits: f64,
     pub estimated: bool,
+}
+
+/// One comment on an artifact page. The UI checks the anchor's fields and the
+/// limits; here only the shape matters, and the anchor must be an object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactCommentRecord {
+    pub id: String,
+    pub artifact_id: String,
+    pub version: i64,
+    pub anchor: serde_json::Map<String, serde_json::Value>,
+    pub body: String,
+    pub created_at: i64,
+    /// When a message holding this comment was sent.
+    #[serde(
+        default,
+        deserialize_with = "lenient_time",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub sent_at: Option<i64>,
 }
 
 /// One comment on a line of a session's diff. The UI checks the values of
@@ -422,6 +467,19 @@ fn lenient_opened_by<'de, D: Deserializer<'de>>(
 fn lenient_review_comments<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ReviewCommentRecord>, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value(item).ok())
+            .collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// The saved artifact comments, each read on its own, as review comments are.
+fn lenient_artifact_comments<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<ArtifactCommentRecord>, D::Error> {
     Ok(match serde_json::Value::deserialize(deserializer)? {
         serde_json::Value::Array(items) => items
             .into_iter()
@@ -906,6 +964,65 @@ mod tests {
         assert_eq!(saved["createdAt"], 10);
     }
 
+    fn artifact_comment_json(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "artifactId": "a-0123456789abcdef",
+            "version": 2,
+            "anchor": { "kind": "text", "quote": "Annual", "before": "", "after": "" },
+            "body": "Make this a badge.",
+            "createdAt": 10,
+            "sentAt": 20,
+        })
+    }
+
+    #[test]
+    fn artifact_comments_survive_a_save() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "artifactComments": [artifact_comment_json("ac-1")]
+        })))
+        .expect("deserialize");
+
+        let value = serde_json::to_value(&record).expect("serialize");
+
+        assert_eq!(value["artifactComments"][0], artifact_comment_json("ac-1"));
+        let back: SessionRecord = serde_json::from_value(value).expect("deserialize again");
+        assert_eq!(back, record);
+    }
+
+    #[test]
+    fn an_artifact_comments_field_of_the_wrong_type_loads_empty() {
+        let record: SessionRecord =
+            serde_json::from_value(session_json(serde_json::json!({ "artifactComments": 5 })))
+                .expect("a bad artifactComments must not fail the record");
+        assert!(record.artifact_comments.is_empty());
+
+        let mut no_anchor = artifact_comment_json("ac-2");
+        no_anchor.as_object_mut().expect("object").remove("anchor");
+        let mut text_anchor = artifact_comment_json("ac-3");
+        text_anchor["anchor"] = serde_json::json!("text");
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "artifactComments": [no_anchor, text_anchor, artifact_comment_json("ac-1")]
+        })))
+        .expect("deserialize");
+        let ids: Vec<&str> = record
+            .artifact_comments
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect();
+        assert_eq!(ids, ["ac-1"]);
+    }
+
+    #[test]
+    fn an_empty_artifact_comments_list_is_not_written() {
+        let value = serde_json::to_value(SessionRecord {
+            id: "s-1".to_string(),
+            ..SessionRecord::default()
+        })
+        .expect("serialize");
+        assert!(value.get("artifactComments").is_none());
+    }
+
     #[test]
     fn a_private_mode_record_round_trips_as_camel_case() {
         let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
@@ -918,6 +1035,7 @@ mod tests {
             Some(PrivateModeRecord {
                 model_id: "Qwen/Qwen3.8-27B".to_string(),
                 own_key: false,
+                session_cap: None,
             })
         );
         let value = serde_json::to_value(&record).expect("serialize");
@@ -936,10 +1054,40 @@ mod tests {
             Some(PrivateModeRecord {
                 model_id: "Qwen/Qwen3.8-27B".to_string(),
                 own_key: true,
+                session_cap: None,
             })
         );
         let value = serde_json::to_value(&record).expect("serialize");
         assert_eq!(value["privateMode"]["ownKey"], true);
+    }
+
+    #[test]
+    fn a_private_mode_record_keeps_the_session_limit() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "privateMode": { "modelId": "Qwen/Qwen3.8-27B", "sessionCap": 200 }
+        })))
+        .expect("deserialize");
+
+        assert_eq!(
+            record
+                .private_mode
+                .as_ref()
+                .and_then(|mode| mode.session_cap),
+            Some(200)
+        );
+        let value = serde_json::to_value(&record).expect("serialize");
+        assert_eq!(value["privateMode"]["sessionCap"], 200);
+    }
+
+    #[test]
+    fn a_malformed_session_limit_keeps_the_session_private() {
+        let record: SessionRecord = serde_json::from_value(session_json(serde_json::json!({
+            "privateMode": { "modelId": "Qwen/Qwen3.8-27B", "sessionCap": "lots" }
+        })))
+        .expect("deserialize");
+
+        let mode = record.private_mode.expect("still private");
+        assert_eq!(mode.session_cap, None);
     }
 
     #[test]

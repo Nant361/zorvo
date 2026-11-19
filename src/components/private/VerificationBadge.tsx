@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Loader2, ShieldCheck, ShieldMinus, ShieldX } from "lucide-react";
 import type { MessageVerification, VerificationKind, VerificationState } from "../../types";
-import { replyUsage, shortSigner, usageLine, VERIFICATION_LABEL } from "../../lib/private-verification";
+import { replyUsage, shortSigner, usageLine, verificationLabel } from "../../lib/private-verification";
 import type { ModelPrice } from "../../lib/private-credits";
 import { verificationCenterUrl } from "./PrivateInspector";
 import { Chip } from "../ui/Chip";
@@ -20,7 +20,7 @@ const LOOK: Record<
 const BODY: Record<"didnt_verify" | "not_signed" | "checking", string> = {
   didnt_verify: "The signature doesn't match this answer. Treat the answer as unverified.",
   not_signed:
-    "The answer was cut off before NEAR AI could sign it, for example when you pressed Stop. It ran on the same hardware; it just can't be proven.",
+    "Zorvo got no signature for this answer. That happens when the answer is cut off, for example when you pressed Stop, or when NEAR AI's signature could not be read. Without one, where it ran can't be proven.",
   checking: "Right after the answer ends, for a second or two.",
 };
 
@@ -57,7 +57,7 @@ export function VerificationBadge({ verification, modelId, model, onOpenUrl }: V
   const [isOpen, setIsOpen] = useState(false);
   const look = LOOK[verification.state];
   const Icon = look.icon;
-  const label = VERIFICATION_LABEL[verification.state];
+  const label = verificationLabel(verification);
 
   return (
     <div className="mt-1.5 flex flex-col gap-1">
@@ -96,7 +96,7 @@ export function VerificationBadge({ verification, modelId, model, onOpenUrl }: V
           <div className="flex w-72 flex-col gap-3.5 p-[18px]">
             <div className="flex items-center gap-2 pb-2">
               <ShieldCheck size={14} strokeWidth={1.75} aria-hidden="true" className="text-status-running" />
-              <span className="text-ui font-semibold text-fg">Verified in TEE</span>
+              <span className="text-ui font-semibold text-fg">{label}</span>
             </div>
             <dl className="flex flex-col">
               <Row label="Model">
@@ -118,6 +118,10 @@ export function VerificationBadge({ verification, modelId, model, onOpenUrl }: V
                 <span className="text-ui-sm">The request and the answer match their signed hashes</span>
               </Row>
             </dl>
+            <p className="text-caption text-fg-muted">
+              NEAR AI's attestation report lists this signer. Zorvo doesn't check the hardware quote behind that
+              report.
+            </p>
             <button
               type="button"
               className="focus-ring mt-2 self-start text-left text-ui-sm text-fg-secondary hover:text-fg"

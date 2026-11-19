@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn refuses_a_named_pipe_without_opening_it() {
         let dir = Dir::new("pipe");
-        let status = std::process::Command::new("mkfifo")
+        let status = crate::spawn::command("mkfifo")
             .arg(dir.0.join("pipe.png"))
             .status()
             .expect("mkfifo");

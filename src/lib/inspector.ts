@@ -1,5 +1,5 @@
 /** The inspector's tabs, in the order they show. */
-export type InspectorTab = "changes" | "activity" | "files" | "terminal" | "private";
+export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "tasks" | "terminal" | "private";
 
 export const INSPECTOR_WIDTH = { min: 320, max: 720, initial: 380, wide: 560, step: 16 } as const;
 
@@ -20,9 +20,12 @@ export function clampInspectorWidth(px: number): number {
   return Math.min(INSPECTOR_WIDTH.max, Math.max(INSPECTOR_WIDTH.min, Math.round(px)));
 }
 
-/** The Terminal tab, and the Files tab while a file is open in it, need room for a line of code or a shell. */
+/**
+ * The Terminal, Artifacts and Tasks tabs, and the Files tab while a file is open in it, need room for a
+ * shell, a page or a line of code. Artifacts is wide for its list too, so opening a page does not move the edge.
+ */
 function isWideTab(tab: InspectorTab, isViewingFile: boolean): boolean {
-  return tab === "terminal" || (tab === "files" && isViewingFile);
+  return tab === "terminal" || tab === "artifacts" || tab === "tasks" || (tab === "files" && isViewingFile);
 }
 
 /** The narrowest the main sheet may get beside the inspector, so its top bar is never crushed. */
@@ -59,13 +62,25 @@ export function minInspectorWidth(tab: InspectorTab, isViewingFile = false): num
 
 /**
  * The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder,
- * and Private only while a private session is on screen.
+ * Artifacts while the session has a page its agent showed, Tasks while the session has a task tab open
+ * (both between Files and Terminal), and Private only while a private session is on screen.
  */
-export function offeredTabs(on: { hasFolder: boolean; isRepository: boolean; hasSession: boolean; isPrivate?: boolean }): InspectorTab[] {
+export function offeredTabs(on: {
+  hasFolder: boolean;
+  isRepository: boolean;
+  hasSession: boolean;
+  hasArtifacts?: boolean;
+  isPrivate?: boolean;
+  /** A task tab is open for the session on screen: only then is there a Tasks tab. */
+  hasTaskTabs?: boolean;
+}): InspectorTab[] {
   const tabs: InspectorTab[] = [];
   if (on.hasFolder && on.isRepository) tabs.push("changes");
   if (on.hasSession) tabs.push("activity");
-  if (on.hasFolder) tabs.push("files", "terminal");
+  if (on.hasFolder) tabs.push("files");
+  if (on.hasSession && on.hasArtifacts) tabs.push("artifacts");
+  if (on.hasSession && on.hasTaskTabs) tabs.push("tasks");
+  if (on.hasFolder) tabs.push("terminal");
   if (on.hasSession && on.isPrivate) tabs.push("private");
   return tabs;
 }

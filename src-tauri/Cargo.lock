@@ -5991,6 +5991,7 @@ dependencies = [
  "tokio",
  "ureq",
  "url",
+ "wry",
  "zip",
 ]
 

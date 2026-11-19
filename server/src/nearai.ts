@@ -162,6 +162,9 @@ export type ListedKey = { id: string; name?: string; limitNano: bigint | null; u
  */
 export const NEAR_AI_USER_AGENT = "zorvo-credits-operator-login/1";
 
+/** How many times longer than any other call a token refresh may take before it is given up on. */
+const REFRESH_TIMEOUT_FACTOR = 3;
+
 export class NearAiClient {
   private readonly base: string;
 
@@ -173,11 +176,17 @@ export class NearAiClient {
     this.base = base.replace(/\/+$/, "");
   }
 
-  private async request(method: string, path: string, token: string | undefined, body?: unknown): Promise<unknown> {
+  private async request(
+    method: string,
+    path: string,
+    token: string | undefined,
+    body?: unknown,
+    timeoutMs: number = this.timeoutMs,
+  ): Promise<unknown> {
     const headers: Record<string, string> = { "user-agent": NEAR_AI_USER_AGENT };
     if (token !== undefined) headers.authorization = `Bearer ${token}`;
     if (body !== undefined) headers["content-type"] = "application/json";
-    const signal = AbortSignal.timeout(this.timeoutMs);
+    const signal = AbortSignal.timeout(timeoutMs);
     let response: Response;
     let text: string;
     try {
@@ -189,7 +198,7 @@ export class NearAiClient {
       });
       text = await response.text();
     } catch (error) {
-      if (signal.aborted) throw new NearAiError(0, `NEAR AI ${method} ${path.split("?")[0]} timed out after ${this.timeoutMs} ms`);
+      if (signal.aborted) throw new NearAiError(0, `NEAR AI ${method} ${path.split("?")[0]} timed out after ${timeoutMs} ms`);
       throw error;
     }
     let parsed: unknown;
@@ -210,7 +219,16 @@ export class NearAiClient {
    * as it is, so the caller can still keep the new refresh token; `refreshOperator` refuses to use it.
    */
   async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string; refreshExpiresAt?: string }> {
-    const body = await this.request("POST", "/users/me/access-tokens", refreshToken);
+    // The refresh token is single-use: giving up on an answer NEAR AI is still sending loses the
+    // only live token and ends the operator session until it is seeded again by hand. So this one
+    // call waits longer than the rest.
+    const body = await this.request(
+      "POST",
+      "/users/me/access-tokens",
+      refreshToken,
+      undefined,
+      this.timeoutMs * REFRESH_TIMEOUT_FACTOR,
+    );
     if (!isRecord(body)) return unexpected("refresh answer");
     const { access_token: accessToken, refresh_token: newRefreshToken, refresh_token_expiration: expiration } = body;
     // Only the two tokens are required: the old refresh token is already spent, so the new pair must never be discarded.

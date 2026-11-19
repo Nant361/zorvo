@@ -165,12 +165,20 @@ fn each_status_is_reported() {
     let catalog = Catalog::bundled(&bundle);
     let globals = BTreeSet::from(["global-npx-pkg".to_string()]);
 
-    // The user's Node serves ready-npx and global-npx.
+    // The user's Node serves the npx agents; only zorvo-npx has its package installed.
+    let npm_install = BinDir::new(&["zorvo-npx"]);
     let mut installed = user_node(22);
     installed.agents.insert(
         ("zorvo-bin".to_string(), "1.0.0".to_string()),
         zorvo_dir.clone(),
     );
+    let npm_key = ("zorvo-npx".to_string(), "1.0.0".to_string());
+    installed
+        .agents
+        .insert(npm_key.clone(), npm_install.path().to_path_buf());
+    installed
+        .agent_bins
+        .insert(npm_key, "zorvo-npx".to_string());
     let result = view(
         &catalog,
         &dir.path_var(),
@@ -179,10 +187,11 @@ fn each_status_is_reported() {
         &BTreeMap::new(),
     );
 
-    assert_eq!(agent(&result, "ready-npx").status, "ready");
+    // An npx agent is ready only from Zorvo's install, whatever the user has globally.
+    assert_eq!(agent(&result, "ready-npx").status, "not_installed");
     assert_eq!(agent(&result, "ready-uvx").status, "ready");
-    assert_eq!(agent(&result, "global-npx").status, "on_your_mac");
-    assert_eq!(agent(&result, "global-npx").location, None);
+    assert_eq!(agent(&result, "global-npx").status, "not_installed");
+    assert_eq!(agent(&result, "zorvo-npx").status, "by_zorvo");
     let on_path = agent(&result, "on-path");
     assert_eq!(on_path.status, "on_your_mac");
     assert_eq!(
@@ -199,7 +208,7 @@ fn each_status_is_reported() {
     assert_eq!(fresh.available_from, Some(first_seen_recent + MIN_AGE_SECS));
     assert_eq!(fresh.name, "Agent fresh");
 
-    // Only Zorvo's Node: npx runs on it.
+    // Only Zorvo's Node, and no package installed.
     let zorvo_node = InstalledTools {
         user_node_major: Some(18),
         node: Some(InstalledRuntime {
@@ -215,7 +224,8 @@ fn each_status_is_reported() {
         &zorvo_node,
         &BTreeMap::new(),
     );
-    assert_eq!(agent(&result, "zorvo-npx").status, "by_zorvo");
+    // Without its package it is not installed, on Zorvo's Node too.
+    assert_eq!(agent(&result, "zorvo-npx").status, "not_installed");
     assert_eq!(
         result
             .agents

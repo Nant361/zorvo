@@ -2,6 +2,7 @@ import type { ModelPrice } from "../lib/private-credits";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MessageRow } from "./chat/MessageRow";
 import { WorkingIndicator } from "./chat/ReplyExtras";
+import { waitingToolCallIds } from "../lib/task-view";
 import { AgentStallNotice } from "./chat/AgentStallNotice";
 import { SelectionToolbar } from "./chat/SelectionToolbar";
 import type { AgentFailures } from "../lib/agent-stall";
@@ -11,7 +12,7 @@ import { useStickToBottom } from "../hooks/useStickToBottom";
 import { useChatSelection } from "../hooks/useChatSelection";
 import { replyQuote } from "../lib/reply-quote";
 import { isAwaitingUser } from "../lib/acp-elicitation";
-import type { ChatMessage, ElicitationAnswer } from "../types";
+import type { ArtifactCard, ChatMessage, ElicitationAnswer } from "../types";
 
 export type { ChatMessage, ToolExecution } from "../types";
 
@@ -32,7 +33,7 @@ const COPIED_FEEDBACK_MS = 2000;
 function hasSomethingToShow(msg: ChatMessage): boolean {
   if (msg.role === "user") return true;
   return Boolean(
-    msg.content.trim() || msg.thinking || msg.plan?.length || msg.tools?.length || msg.actionCard || msg.elicitation,
+    msg.content.trim() || msg.thinking || msg.plan?.length || msg.tools?.length || msg.actionCard || msg.elicitation || msg.artifactCard,
   );
 }
 
@@ -53,6 +54,10 @@ export interface ChatCanvasProps {
   onAnswerElicitation?: (key: string, answer: ElicitationAnswer) => void;
   /** Opens an agent's page again after the user opened it once. */
   onReopenElicitationUrl?: (key: string) => void;
+  /** The ids of the session's artifacts, so a card of a deleted one reads Removed. */
+  artifactIds?: ReadonlySet<string>;
+  /** Shows an artifact card's version in the Artifacts tab; absent in a popout. */
+  onOpenArtifact?: (card: ArtifactCard) => void;
   /** Opens NEAR AI's Verification Center from a private reply's badge. */
   onOpenUrl?: (url: string) => void;
   /** The private model id, for a reply's verification popover. */
@@ -75,6 +80,12 @@ export interface ChatCanvasProps {
   delegatedFrom?: ReactNode;
   /** A delegation's status under the messages, before the turn's own status. */
   delegationStatus?: ReactNode;
+  /** Opens a subagent's task beside the chat; without it a task row is not a button. */
+  onOpenTask?: (toolId: string) => void;
+  /** The subagent whose task tab is on screen. */
+  openTaskId?: string;
+  /** The commands the agent left running, as rows after the last message. */
+  tasksFooter?: ReactNode;
   /** Shown under the last message and the turn's status (a failed turn's card). */
   footer?: ReactNode;
   /** Puts a quote of text selected in a message into the message box; Reply is offered only when given. */
@@ -93,6 +104,8 @@ export function ChatCanvas({
   onChooseOption,
   onAnswerElicitation,
   onReopenElicitationUrl,
+  artifactIds,
+  onOpenArtifact,
   onOpenUrl,
   privateModelId,
   privateModel,
@@ -104,6 +117,9 @@ export function ChatCanvas({
   header,
   delegatedFrom,
   delegationStatus,
+  onOpenTask,
+  openTaskId,
+  tasksFooter,
   footer,
   onReply,
   replyBlockedReason,
@@ -166,6 +182,8 @@ export function ChatCanvas({
   const onChooseOptionRef = useLatest(onChooseOption);
   const onAnswerElicitationRef = useLatest(onAnswerElicitation);
   const onReopenElicitationUrlRef = useLatest(onReopenElicitationUrl);
+  const onOpenArtifactRef = useLatest(onOpenArtifact);
+  const handleOpenArtifact = useCallback((card: ArtifactCard) => onOpenArtifactRef.current?.(card), [onOpenArtifactRef]);
 
   const handleCopyMessage = useCallback((id: string, content: string) => {
     if (navigator?.clipboard?.writeText) {
@@ -177,6 +195,11 @@ export function ChatCanvas({
   // These take the message id, so every row gets the same function and an
   // unchanged row is not re-rendered when the host makes a new closure.
   const handleFork = useCallback((id: string) => onForkRef.current?.(id), [onForkRef]);
+  // The same array while the same requests wait, so a row is not drawn again on every streamed frame.
+  const waitingKey = waitingToolCallIds(messages).join("\n");
+  const waiting = useMemo(() => (waitingKey ? waitingKey.split("\n") : undefined), [waitingKey]);
+  const onOpenTaskRef = useLatest(onOpenTask);
+  const handleOpenTask = useCallback((_messageId: string, toolId: string) => onOpenTaskRef.current?.(toolId), [onOpenTaskRef]);
   const handleRewind = useCallback((id: string) => onRewindRef.current?.(id), [onRewindRef]);
   const handleChooseOption = useCallback(
     (cardId: string, optionId: string, answers?: Record<string, string>) =>
@@ -253,11 +276,17 @@ export function ChatCanvas({
           onChooseOption={onChooseOption ? handleChooseOption : undefined}
           onAnswerElicitation={onAnswerElicitation ? handleAnswerElicitation : undefined}
           onReopenElicitationUrl={onReopenElicitationUrl ? handleReopenElicitationUrl : undefined}
+          artifactIds={artifactIds}
+          onOpenArtifact={onOpenArtifact ? handleOpenArtifact : undefined}
           onOpenUrl={onOpenUrl}
           privateModelId={privateModelId}
           privateModel={privateModel}
+          onOpenTask={onOpenTask ? handleOpenTask : undefined}
+          openTaskId={openTaskId}
+          waitingToolCallIds={waiting}
         />
       ))}
+      {tasksFooter && <div className="mx-auto w-full max-w-chat">{tasksFooter}</div>}
       {delegationStatus}
       {isWorking && <WorkingIndicator agentName={shownAgentName} since={workStartedAt} />}
       {isWorking && (

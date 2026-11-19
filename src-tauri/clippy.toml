@@ -1,0 +1,6 @@
+# Every process Zorvo starts goes through `spawn`, which gives up Zorvo's
+# macOS Screen Recording and Accessibility grants (computer use spec §1).
+disallowed-methods = [
+  { path = "std::process::Command::new", reason = "use crate::spawn::command, which disclaims macOS responsibility" },
+  { path = "portable_pty::CommandBuilder::new", reason = "use crate::spawn::pty_command, which disclaims macOS responsibility" },
+]

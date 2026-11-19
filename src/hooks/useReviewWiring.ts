@@ -1,10 +1,11 @@
 import type { RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import type { ComposerHandle } from '../components/ComposerDock';
+import { artifactHeading, artifactMessage, type CheckedArtifactComment } from '../lib/artifact-comments';
 import { runOfSession } from '../lib/compare-run';
 import type { ReviewOwner } from '../lib/composer-state';
 import { asUnsent, reviewHeading, reviewMessage, type CheckedComment, type MessageContext } from '../lib/review-comments';
-import type { ReviewComment, ReviewTarget, Session } from '../types';
+import type { Artifact, ArtifactComment, ReviewComment, ReviewTarget, Session } from '../types';
 import type { ReviewComments } from './useReviewComments';
 import { useReviewMessage, type ReviewSlot } from './useReviewMessage';
 
@@ -20,10 +21,29 @@ export interface AddReview {
   add: (comments: readonly CheckedComment[], target: ReviewTarget, context: MessageContext) => void;
 }
 
+/** What the artifact viewer needs to put its comments in the message. */
+export interface AddArtifactReview {
+  inMessage: ReadonlySet<string>;
+  /** Why nothing can be added now; undefined when it can. The same reasons as the diff's. */
+  blockedReason: string | undefined;
+  add: (checked: readonly CheckedArtifactComment[], artifact: Artifact, cwd: string) => void;
+}
+
+type ArtifactCommentsChange = (prev: ArtifactComment[]) => ArtifactComment[];
+
+/** A comment going into a message again is plain until that message is sent. */
+function unsent(comment: ArtifactComment): ArtifactComment {
+  const { sentAt: _sentAt, ...rest } = comment;
+  return rest;
+}
+
 export interface ReviewWiring {
   /** The comments, with Edit and Delete also taking a comment out of the message. */
   review: ReviewComments;
   addReview: AddReview;
+  addArtifactReview: AddArtifactReview;
+  /** Takes comments of either kind out of the message, when they are edited, deleted or swept. */
+  forget: (ids: readonly string[]) => void;
   /** The composer's comments for the session on screen, while its message is still being written. */
   slot: ReviewSlot | null;
   /** The session the composer's comments are for, while that blocks Send here. */
@@ -46,11 +66,13 @@ export function useReviewWiring({
   sessions,
   comments,
   updateComments,
+  updateArtifactComments,
   composerRef,
   canContinue,
   hasComposer,
   isComposerDisabled,
   collapseDiff,
+  collapseArtifact,
   agentNameOf,
 }: {
   /** The session on screen. */
@@ -58,6 +80,7 @@ export function useReviewWiring({
   sessions: readonly Session[];
   comments: ReviewComments;
   updateComments: (sessionId: string, change: (prev: ReviewComment[]) => ReviewComment[]) => void;
+  updateArtifactComments?: (sessionId: string, change: ArtifactCommentsChange) => void;
   composerRef: RefObject<ComposerHandle | null>;
   /** The session on screen takes a message itself. When not, Send falls through and starts a new session. */
   canContinue: boolean;
@@ -66,16 +89,24 @@ export function useReviewWiring({
   isComposerDisabled: boolean;
   /** Ends an expanded diff, which hides the composer. */
   collapseDiff: () => void;
+  /** Ends an expanded artifact page, which hides the composer too. */
+  collapseArtifact?: () => void;
   agentNameOf: (profileId: string) => string;
 }): ReviewWiring {
   const change = (sessionId: string, ids: readonly string[], changed: (comment: ReviewComment) => ReviewComment) =>
     updateComments(sessionId, (prev) => prev.map((comment) => (ids.includes(comment.id) ? changed(comment) : comment)));
+  const changeArtifact = (sessionId: string, ids: readonly string[], changed: (comment: ArtifactComment) => ArtifactComment) =>
+    updateArtifactComments?.(sessionId, (prev) => prev.map((comment) => (ids.includes(comment.id) ? changed(comment) : comment)));
   const message = useReviewMessage({
     activeSessionId: session?.id,
     sessionIds: sessions.map((candidate) => candidate.id),
     markSent: (sessionId, ids) => {
       const sentAt = Date.now();
       change(sessionId, ids, (comment) => ({ ...comment, sentAt }));
+    },
+    markArtifactSent: (sessionId, ids) => {
+      const sentAt = Date.now();
+      changeArtifact(sessionId, ids, (comment) => ({ ...comment, sentAt }));
     },
   });
   const { slot, inMessage, sendFrom, rearm, onComposerText, onComposerRestored, onComposerGivenBack } = message;
@@ -102,6 +133,18 @@ export function useReviewWiring({
     message.add(session.id, ids, target);
   };
 
+  const addArtifact: AddArtifactReview['add'] = (checked, artifact, cwd) => {
+    const composer = composerRef.current;
+    if (!session || !composer || blockedReason || checked.length === 0) return;
+    // The composer takes the focus below, so an expanded page must give it its place first.
+    flushSync(() => collapseArtifact?.());
+    const withHeading = message.needsArtifactHeading(session.id, artifact.id, artifactHeading(artifact, cwd));
+    composer.insertText(artifactMessage(checked, artifact, cwd, withHeading));
+    const ids = checked.map(({ comment }) => comment.id);
+    changeArtifact(session.id, ids, unsent);
+    message.addArtifact(session.id, ids, artifact.id);
+  };
+
   const owner = blocksSend && slot ? sessions.find((candidate) => candidate.id === slot.sessionId) : undefined;
   // A run's sessions share one title, so only the agent tells them apart: in the run, and once archived out of it.
   // A Pick's winner keeps its id, but it is a plain session again and the sidebar lists it by title.
@@ -121,6 +164,8 @@ export function useReviewWiring({
       },
     },
     addReview: { inMessage, blockedReason, add },
+    addArtifactReview: { inMessage: message.inMessageArtifact, blockedReason, add: addArtifact },
+    forget: message.forget,
     slot,
     reviewOwner: blocksSend
       ? { title: ownerTitle || null, isArchived: Boolean(owner?.archivedAt), cannotContinue: isOwnSessionStuck }

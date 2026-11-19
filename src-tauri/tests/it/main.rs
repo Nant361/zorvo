@@ -2,6 +2,10 @@
 //! linked once instead of once per file. `installer_state_test.rs` stays
 //! apart: it sets process-wide installer state that other tests also read.
 
+// Tests start helper processes (git, shells) directly; production code must go
+// through `spawn` (clippy.toml).
+#![allow(clippy::disallowed_methods)]
+
 mod common;
 
 mod acp_jsonrpc_test;
@@ -10,6 +14,7 @@ mod acp_private_errors_test;
 mod acp_prompt_blocks_test;
 mod acp_session_list_test;
 mod acp_session_reopen_test;
+mod acp_subagent_test;
 mod agent_tools_cli_test;
 mod agent_tools_e2e_test;
 mod agent_tools_service_test;
@@ -50,7 +55,11 @@ mod workspaces_test;
 mod worktrees_test;
 
 /// Test files that are binaries of their own, directly in `tests/`.
-const OWN_BINARIES: &[&str] = &["installer_state_test.rs", "private_proxy_test.rs"];
+const OWN_BINARIES: &[&str] = &[
+    "installer_state_test.rs",
+    "private_proxy_test.rs",
+    "spawn_test.rs",
+];
 
 /// The `.rs` file names directly in `dir`.
 fn rust_files_in(dir: &std::path::Path) -> Vec<String> {

@@ -30,8 +30,6 @@ use super::PrivateError;
 mod recovery;
 
 const MODELS_TTL: Duration = Duration::from_secs(10 * 60);
-/// 1 USDC paid buys 100 credits.
-const CREDITS_PER_USD: u64 = 100;
 const MAX_PROMO_CHARS: usize = 64;
 const CHECKOUT_HOST: &str = "pay.pingpay.io";
 const CREDITED: &str = "credited";
@@ -260,9 +258,13 @@ impl PrivateMode {
     /// is made before the reset, so a random source that fails changes nothing.
     fn create_secret(&self) -> Result<String, PrivateError> {
         let code = new_recovery_code()?;
+        // The user's own key is not the device's: it stays in the Keychain, so what the state
+        // file says about it stays too.
         self.update_state(|old| LocalState {
             models: old.models,
             private_sessions: old.private_sessions,
+            own_key_added_at: old.own_key_added_at,
+            own_key_no_credits: old.own_key_no_credits,
             ..LocalState::default()
         })?;
         self.store.set(DEVICE_SECRET, &code)?;
@@ -644,7 +646,11 @@ impl PrivateMode {
         let cap = self.load_state().session_cap(app_session_id);
         let _ = self.store.delete(&account);
         lock(&self.seen).remove(app_session_id);
-        self.change_state(|old| old.without_session_cap(app_session_id));
+        // Nothing recorded, nothing to write: deleting an ordinary session must not create
+        // or rewrite Private mode's state file.
+        if cap.is_some() {
+            self.change_state(|old| old.without_session_cap(app_session_id));
+        }
         Ok(cap)
     }
 
@@ -664,8 +670,8 @@ impl PrivateMode {
     }
 
     /// Ends a capped session at the Worker and forgets its local key. Called on
-    /// delete and orphan cleanup; a failed call is only logged, since the Worker
-    /// sweeps an idle session after 24 hours.
+    /// delete; a failed call is only logged, since the Worker sweeps an idle
+    /// session after 24 hours.
     pub fn end_session_cap(&self, app_session_id: &str) -> Result<(), PrivateError> {
         if let Some(cap) = self.take_session_cap(app_session_id)? {
             self.end_taken_session_cap(cap);
@@ -851,11 +857,8 @@ impl PrivateMode {
     pub fn models_for_launch(&self, own_key: bool) -> Result<Vec<ModelPrice>, PrivateError> {
         if own_key {
             // The catalog may be older than its Worker TTL; an own-key launch must not ask the
-            // Worker, and the UI refreshed this same list when the Private chip turned on.
-            Ok(lock(&self.models)
-                .as_ref()
-                .map(|(_, list)| list.clone())
-                .unwrap_or_default())
+            // Worker, so it uses the list this run read, else the one saved on this Mac.
+            Ok(self.known_models())
         } else {
             self.models()
         }
@@ -952,11 +955,36 @@ impl PrivateMode {
     /// What `session_id`'s private calls cost, from billing where it answers and from token counts
     /// when it does not. It uses the key held by the proxy for that session and returns no key.
     pub fn session_usage(&self, session_id: &str) -> PrivateSessionUsage {
-        let records = self.proxy.records(session_id);
+        // A native fork shares its source's token, and every call on a token is recorded under
+        // the session the token was made for. Counting only those keeps one call in one total;
+        // the fork counts its own calls from the first token made for it (a reopen), or from
+        // the moment its source is deleted and the proxy hands the token over to it.
+        let held = self.proxy.records(session_id);
+        let counted_for = super::billing::counted_for(&held, session_id);
+        let records: Vec<_> = held
+            .into_iter()
+            .filter(|record| record.app_session_id == session_id)
+            .collect();
         let key = self.proxy.key(session_id);
-        let models = self.cached_models().unwrap_or_default();
-        self.usage
-            .usage(&records, &models, key.as_deref(), self.billing.as_ref())
+        // Prices are only used to estimate a call billing has not priced, so an old list is
+        // better than none: without one the call would be left out of the total.
+        let models = self.known_models();
+        let usage = self
+            .usage
+            .usage(&records, &models, key.as_deref(), self.billing.as_ref());
+        PrivateSessionUsage {
+            counted_for,
+            ..usage
+        }
+    }
+
+    /// The newest catalog this Mac has, however old: the one read in this run, else the saved
+    /// one. It never asks the Worker.
+    fn known_models(&self) -> Vec<ModelPrice> {
+        let in_memory = lock(&self.models).as_ref().map(|(_, list)| list.clone());
+        in_memory
+            .or_else(|| self.load_state().models.map(|cached| cached.list))
+            .unwrap_or_default()
     }
 
     fn cached_models(&self) -> Option<Vec<ModelPrice>> {
@@ -990,7 +1018,7 @@ impl PrivateMode {
         let pending = PendingTopup {
             topup_id: created.topup_id.clone(),
             expires_at: created.expires_at,
-            credits: u64::from(package_usd) * CREDITS_PER_USD,
+            credits: u64::from(package_usd) * super::CREDITS_PER_USD_PAID,
             bought_before: self.bought_so_far(),
         };
         self.keep_pending(&pending);

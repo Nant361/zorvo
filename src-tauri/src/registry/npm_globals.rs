@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -30,7 +30,7 @@ pub fn npm_globals(env: &HashMap<String, String>, timeout: Duration) -> BTreeSet
         return BTreeSet::new();
     };
 
-    let Ok(mut child) = Command::new(npm)
+    let Ok(mut child) = crate::spawn::command(npm)
         .args(["ls", "-g", "--depth=0", "--json"])
         .env_clear()
         .envs(env)

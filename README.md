@@ -129,10 +129,16 @@ Private mode is off until you turn it on, and works with Qwen Code.
 - **Approve what the agent does.** Permission requests appear in the chat with
   the agent's own choices, and every new session starts in the safest mode its
   agent offers.
+- **See what the agent made, as a page.** An agent can show you a report, a
+  diagram or a small dashboard as a web page beside the chat. Ask for a change
+  and you get a new version; older versions stay, **Export** saves the page as
+  one HTML file, and **Artifacts** in the sidebar lists the pages of every
+  session.
 - **Reply to part of a reply.** Select text in the chat to copy it, or press
   **Reply** to quote it in your next message.
 - **One inspector beside the chat.** The top bar's **Inspector** button opens a
-  panel with four tabs: Changes, Activity, Files and Terminal. Drag its edge to
+  panel with four tabs: Changes, Activity, Files and Terminal, and a fifth,
+  Artifacts, once an agent has shown you a page. Drag its edge to
   resize it; Zorvo remembers the width.
 - **See what an agent did.** The Activity tab lists, turn by turn, the files it
   reported, the commands it ran and the permissions you answered, and shows
@@ -198,9 +204,11 @@ sooner, and never one the registry has withdrawn.
 ## Requirements
 
 - **A Mac** with Apple Silicon or Intel.
-- **Node.js 22 or newer** for the agents that run with `npx` (Claude Code,
-  Codex, Qwen Code and many others). If yours is missing or older, Zorvo
-  installs its own when you install such an agent.
+- **Node.js 22 or newer** for the agents that come as npm packages (Claude
+  Code, Codex, Qwen Code and many others). If yours is missing or older, Zorvo
+  installs its own when you install such an agent. Zorvo installs the agent's
+  package into its own folder with `npm` and starts it from there, so starting
+  a session downloads nothing.
 - **An account with at least one agent.** Each agent signs in with its own
   tools; Zorvo never asks for your API keys.
 
@@ -350,6 +358,17 @@ before it edits files or runs commands. Pick another mode in the composer.
   brief it writes; in another folder Zorvo knows, that asks every time and is
   allowed once, never in advance. You can turn all of this off in
   **Settings → Agents**.
+- **A page an agent shows you is kept apart.** An agent can make a web page
+  and show it in the **Artifacts** tab. The page runs in a part of the window
+  of its own: it cannot call Zorvo, read your files, keep data, or open any
+  address but its own. It may load scripts from `cdnjs.cloudflare.com`,
+  `cdn.jsdelivr.net`, `unpkg.com`, `cdn.tailwindcss.com` and `code.jquery.com`
+  and fonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`),
+  and only when the page asks for them; it cannot send a request anywhere
+  else. Those hosts see that a file was asked for, as any website's would.
+  Zorvo's own interface still makes no request at all. Pages are stored on
+  this Mac and deleted with their session. A page you **Export** is an
+  ordinary HTML file: opened in a browser, it has none of these limits.
 - **No telemetry.** Zorvo sends nothing about you or your work anywhere.
 - **Only a few hosts, all named.** Zorvo itself contacts only:
   - the ACP registry (`cdn.agentclientprotocol.com`), to list agents, their
@@ -377,14 +396,19 @@ before it edits files or runs commands. Pick another mode in the composer.
     today `release-assets.githubusercontent.com`. The check sends no
     information about you or your work.
 
-  No agent, runtime or Zorvo update downloads until you click **Install** or
-  **Update & restart**. Agent and runtime downloads are checked against a
-  SHA-256 hash pinned in advance. A Zorvo update must come from this
+  No agent, runtime or Zorvo update downloads until you click **Install**,
+  **Update** or **Update & restart**, with one exception: when Zorvo opens, an
+  agent you have used (it has a session, is your default, or was seen signed
+  in) whose npm package is not in Zorvo's folder yet is installed without a
+  click, once (this is how agents from before this version move over). An agent
+  you never used is not downloaded until you click **Install**. Runtime and binary agent downloads are checked against a SHA-256
+  hash pinned in advance; an agent that comes as an npm package is installed by
+  `npm` at the exact version the registry pins, with npm's own integrity check. A Zorvo update must come from this
   repository's releases and is installed only if its signature matches the key
   built into Zorvo.
 
-  Your agents, and the `npm`, `npx` and `uvx` they run with, make their own
-  requests to their own services, and so does your `gh`, which Zorvo runs to
+  Your agents, the `npm` that installs them and the `uvx` some run with, make
+  their own requests to their own services, and so does your `gh`, which Zorvo runs to
   read your pull requests and your GitHub sign-in.
 - **Your data stays on your Mac.** Sessions and transcripts are stored in
   `~/Library/Application Support/xyz.zorvo.desktop/`, and session worktrees in

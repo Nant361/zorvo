@@ -156,7 +156,7 @@ export function PrivateCreditsOut({
             your NEAR AI dashboard, or switch this Mac to Zorvo credits.
           </p>
         )}
-        <p className="text-ui-sm text-fg-subtle">Your message is back in the box.</p>
+        <p className="text-ui-sm text-fg-subtle">A message Qwen Code had not started on is back in the box.</p>
       </BlockerCard>
     );
   }
@@ -184,8 +184,8 @@ export function PrivateCreditsOut({
       <BlockerCard label="Private credits" title={creditsOutText(reason)} titleDot={reason === "empty" ? "attention" : undefined} actions={actions}>
         {reason === "empty" && (
           <p>
-            Qwen Code stopped because there are no credits left. Your message is back in the box, ready to send after a
-            top-up. The rest of Zorvo and this session's history keep working.
+            Qwen Code stopped because there are no credits left. A message it had not started on is back in the box,
+            ready to send after a top-up. The rest of Zorvo and this session's history keep working.
           </p>
         )}
         {canContinue && (

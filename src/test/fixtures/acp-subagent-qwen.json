@@ -1,0 +1,126 @@
+{
+  "_note": "Trimmed from a recording of Qwen Code 0.27.0 (2026-11-17).",
+  "parentId": "call_parent",
+  "updates": [
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_parent",
+      "title": "Agent: read the notes",
+      "kind": "other",
+      "status": "pending",
+      "_meta": {
+        "toolName": "agent",
+        "provenance": "builtin"
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "content": {
+        "type": "text",
+        "text": "Initial hypothesis: locate the files"
+      },
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "c1",
+      "title": "ReadFile: notes.txt",
+      "kind": "read",
+      "status": "pending",
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        },
+        "toolName": "read_file",
+        "provenance": "subagent"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "c1",
+      "status": "completed",
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        },
+        "toolName": "read_file",
+        "provenance": "subagent"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "c2",
+      "title": "ReadFile: list.txt",
+      "kind": "read",
+      "status": "pending",
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        },
+        "toolName": "read_file",
+        "provenance": "subagent"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "c2",
+      "status": "completed",
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        },
+        "toolName": "read_file",
+        "provenance": "subagent"
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "content": {
+        "type": "text",
+        "text": "notes.txt starts with alpha line."
+      },
+      "_meta": {
+        "parentToolCallId": "call_parent",
+        "subagentType": "general-purpose",
+        "agent": {
+          "agentName": "/root/general-purpose",
+          "depth": 1,
+          "kind": "subagent"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_parent",
+      "status": "completed",
+      "_meta": {
+        "toolName": "agent",
+        "provenance": "builtin"
+      }
+    }
+  ]
+}

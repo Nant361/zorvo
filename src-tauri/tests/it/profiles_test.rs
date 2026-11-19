@@ -46,7 +46,7 @@ fn test_profile_ids_are_unique() {
 }
 
 #[test]
-fn test_npx_registry_agents_are_pinned_to_exact_versions() {
+fn test_npx_registry_agents_never_run_through_npx() {
     let profiles = offered_profiles();
     let npx: Vec<&AgentProfile> = profiles
         .iter()
@@ -55,16 +55,13 @@ fn test_npx_registry_agents_are_pinned_to_exact_versions() {
     assert!(!npx.is_empty());
 
     for profile in npx {
-        assert_eq!(profile.acp_args.first().map(String::as_str), Some("-y"));
-        let package = &profile.acp_args[1];
-        let version = package.rsplit('@').next().unwrap();
-        assert_eq!(
-            Some(version),
-            profile.version.as_deref(),
-            "{} must pin its registry version, got {}",
+        assert!(
+            !profile.acp_args.iter().any(|arg| arg == "-y"),
+            "{} still passes npx arguments: {:?}",
             profile.id,
-            package
+            profile.acp_args
         );
+        assert!(profile.setup_args.is_empty(), "{}", profile.id);
     }
 }
 

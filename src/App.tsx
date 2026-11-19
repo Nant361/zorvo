@@ -12,6 +12,12 @@ import { RemovedAgentPanel } from "./components/RemovedAgentPanel";
 import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
+import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
+import { ArtifactGallery } from "./components/artifacts/ArtifactGallery";
+import { useArtifactComments, useArtifactCommentSweep } from "./hooks/useArtifactComments";
+import { useArtifacts } from "./hooks/useArtifacts";
+import { useArtifactOpening } from "./hooks/useArtifactOpening";
+import { galleryRows, hasVersion, newestVersion, shownArtifactOf } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -70,6 +76,10 @@ import {
 import { useAppearance } from "./hooks/useAppearance";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useBackgroundTasks } from "./hooks/useBackgroundTasks";
+import { useSessionTaskTabs } from "./hooks/useSessionTaskTabs";
+import type { TaskTab } from "./hooks/useTaskTabs";
+import { TasksPanel } from "./components/tasks/TasksPanel";
+import { ShellTaskRows } from "./components/chat/TaskRow";
 import { useTranscripts } from "./hooks/useTranscripts";
 import { usePrivateCreditsRefresh } from "./hooks/usePrivateCreditsRefresh";
 import { usePrivateTopupRequests } from "./hooks/usePrivateTopupRequests";
@@ -79,8 +89,10 @@ import { isTopupActive } from "./lib/private-flow";
 import { usePrivateLowBalanceNotice } from "./hooks/usePrivateLowBalanceNotice";
 import { usePrivateUsage } from "./hooks/usePrivateUsage";
 import { usePrivateVerification } from "./hooks/usePrivateVerification";
-import { lowBalanceNote, privateErrorText } from "./lib/private-credits";
+import { actionError, lowBalanceNote } from "./lib/private-credits";
 import { useAgentProfiles, useSuggestedFolders } from "./hooks/useDiscovery";
+import { useAutoInstall } from "./hooks/useAutoInstall";
+import { usedAgentIds } from "./lib/agent-catalog";
 import { useDraftInstall } from "./hooks/useDraftInstall";
 import { useWorkspaceSelection } from "./hooks/useWorkspaceSelection";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding";
@@ -160,7 +172,7 @@ import {
   type AgentOptions,
   type ProbedOptions,
 } from "./lib/acp-draft";
-import type { AgentProfile, ReviewComment, Session, SessionWorktree, Settings } from "./types";
+import type { AgentProfile, ArtifactCard, ArtifactComment, ReviewComment, Session, SessionWorktree, Settings } from "./types";
 import { replyBlockedReason } from "./lib/reply-quote";
 
 const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folder chip by the message box.";
@@ -196,6 +208,8 @@ export default function App() {
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsPage = useSettingsPage(settingsButtonRef);
   const [isSidebarHidden, setSidebarHidden] = useState(false);
+  // The gallery of every session's artifacts takes the main sheet's place; picking anything in the sidebar leaves it.
+  const [isGalleryOpen, setGalleryOpen] = useState(false);
   const windowWidth = useWindowWidth();
   const composerRef = useRef<ComposerHandle>(null);
   // The top bar's Inspector button: focus goes back to it when the inspector closes from its own button.
@@ -276,6 +290,12 @@ export default function App() {
   const isActiveRunning = activeSession?.status === "running";
   // Only the agents in use are offered: the defaults and installed ones.
   const agentsInUse = agents.filter((agent) => isInUse(agent, state.settings));
+  // After an update of Zorvo, the npm packages of the agents you have used are installed without a click.
+  useAutoInstall({
+    agentsInUse,
+    usedIds: usedAgentIds(state.settings, state.sessions),
+    isReady: isLoaded && areAgentsLoaded && state.settings.onboardingCompleted,
+  });
   // A saved session of a removed agent stays readable; once it stops, its composer offers to add the agent again.
   const activeAgentRemoved = removedAgentNameFor(activeSession, agents, state.settings);
   // Hidden, not unmounted: a look at either must not cost the message being written.
@@ -450,6 +470,19 @@ export default function App() {
       })),
     [updateState],
   );
+  const updateArtifactComments = useCallback(
+    (sessionId: string, change: (prev: ArtifactComment[]) => ArtifactComment[]) =>
+      updateState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) => {
+          if (s.id !== sessionId) return s;
+          const current = s.artifactComments ?? [];
+          const next = change(current);
+          return next === current ? s : { ...s, artifactComments: next };
+        }),
+      })),
+    [updateState],
+  );
   const reviewComments = useReviewComments(activeSession?.id, activeSession?.reviewComments, updateReviewComments);
   const unsentCommentCount = reviewComments.comments.filter((comment) => comment.sentAt === undefined).length;
 
@@ -618,7 +651,9 @@ export default function App() {
       error ? setFailedTurns((prev) => ({ ...prev, [sessionId]: error })) : clearFailedTurn(sessionId),
     // Read when a retry runs, long after the render that built the engine: the latest hook decides.
     promptBlockedReason: (sessionId) => delegationBlockedRef.current(sessionId),
-    onPrivateCreditsOut: onCreditsOut,
+    // An own-key session's refusal is about the user's NEAR AI key, not about Zorvo's balance.
+    onPrivateCreditsOut: (sessionId, reason) =>
+      onCreditsOut(sessionId, reason, sessions.find((s) => s.id === sessionId)?.privateMode?.ownKey === true),
     onPrivateTurnEnd,
     giveBack: (sessionId, message) => giveBackMessage(sessionId, message.text, message.attachments),
   });
@@ -674,11 +709,29 @@ export default function App() {
   const isDraggingFiles = useFileDrop(handleDroppedFiles, reportError);
 
   const turnsEnded = useTurnsEnded(Boolean(activeSessionId) && isSessionBusy(activeSessionId));
+  // The pages each session's agent showed; the backend owns them and says when they change.
+  const artifacts = useArtifacts(useMemo(() => sessions.map((session) => session.id), [sessions]));
+  const sessionArtifacts = useMemo(() => (activeSession ? artifacts.bySession.get(activeSession.id) ?? [] : []), [artifacts.bySession, activeSession]);
+  const backgroundTasks = useBackgroundTasks({
+    sessions,
+    transcripts,
+    isBusy: acp.isBusy,
+    busySince: acp.busySinceOf,
+    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
+    // These three are declared further down and only ever called from a click.
+    onOpenSession: (id) => handleSelectSession(id),
+    onOpenTask: (id, tab) => openTask(id, tab),
+    stopAgent: (id) => handleInterrupt(id),
+    onError: reportError,
+  });
+  const taskTabs = useSessionTaskTabs({ sessionId: activeSessionId ?? null, transcripts, tasks: backgroundTasks.tasks });
   const inspectorTabs = offeredTabs({
     hasFolder: Boolean(filesFolder),
     isRepository,
     hasSession: Boolean(activeSession),
+    hasArtifacts: sessionArtifacts.length > 0,
     isPrivate: Boolean(activeSession?.privateMode),
+    hasTaskTabs: taskTabs.tabs.length > 0,
   });
   const inspector = useInspector(filesFolder?.path, isRepository, turnsEnded, reportError, {
     isSidebarShown: !isSidebarHidden,
@@ -691,10 +744,66 @@ export default function App() {
       if (tab === "terminal" && filesFolder) terminalDrawer.ensureShell(filesFolder.path);
     },
   });
+  const onArtifactShown = useArtifactOpening({
+    activeSessionId: activeSession?.id ?? null,
+    viewed: inspector.viewedArtifact,
+    showTab: () => inspector.show("artifacts"),
+    view: inspector.viewArtifact,
+  });
+  const gallery = useMemo(
+    () => galleryRows(sessions, artifacts.bySession, (profileId) => agentNameOr(agents.find((agent) => agent.id === profileId))),
+    [sessions, artifacts.bySession, agents],
+  );
+  // The last artifact may go while the gallery is open: then there is nothing to show, and the chat is back.
+  const isGalleryShown = isGalleryOpen && gallery.length > 0;
+  const openFromGallery = (sessionId: string, artifactId: string) => {
+    handleSelectSession(sessionId);
+    // For the session about to show, whose id is its view: the one on screen now may be another.
+    inspector.viewArtifact({ artifactId, version: null }, sessionId);
+    inspector.show("artifacts");
+  };
+  const artifactIds = useMemo(() => new Set(sessionArtifacts.map((artifact) => artifact.id)), [sessionArtifacts]);
+  /** A chat card's Open: the version it marks, in the Artifacts tab (the newest is followed, not pinned). */
+  const openArtifactCard = (card: ArtifactCard) => {
+    const artifact = sessionArtifacts.find((candidate) => candidate.id === card.artifactId);
+    if (!artifact) return;
+    inspector.viewArtifact({ artifactId: card.artifactId, version: card.version === newestVersion(artifact) ? null : card.version });
+    inspector.show("artifacts");
+  };
   // Memoized: the stats object only changes when they are read again.
   const fileMarkers = useMemo(() => markersOf(inspector.headStats, inspector.filesPrefix), [inspector.headStats, inspector.filesPrefix]);
   // A tab that no longer applies (another folder, a draft) does not show.
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
+  // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
+  const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
+  // The artifact page on screen, for its comments: the Artifacts tab's viewer shows it, expanded or not.
+  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact) : undefined;
+  const viewedVersion = inspector.viewedArtifact?.artifactId === shownArtifact?.id ? inspector.viewedArtifact?.version : null;
+  const shownVersion = shownArtifact ? (viewedVersion ?? newestVersion(shownArtifact)) : 0;
+  const shownPage =
+    activeSession && shownArtifact && hasVersion(shownArtifact, shownVersion)
+      ? { sessionId: activeSession.id, artifactId: shownArtifact.id, version: shownVersion }
+      : null;
+  // The review wiring is built further down; its `forget` reaches the comments through this ref.
+  const forgetReviewRef = useRef<((ids: readonly string[]) => void) | null>(null);
+  const forgetInMessage = useCallback((ids: readonly string[]) => forgetReviewRef.current?.(ids), []);
+  const artifactComments = useArtifactComments({
+    sessionId: activeSession?.id,
+    comments: activeSession?.artifactComments,
+    update: updateArtifactComments,
+    shownPage,
+    forget: forgetInMessage,
+    onError: reportError,
+  });
+  useArtifactCommentSweep(sessions, artifacts.bySession, artifacts.readSessions, updateArtifactComments, forgetInMessage);
+  /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
+  const openTask = (sessionId: string, tab: TaskTab) => {
+    taskTabs.open(sessionId, tab);
+    inspector.show("tasks");
+  };
+  const openTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "subagent" ? taskTabs.selected.toolId : undefined;
+  const openShellTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "shell" ? taskTabs.selected.taskId : undefined;
+  const sessionShellTasks = backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId);
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -754,6 +863,7 @@ export default function App() {
     updateMessages,
     onAttention: (sessionId, reason) => notifyAttention(sessionId, reason),
     onNotice: (message) => setNotice(message),
+    onArtifactShown,
     messagesOf: async (sessionId) => {
       const live = transcripts[sessionId] ?? [];
       if (transcriptStatus[sessionId] === "ready") return live;
@@ -860,6 +970,7 @@ export default function App() {
    * the composer, and the agent starts with the first message.
    */
   const openNewSession = (path?: string, agentId?: string, options?: OpenNewSessionOptions) => {
+    setGalleryOpen(false);
     if (path) chooseFolder(path);
     setPickedAgentId(agentId ?? null);
     compare.reset();
@@ -906,7 +1017,7 @@ export default function App() {
       });
       privateCredits.clearCreditsOut(session.id);
     } catch (error) {
-      setNotice(privateErrorText(String(error)), "warning");
+      setNotice(actionError("raise", String(error)), "warning");
     } finally {
       setIsRaisingPrivateCap(false);
     }
@@ -955,6 +1066,7 @@ export default function App() {
   };
 
   const handleSelectSession = (sessionId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId(sessionId);
     // An agent picked for a new session that was never started is forgotten.
     setPickedAgentId(null);
@@ -1013,6 +1125,7 @@ export default function App() {
 
   /** Shows a run's panel in the chat's place; no session stays selected, or the panel would not show. */
   const openRun = (runId: string) => {
+    setGalleryOpen(false);
     setActiveSessionId("");
     setPickedAgentId(null);
     compare.reset();
@@ -1028,17 +1141,6 @@ export default function App() {
     if (isRestarting(sessionId)) cancelRestart(sessionId);
     else acp.interrupt(sessionId, transcripts[sessionId]);
   };
-
-  const backgroundTasks = useBackgroundTasks({
-    sessions,
-    transcripts,
-    isBusy: acp.isBusy,
-    busySince: acp.busySinceOf,
-    needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
-    onOpenSession: handleSelectSession,
-    stopAgent: handleInterrupt,
-    onError: reportError,
-  });
 
   const navigateTo = (sessionId: string | null) => {
     if (sessionId) handleSelectSession(sessionId);
@@ -1081,8 +1183,10 @@ export default function App() {
     (sessionId: string) => {
       forgetQueued(sessionId);
       removeTranscript(sessionId);
+      // An artifact belongs to its session: its pages go with it. The session is deleted either way.
+      invoke("artifact_delete_session", { sessionId }).catch(() => reportError("Could not delete the session's artifacts."));
     },
-    [forgetQueued, removeTranscript],
+    [forgetQueued, removeTranscript, reportError],
   );
 
   const terminals = useWorkspaceTerminals(setNotice);
@@ -1230,14 +1334,17 @@ export default function App() {
     sessions,
     comments: reviewComments,
     updateComments: updateReviewComments,
+    updateArtifactComments,
     composerRef,
     canContinue: isActiveRunning || isResumable,
     hasComposer: activeAgentRemoved === null,
     isComposerDisabled,
     collapseDiff: inspector.collapseDiff,
+    collapseArtifact: () => inspector.setArtifactExpanded(false),
     agentNameOf: (profileId) => agents.find((a) => a.id === profileId)?.name ?? profileId,
   });
   rearmReviewRef.current = review.rearm;
+  forgetReviewRef.current = review.forget;
 
   /** What a delegation to an agent starts with: the picks, and the agent's remembered model and effort. */
   const delegationChoicesFor = (agentId: string): AcpChoices =>
@@ -1483,7 +1590,10 @@ export default function App() {
   const isSendWaiting = compare.isCompare
     ? !canUseWorktree
     : draftNeedsInstall || draftNeedsSignIn || privateDraft.blocksSend || creditsOutReason !== undefined;
-  const isSendBlocked = isSendWaiting || review.blocksSend || delegationBlock !== undefined;
+  // A draft's message is still being checked for secrets: a second Send would start a second session.
+  // Only Send waits; disabling the box would take the focus away from what the user types next.
+  const isCheckingDraftSecrets = isNewSessionDraft && secretGuard.isCheckingDraft;
+  const isSendBlocked = isSendWaiting || isCheckingDraftSecrets || review.blocksSend || delegationBlock !== undefined;
   const privateModelId = activeSession?.privateMode?.modelId ?? privateDraft.privateMode?.modelId;
   const privateModel = privateCredits.models?.find((model) => model.id === privateModelId);
   const privateSessionCap = activeSession?.privateMode?.sessionCap;
@@ -1552,6 +1662,9 @@ export default function App() {
         <Sidebar
           isHidden={isSidebarHidden}
           onHide={() => setSidebarHidden(true)}
+          artifactCount={gallery.length}
+          isGalleryOpen={isGalleryShown}
+          onOpenGallery={() => setGalleryOpen(true)}
           workspaces={workspaces}
           activeWorkspacePath={activeWorkspacePath}
           sessions={sessions}
@@ -1597,7 +1710,16 @@ export default function App() {
         />
 
         <div data-stage data-tauri-drag-region className={`flex min-w-0 flex-1 gap-2 py-2 pr-2${isSidebarHidden ? " pl-2" : ""}`}>
-          <div data-sheet="main" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet">
+          {isGalleryShown && (
+            <ArtifactGallery
+              rows={gallery}
+              onOpen={openFromGallery}
+              onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
+              notice={settingsPage.section === null && noticeToast}
+            />
+          )}
+          {/* Hidden, not unmounted, under the gallery: the composer keeps its text. */}
+          <div data-sheet="main" className={`${isGalleryShown ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-sheet`}>
             <TopBar
               onShowSidebar={isSidebarHidden ? () => setSidebarHidden(false) : undefined}
               hasTrafficLights={isSidebarHidden}
@@ -1657,7 +1779,7 @@ export default function App() {
             <div className="flex min-h-0 flex-1">
               {/* A still frame: the drop overlay is placed against it and the update banner sits on it, so both stay on
                   screen whatever the column under them is scrolled to. */}
-              <article className={`${isDiffOpen && inspector.isDiffExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
+              <article className={`${(isDiffOpen && inspector.isDiffExpanded) || isArtifactExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
                 {isDraggingFiles && <FileDropOverlay />}
                 <UpdateNotice
                   agents={agentUpdates.unnotified}
@@ -1697,6 +1819,18 @@ export default function App() {
                       agentName={activeAgent?.name}
                       agentProfileId={activeSession?.profileId}
                       onForkBranch={(messageId) => void forkSession(messageId)}
+                      onOpenTask={activeSession ? (toolId) => openTask(activeSession.id, { kind: "subagent", toolId }) : undefined}
+                      openTaskId={openTaskId}
+                      tasksFooter={
+                        activeSession && sessionShellTasks.length > 0 ? (
+                          <ShellTaskRows
+                            tasks={sessionShellTasks}
+                            openTaskId={openShellTaskId}
+                            transcripts={transcripts}
+                            onOpen={(task) => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
+                          />
+                        ) : undefined
+                      }
                       onReply={(quote) => composerRef.current?.insertText(quote)}
                       onOpenUrl={openLink}
                       privateModelId={activeSession?.privateMode?.modelId}
@@ -1772,6 +1906,8 @@ export default function App() {
                       onChooseOption={(cardId, optionId, answers) => chooseOption(activeSessionId, cardId, optionId, answers)}
                       onAnswerElicitation={(key, answer) => acp.answerElicitation(activeSessionId, key, answer)}
                       onReopenElicitationUrl={(key) => acp.reopenElicitationUrl(activeSessionId, key)}
+                      artifactIds={artifactIds}
+                      onOpenArtifact={openArtifactCard}
                       isWorking={isSessionBusy(activeSessionId) && !isAwaitingUser(currentMessages)}
                       failures={acp.failuresOf(activeSessionId)}
                       onStop={() => handleInterrupt(activeSessionId)}
@@ -2012,6 +2148,25 @@ export default function App() {
                   {isNewSessionDraft && <NewSessionBelow sessionList={draftSessionList.sessionList} />}
                 </div>
               </article>
+              {isArtifactExpanded && activeSession && (
+                <section aria-label="Artifact" className="relative flex min-w-0 flex-1 flex-col">
+                  <ArtifactsPanel
+                    sessionId={activeSession.id}
+                    artifacts={sessionArtifacts}
+                    viewed={inspector.viewedArtifact}
+                    onView={inspector.viewArtifact}
+                    isExpanded
+                    onToggleExpanded={() => inspector.setArtifactExpanded(false)}
+                    onError={reportError}
+                    comments={artifactComments}
+                    addReview={review.addArtifactReview}
+                    cwd={activeSession.cwd}
+                  />
+                  {/* The chat, which draws the app's notice, is hidden under an expanded page: a failure here
+                      (export, rename, delete, a page that cannot be shown) is said here. The page hides under it. */}
+                  {settingsPage.section === null && noticeToast && <ToastStack>{noticeToast}</ToastStack>}
+                </section>
+              )}
               {isDiffOpen && filesFolder && (
                 <DiffView
                   key={`${activeSession?.id ?? "draft"}:${filesFolder.path}`}
@@ -2029,13 +2184,13 @@ export default function App() {
               )}
             </div>
           </div>
-          {inspectorTab && (
+          {inspectorTab && !isArtifactExpanded && !isGalleryShown && (
             <Inspector
               tab={inspectorTab}
               tabs={inspectorTabs}
               width={inspector.width}
               maxWidth={maxInspectorWidth(windowWidth, !isSidebarHidden)}
-              counts={{ changes: inspector.changes.changes?.length }}
+              counts={{ changes: inspector.changes.changes?.length, artifacts: sessionArtifacts.length, tasks: taskTabs.tabs.length || undefined }}
               isViewingFile={inspectorTab === "files" && inspector.viewedFile !== null}
               onSelect={inspector.show}
               onResize={inspector.setWidth}
@@ -2064,6 +2219,17 @@ export default function App() {
                   targetsFailed={inspector.targetsFailed}
                   review={activeSession ? review.review : undefined}
                   addReview={activeSession ? review.addReview : undefined}
+                />
+              )}
+              {inspectorTab === "tasks" && activeSession && (
+                <TasksPanel
+                  tabs={taskTabs}
+                  sessionId={activeSession.id}
+                  messages={transcripts[activeSession.id] ?? []}
+                  tasks={backgroundTasks.tasks}
+                  agentName={activeAgent?.name ?? "The agent"}
+                  isBusy={acp.isBusy(activeSession.id)}
+                  onStop={backgroundTasks.stop}
                 />
               )}
               {inspectorTab === "activity" && activeSession && (
@@ -2101,6 +2267,21 @@ export default function App() {
                       ? undefined
                       : (text) => composerRef.current?.insertText(text)
                   }
+                />
+              )}
+              {inspectorTab === "artifacts" && activeSession && (
+                <ArtifactsPanel
+                  key={activeSession.id}
+                  sessionId={activeSession.id}
+                  artifacts={sessionArtifacts}
+                  viewed={inspector.viewedArtifact}
+                  onView={inspector.viewArtifact}
+                  isExpanded={false}
+                  onToggleExpanded={() => inspector.setArtifactExpanded(true)}
+                  onError={reportError}
+                  comments={artifactComments}
+                  addReview={review.addArtifactReview}
+                  cwd={activeSession.cwd}
                 />
               )}
               {inspectorTab === "private" && activeSession?.privateMode && (

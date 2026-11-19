@@ -362,10 +362,31 @@ fn a_legacy_id_launches_its_registry_agent() {
     let catalog = Catalog::bundled(BUNDLED_HISTORY);
     let npm = BTreeSet::new();
     let path = bin.to_string_lossy().to_string();
-    // The user's own Node is new enough, so their `npx` runs the agent.
-    let installed = InstalledTools {
+    // The user's own Node is new enough; the agent runs from Zorvo's install of its package.
+    let no_install = InstalledTools {
         user_node_major: Some(MIN_USER_NODE_MAJOR),
         ..InstalledTools::none()
+    };
+    let version = {
+        let tools = SystemTools {
+            path_var: Some(&path),
+            npm_globals: &npm,
+            installed: &no_install,
+        };
+        profile_to_launch(&catalog, &tools, "claude-code", &BTreeMap::new(), FIXED_NOW)
+            .expect("claude-code is known")
+            .version
+            .expect("a registry agent has a version")
+    };
+    let package = scratch.root.join("package");
+    std::fs::create_dir_all(package.join("bin")).expect("package dir");
+    let program = package.join("bin/claude-agent-acp");
+    std::fs::write(&program, "#!/bin/sh\n").expect("write fake agent");
+    let key = ("claude-acp".to_string(), version);
+    let installed = InstalledTools {
+        agents: BTreeMap::from([(key.clone(), package.clone())]),
+        agent_bins: BTreeMap::from([(key, "bin/claude-agent-acp".to_string())]),
+        ..no_install.clone()
     };
     let tools = SystemTools {
         path_var: Some(&path),
@@ -381,13 +402,9 @@ fn a_legacy_id_launches_its_registry_agent() {
     })
     .expect("it launches");
 
-    assert_eq!(launch.program, npx.to_string_lossy());
-    assert_eq!(launch.args.first().map(String::as_str), Some("-y"));
+    assert_eq!(launch.program, program.to_string_lossy());
     assert!(
-        launch
-            .args
-            .get(1)
-            .is_some_and(|a| a.starts_with("@agentclientprotocol/claude-agent-acp@")),
+        !launch.args.iter().any(|arg| arg == "-y"),
         "{:?}",
         launch.args
     );

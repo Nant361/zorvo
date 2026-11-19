@@ -120,6 +120,20 @@ function handleStoreCommand(cmd: string, args: StoreArgs | undefined): Promise<u
     case "list_directory":
     case "background_processes":
       return Promise.resolve([]);
+    case "artifact_list":
+      // No session has an artifact unless a test spies on `invoke` and says so.
+      return Promise.resolve(((args as { sessionIds?: string[] } | undefined)?.sessionIds ?? []).map((sessionId) => ({ sessionId, artifacts: [] })));
+    case "artifact_delete":
+    case "artifact_delete_session":
+    case "artifact_view_show":
+    case "artifact_view_bounds":
+    case "artifact_view_hide":
+    case "artifact_view_close":
+    case "artifact_comment_mode":
+    case "artifact_view_marks":
+      return Promise.resolve(undefined);
+    case "artifact_export":
+      return Promise.resolve(false);
     case "agent_tool_respond":
     case "open_path":
     case "remember_workspace":
@@ -160,6 +174,7 @@ if (typeof window !== "undefined") {
     (await import("../lib/attachment-previews")).clearAttachmentPreviews();
     (window as unknown as { __FAKE_TAURI_STORE__: FakeTauriStore }).__FAKE_TAURI_STORE__ = emptyFakeStore();
     delete (window as unknown as { __FAKE_ACP_LIST__?: unknown }).__FAKE_ACP_LIST__;
+    window.sessionStorage.clear();
     resetFakePrivate();
   });
 }
