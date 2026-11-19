@@ -119,6 +119,10 @@ pub struct StartedSession {
     /// command layer fills it in: the manager does not know.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools_path: Option<crate::agent_tools::ToolsPath>,
+    /// The session has Zorvo's agent tools, not only computer use: only then may
+    /// the agent be told to show a page. Filled in by the command layer too.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub agent_tools: bool,
 }
 
 /// Events for the UI, already routed to the app session they belong to.

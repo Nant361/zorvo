@@ -20,12 +20,25 @@ pub fn servers_for_session(
     store: &AppStore,
     session_id: &str,
     agent_tools: bool,
-) -> Result<Value, String> {
+) -> Result<SessionTools, String> {
+    let none = SessionTools {
+        servers: Value::Array(Vec::new()),
+        env: Vec::new(),
+        path: None,
+        agent_tools: false,
+    };
     if !agent_tools {
-        return Ok(Value::Array(Vec::new()));
+        return Ok(none);
     }
     let capabilities = capabilities_of(store, ToolsPath::Mcp)?;
-    Ok(tools.servers_with(session_id, capabilities))
+    let servers = tools.servers_with(session_id, capabilities);
+    let path = path_of_servers(&servers);
+    Ok(SessionTools {
+        agent_tools: path.is_some() && capabilities.agent_tools,
+        servers,
+        path,
+        ..none
+    })
 }
 
 /// What the saved settings give a session on `path`: Zorvo's agent tools,
@@ -48,6 +61,8 @@ pub struct SessionTools {
     pub env: Vec<(String, String)>,
     /// Which path the session got; `None` when it gets no tools.
     pub path: Option<ToolsPath>,
+    /// It gets Zorvo's agent tools, not only computer use.
+    pub agent_tools: bool,
 }
 
 /// Decides what the session `session_id` of agent `profile_id` gets: nothing
@@ -66,6 +81,7 @@ pub fn tools_for_session(
         servers: Value::Array(Vec::new()),
         env: Vec::new(),
         path: None,
+        agent_tools: false,
     };
     if !agent_tools {
         return Ok(none);
@@ -81,6 +97,7 @@ pub fn tools_for_session(
             let path = has_entries(&servers).then_some(ToolsPath::Mcp);
             SessionTools {
                 servers,
+                agent_tools: path.is_some() && capabilities.agent_tools,
                 path,
                 ..none
             }
@@ -88,7 +105,12 @@ pub fn tools_for_session(
         ToolsPath::Command => {
             let env = tools.launch_env_with(session_id, capabilities);
             let path = (!env.is_empty()).then_some(ToolsPath::Command);
-            SessionTools { env, path, ..none }
+            SessionTools {
+                env,
+                agent_tools: path.is_some() && capabilities.agent_tools,
+                path,
+                ..none
+            }
         }
     })
 }

@@ -173,8 +173,11 @@ fn computer_use_alone_still_passes_zorvos_server() {
     let mcp = tools_for_session(&rig.tools, &store, "s1", "qwen-code", true).unwrap();
     assert_eq!(mcp.servers[0]["name"], "zorvo");
     assert_eq!(mcp.path, Some(ToolsPath::Mcp));
+    // The server is there, but not the agent tools: nothing may tell this agent to show a page.
+    assert!(!mcp.agent_tools);
     let command = tools_for_session(&rig.tools, &store, "s2", "pi-acp", true).unwrap();
     assert_eq!(command.path, Some(ToolsPath::Command));
+    assert!(!command.agent_tools);
     let none = tools_for_session(
         &rig.tools,
         &store_with(&rig.dir.join("off"), false, false),
@@ -235,6 +238,7 @@ fn tools_for_session_picks_the_path_by_agent_and_setting() {
     assert_eq!(mcp.servers[0]["name"], "zorvo");
     assert!(mcp.env.is_empty());
     assert_eq!(mcp.path, Some(ToolsPath::Mcp));
+    assert!(mcp.agent_tools);
 
     // The webview did not ask, or the setting is off: nothing, on either path.
     let off = store_with_tools(&rig.dir.join("off"), false);

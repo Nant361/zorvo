@@ -419,9 +419,14 @@ export function useAcpEngine({
     }
   };
 
-  /** A session that just opened: with Zorvo's tools it is due their context again, else it is not. */
+  /**
+   * A session that just opened: with Zorvo's tools it is due their context again, else it is not. The
+   * MCP note is about pages, so it goes only to a session with the agent tools: computer use alone
+   * also gets the zorvo server, without `show_artifact`.
+   */
   const noteToolsPath = (sessionId: string, info: AcpSessionInfo) => {
-    if (info.toolsPath === 'command' || info.toolsPath === 'mcp') toolsContextDueRef.current.set(sessionId, info.toolsPath);
+    if (info.toolsPath === 'command') toolsContextDueRef.current.set(sessionId, 'command');
+    else if (info.toolsPath === 'mcp' && info.agentTools) toolsContextDueRef.current.set(sessionId, 'mcp');
     else toolsContextDueRef.current.delete(sessionId);
   };
 

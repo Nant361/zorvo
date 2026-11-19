@@ -114,6 +114,7 @@ mod tests {
             config_options: Value::Null,
             reopened_with: None,
             tools_path: None,
+            agent_tools: false,
         }
     }
 

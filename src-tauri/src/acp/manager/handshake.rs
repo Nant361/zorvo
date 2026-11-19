@@ -161,5 +161,6 @@ pub(super) fn started_session(
         config_options: response["configOptions"].clone(),
         reopened_with: None,
         tools_path: None,
+        agent_tools: false,
     })
 }

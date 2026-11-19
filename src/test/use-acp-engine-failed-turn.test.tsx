@@ -172,6 +172,7 @@ describe("useAcpEngine when a turn fails", () => {
     // An agent that loads MCP tools on demand reads neither a tool's description nor the
     // server's instructions before it answers; this is what reaches it.
     (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__ = "mcp";
+    (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__ = true;
     try {
       const spy = vi.spyOn(tauriInternals(), "invoke");
       const engine = renderEngine();
@@ -183,6 +184,7 @@ describe("useAcpEngine when a turn fails", () => {
       });
       expect(promptsSent(spy)).toEqual([`${MCP_PATH_CONTEXT}\n\ndraw the data flow`, "and the store"]);
     } finally {
+      delete (window as unknown as { __FAKE_AGENT_TOOLS__?: boolean }).__FAKE_AGENT_TOOLS__;
       delete (window as unknown as { __FAKE_TOOLS_PATH__?: string }).__FAKE_TOOLS_PATH__;
     }
   });
