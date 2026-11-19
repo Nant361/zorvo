@@ -2,25 +2,34 @@ import type { ChatMessage } from '../types';
 
 /** A file the agent made in this session, as its own report says. */
 export interface CreatedFile {
-  /** As the agent named it: absolute, or relative to the session's folder. */
+  /** Absolute when the session's folder was given, else as the agent named it. */
   path: string;
-  /** When the tool that made it started. */
-  at: number;
+  /** When the tool that made it started; null for a session's history replayed on import, whose times are not known. */
+  at: number | null;
 }
 
 /**
  * The files the agent created: a tool whose diff marks a new file and that reached `completed`, since an
- * agent can send a diff before a permission is refused. One row per path, the newest first. A subagent's
- * tool counts too: it stays in the reply's `tools`.
+ * agent can send a diff before a permission is refused. One row per path, the newest first, rows whose time
+ * is not known (an imported session's history) last. A subagent's tool counts too: it stays in the reply's `tools`.
  */
-export function createdFilesOf(messages: readonly ChatMessage[]): CreatedFile[] {
-  const newest = new Map<string, number>();
+export function createdFilesOf(messages: readonly ChatMessage[], cwd?: string): CreatedFile[] {
+  // Messages come oldest first, so the last report of a path is its newest, timed or not.
+  const latest = new Map<string, number | null>();
   for (const message of messages) {
     for (const file of createdIn(message)) {
-      if (file.at >= (newest.get(file.path) ?? Number.NEGATIVE_INFINITY)) newest.set(file.path, file.at);
+      // One file named relative by one tool and absolute by another is still one row.
+      latest.set(cwd ? absoluteIn(file.path, cwd) : file.path, file.at);
     }
   }
-  return [...newest].map(([path, at]) => ({ path, at })).sort((a, b) => b.at - a.at);
+  const order = (at: number | null) => at ?? Number.NEGATIVE_INFINITY;
+  return [...latest].map(([path, at]) => ({ path, at })).sort((a, b) => order(b.at) - order(a.at));
+}
+
+/** An agent's relative path as an absolute one under `cwd`; an absolute path as it is. */
+function absoluteIn(path: string, cwd: string): string {
+  if (path.startsWith('/')) return path;
+  return `${cwd.replace(/\/+$/, '')}/${path.replace(/^(\.\/)+/, '')}`;
 }
 
 /** One message's created files, kept per message: a reply is a new object whenever it changes, so the rest are not walked again on each streamed frame. */
@@ -33,8 +42,10 @@ function createdIn(message: ChatMessage): readonly CreatedFile[] {
   for (const tool of message.tools ?? []) {
     if (tool.status !== 'completed') continue;
     for (const detail of tool.details ?? []) {
-      if (detail.kind === 'diff' && detail.isNewFile && detail.path !== '') {
-        files.push({ path: detail.path, at: tool.startedAt ?? message.timestamp });
+      // A diff too large to keep is summarised as `changed`, which still says whether it made the file.
+      const isCreated = (detail.kind === 'diff' || detail.kind === 'changed') && detail.isNewFile === true;
+      if (isCreated && detail.path !== '') {
+        files.push({ path: detail.path, at: message.hasKnownTime === false ? null : (tool.startedAt ?? message.timestamp) });
       }
     }
   }

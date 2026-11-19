@@ -69,8 +69,10 @@ describe("known paths", () => {
     expect(toolOf(updated)?.details).toHaveLength(1);
   });
 
-  it("keeps the path of a diff too large to hold", () => {
-    const big = { ...edit, content: [{ type: "diff", path: "/repo/a.ts", oldText: null, newText: "x".repeat(300_000) }] };
-    expect(toolOf(applyAcpUpdate([], big, ctx()))?.details).toEqual([{ kind: "changed", path: "/repo/a.ts" }]);
+  it("keeps the path of a diff too large to hold, and whether it made the file", () => {
+    const created = { ...edit, content: [{ type: "diff", path: "/repo/a.ts", oldText: null, newText: "x".repeat(300_000) }] };
+    expect(toolOf(applyAcpUpdate([], created, ctx()))?.details).toEqual([{ kind: "changed", path: "/repo/a.ts", isNewFile: true }]);
+    const changed = { ...edit, content: [{ type: "diff", path: "/repo/a.ts", oldText: "old", newText: "x".repeat(300_000) }] };
+    expect(toolOf(applyAcpUpdate([], changed, ctx()))?.details).toEqual([{ kind: "changed", path: "/repo/a.ts" }]);
   });
 });

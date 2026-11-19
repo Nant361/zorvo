@@ -719,7 +719,8 @@ export default function App() {
   const sessionArtifacts = useMemo(() => (activeSession ? artifacts.bySession.get(activeSession.id) ?? [] : []), [artifacts.bySession, activeSession]);
   // The files the agent created in this session, listed in the Output tab under its pages.
   const activeTranscript = activeSessionId ? transcripts[activeSessionId] : undefined;
-  const createdFiles = useMemo(() => createdFilesOf(activeTranscript ?? []), [activeTranscript]);
+  const activeCwd = activeSession?.cwd;
+  const createdFiles = useMemo(() => createdFilesOf(activeTranscript ?? [], activeCwd), [activeTranscript, activeCwd]);
   const backgroundTasks = useBackgroundTasks({
     sessions,
     transcripts,
@@ -2315,7 +2316,13 @@ export default function App() {
                   viewed={inspector.viewedArtifact}
                   onView={inspector.viewArtifact}
                   isExpanded={false}
-                  onToggleExpanded={() => inspector.setArtifactExpanded(true)}
+                  onToggleExpanded={() => {
+                    // A page that opened by itself is pinned when it takes the chat's place: a file the agent
+                    // makes meanwhile would otherwise turn the tab back into a list under the expanded page,
+                    // and comments would lose the page they are on.
+                    if (!inspector.viewedArtifact && shownArtifact) inspector.viewArtifact({ artifactId: shownArtifact.id, version: null });
+                    inspector.setArtifactExpanded(true);
+                  }}
                   onError={reportError}
                   comments={artifactComments}
                   addReview={review.addArtifactReview}

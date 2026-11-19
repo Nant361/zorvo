@@ -62,7 +62,9 @@ function CreatedFileRow({ file, root, onOpenFile }: { file: CreatedFile; root?: 
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-ui text-fg">{name}</span>
         <span className="truncate text-caption text-fg-subtle">
-          {[where ? `New file · ${where}` : "New file", formatRelativeTime(file.at)].join(" · ")}
+          {[where ? `New file · ${where}` : "New file", file.at === null ? null : formatRelativeTime(file.at)]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
       </span>
     </>

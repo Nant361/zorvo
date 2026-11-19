@@ -292,7 +292,7 @@ describe("tool call details", () => {
     expect(text.kind === "text" && text.text.startsWith("… earlier output not shown")).toBe(true);
     expect(text.kind === "text" && text.text.endsWith("THE END")).toBe(true);
     expect(text.kind === "text" && text.text.length).toBeLessThan(51_000);
-    expect(diff).toEqual({ kind: "changed", path: "/repo/big.txt" });
+    expect(diff).toEqual({ kind: "changed", path: "/repo/big.txt", isNewFile: true });
   });
 
   it("treats a missing oldText as a new file", () => {

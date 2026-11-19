@@ -22,6 +22,29 @@ describe("createdFilesOf", () => {
     ]);
   });
 
+  it("counts a file named relative by one tool and absolute by another once", () => {
+    const messages = [
+      reply("a", [tool("t1", "completed", "src/a.ts", true, 10)]),
+      reply("b", [tool("t2", "completed", "/w/zorvo/src/a.ts", true, 20)]),
+    ];
+    expect(createdFilesOf(messages, "/w/zorvo")).toEqual([{ path: "/w/zorvo/src/a.ts", at: 20 }]);
+  });
+
+  it("lists a new file whose diff was too large to keep", () => {
+    const big = { ...tool("t1", "completed", "/w/big.json", true, 10), details: [{ kind: "changed" as const, path: "/w/big.json", isNewFile: true }] };
+    const edited = { ...tool("t2", "completed", "/w/old.json", false, 11), details: [{ kind: "changed" as const, path: "/w/old.json" }] };
+    expect(createdFilesOf([reply("a", [big, edited])])).toEqual([{ path: "/w/big.json", at: 10 }]);
+  });
+
+  it("keeps no time for a file from an imported session's replayed history, and puts it last", () => {
+    const replayed = { ...reply("old", [tool("t1", "completed", "/w/replayed.ts", true, 99)]), hasKnownTime: false };
+    const live = reply("new", [tool("t2", "completed", "/w/live.ts", true, 50)]);
+    expect(createdFilesOf([replayed, live])).toEqual([
+      { path: "/w/live.ts", at: 50 },
+      { path: "/w/replayed.ts", at: null },
+    ]);
+  });
+
   it("reads a reply once and again only when it changes", () => {
     const first = reply("a", [tool("t1", "running", "/w/a.ts", true, 10)]);
     expect(createdFilesOf([first])).toEqual([]);

@@ -486,6 +486,13 @@ describe("the Output tab's files and empty state", () => {
     expect(rows[2].textContent).toContain("notes.md");
   });
 
+  it("says no time for a file whose time is not known", () => {
+    show({ artifacts: [], files: [{ path: "/w/zorvo/src/replayed.ts", at: null }], filesRoot: "/w/zorvo" });
+    const row = within(screen.getByRole("list", { name: "Output" })).getByRole("listitem");
+    expect(row.textContent).toContain("New file · src");
+    expect(row.textContent).not.toMatch(/ago|now/i);
+  });
+
   it("opens a single page by itself only when no file is listed beside it", () => {
     show({ artifacts: [REPORT], files: MADE, filesRoot: "/w/zorvo" });
     expect(screen.getByRole("list", { name: "Output" })).toBeTruthy();
