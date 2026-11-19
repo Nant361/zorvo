@@ -76,6 +76,13 @@ pub enum PageMessage {
     MarksMissing(MissingMarks),
 }
 
+impl PageMessage {
+    /// A pick is followed by the user writing the comment, so the keyboard must leave the page.
+    pub fn takes_keyboard(&self) -> bool {
+        matches!(self, Self::PickText(_) | Self::PickElement(_))
+    }
+}
+
 /// Where a comment is on the page: `{"kind":"text",...}` or `{"kind":"element",...}`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -326,6 +333,20 @@ mod tests {
             let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
             assert_eq!(back, sent, "round trip of {body}");
         }
+    }
+
+    #[test]
+    fn only_a_pick_takes_the_keyboard_from_the_page() {
+        // After a pick the user writes the comment: their keys must reach Zorvo, never the page.
+        let pick_text = parse_page_message(&text_pick("Annual plan")).unwrap();
+        let pick_element = parse_page_message(&element_pick(serde_json::json!({}))).unwrap();
+        let cancel = parse_page_message(r#"{"kind":"cancel"}"#).unwrap();
+        let missing = parse_page_message(r#"{"kind":"marks-missing","numbers":[1]}"#).unwrap();
+
+        assert!(pick_text.takes_keyboard());
+        assert!(pick_element.takes_keyboard());
+        assert!(!cancel.takes_keyboard());
+        assert!(!missing.takes_keyboard());
     }
 
     #[test]

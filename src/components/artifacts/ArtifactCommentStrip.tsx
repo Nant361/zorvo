@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { Button } from "../ui/Button";
 import {
@@ -46,7 +46,13 @@ function CandidateBox({ comments, number }: { comments: ArtifactCommentsState; n
   const candidate = comments.candidate!;
   const [body, setBody] = useState(comments.candidateBody);
   const [isFull, setIsFull] = useState(false);
+  const boxRef = useRef<HTMLTextAreaElement>(null);
   const summary = anchorSummary(candidate.anchor);
+  // The page had the keyboard while the user picked: take it, on a new pick and on a refused one,
+  // so what they type next is the comment and never reaches the page.
+  useEffect(() => {
+    boxRef.current?.focus();
+  }, [candidate.isPickHeld]);
   const save = () => {
     const outcome = comments.saveCandidate();
     setIsFull(outcome === "full");
@@ -60,6 +66,7 @@ function CandidateBox({ comments, number }: { comments: ArtifactCommentsState; n
           <span className="truncate font-medium text-fg-secondary">{summary}</span>
         </span>
         <textarea
+          ref={boxRef}
           rows={2}
           value={body}
           aria-label={`Comment on ${summary}`}

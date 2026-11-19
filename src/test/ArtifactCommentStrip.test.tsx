@@ -56,6 +56,27 @@ function strip(comments: ArtifactCommentsState, addReview: AddArtifactReview = r
 const rows = () => within(screen.getByRole("list", { name: "Comments" })).queryAllByRole("listitem");
 
 describe("ArtifactCommentStrip", () => {
+  it("puts the keyboard in the comment box when a pick makes a candidate", () => {
+    // The page had the keyboard while the user picked; what they type next must not reach it.
+    const candidate = { page: PAGE, anchor: comment("c1").anchor, isPickHeld: false };
+    strip(state({ candidate, isCommenting: true }));
+
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /^Comment on/ }));
+  });
+
+  it("gives the keyboard back to a held comment when another pick is refused", () => {
+    const candidate = { page: PAGE, anchor: comment("c1").anchor, isPickHeld: false };
+    const comments = state({ candidate, isCommenting: true, candidateBody: () => "Half written" });
+    const { rerender } = strip(comments);
+    const box = screen.getByRole("textbox", { name: /^Comment on/ });
+    box.blur();
+
+    const held = { ...comments, candidate: { ...candidate, isPickHeld: true } };
+    rerender(<ArtifactCommentStrip artifact={ARTIFACT} shownVersion={3} cwd="/w/api" comments={held} addReview={review()} />);
+
+    expect(document.activeElement).toBe(box);
+  });
+
   it("the strip shows a candidate, saves it, and lists it as 1", () => {
     const candidate = { page: PAGE, anchor: comment("c1").anchor, isPickHeld: false };
     const comments = state({ candidate, isCommenting: true });

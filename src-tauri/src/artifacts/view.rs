@@ -184,6 +184,9 @@ fn on_page_message(app: &AppHandle, generation: u64, body: &str) {
         )
     });
     if let Some(message) = message {
+        if message.takes_keyboard() {
+            focus_zorvo(app);
+        }
         let _ = app.emit(
             ARTIFACT_PAGE_PICK,
             PagePickEvent {
@@ -194,6 +197,29 @@ fn on_page_message(app: &AppHandle, generation: u64, body: &str) {
             },
         );
     }
+}
+
+/// Gives the keyboard to Zorvo's own webview, so the comment the user writes after a pick goes
+/// to the comment box and never to the page, which keeps it while it is the first responder.
+fn focus_zorvo(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+        return;
+    };
+    let _ = window.with_webview(|webview| {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+        let view = webview.inner().cast::<AnyObject>();
+        let ns_window = webview.ns_window().cast::<AnyObject>();
+        if view.is_null() || ns_window.is_null() {
+            return;
+        }
+        // SAFETY: `with_webview` runs this on the main thread, and both pointers are the live
+        // main WKWebView and its NSWindow, checked non-null above; `makeFirstResponder:` takes
+        // one view of that window and returns a BOOL.
+        unsafe {
+            let _: bool = msg_send![&*ns_window, makeFirstResponder: &*view];
+        }
+    });
 }
 
 /// Whether the view shows a page of `session_id` (and, when one is named, of that artifact).
