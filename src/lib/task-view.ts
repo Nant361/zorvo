@@ -1,0 +1,123 @@
+import type { ChatMessage, ChatMessagePart, ToolExecution } from '../types';
+
+/**
+ * What a subagent's tool call shows as a task: the row in the chat and the tab beside it. All of
+ * it is read from the transcript, so a rewind removes a task with its message.
+ */
+
+export type TaskStatus = 'Working' | 'Needs you' | 'Done' | 'Failed' | 'Did not finish';
+
+export interface SubagentTask {
+  toolId: string;
+  title: string;
+  agentType?: string;
+  /** The tool calls the subagent made. */
+  stepCount: number;
+  status: TaskStatus;
+  startedAt?: number;
+  /** The subagent's last text, which is what it handed back. */
+  lastText?: string;
+}
+
+/** The tools a reply lists itself: a subagent's own tools show under their parent. */
+export function shownTools(tools: readonly ToolExecution[]): ToolExecution[] {
+  return tools.filter((tool) => tool.parentId === undefined);
+}
+
+function childrenOf(tool: ToolExecution, message: ChatMessage): ToolExecution[] {
+  return (message.tools ?? []).filter((candidate) => candidate.parentId === tool.id);
+}
+
+/**
+ * The tool calls the turn's open permission requests are for. A request need not sit in the reply
+ * that holds its subagent: an answered one closes its reply, and the next lands in a later one.
+ */
+export function waitingToolCallIds(messages: readonly ChatMessage[]): string[] {
+  const ids: string[] = [];
+  for (let index = messages.length - 1; index >= 0 && messages[index].role !== 'user'; index--) {
+    const card = messages[index].actionCard;
+    if (card?.status === 'pending' && card.toolCallId !== undefined) ids.push(card.toolCallId);
+  }
+  return ids;
+}
+
+/**
+ * Whether a reply belongs to the turn that runs now: the session is in a turn and the user has
+ * sent nothing since. A turn may span several replies and only its last is marked complete, so a
+ * reply's own flag cannot say this.
+ */
+export function isInRunningTurn(messages: readonly ChatMessage[], message: ChatMessage, isBusy: boolean): boolean {
+  if (!isBusy) return false;
+  // Walk back from the end: the turn is short, the transcript may not be.
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index] === message) return true;
+    if (messages[index].role === 'user') return false;
+  }
+  return false;
+}
+
+export interface TaskContext {
+  /** The turn has ended: a subagent still marked running did not finish. */
+  isTurnOver: boolean;
+  /** `waitingToolCallIds` of the transcript; without it only the reply's own request is seen. */
+  waitingToolCallIds?: readonly string[];
+}
+
+function isWaitingOnUser(tool: ToolExecution, message: ChatMessage, waiting: readonly string[]): boolean {
+  const card = message.actionCard;
+  const own = card?.status === 'pending' && card.toolCallId !== undefined ? [card.toolCallId] : [];
+  const asked = new Set([...own, ...waiting]);
+  return asked.size > 0 && childrenOf(tool, message).some((child) => asked.has(child.id));
+}
+
+function statusOf(tool: ToolExecution, message: ChatMessage, on: TaskContext): TaskStatus {
+  if (tool.status === 'failed') return 'Failed';
+  if (tool.status === 'completed') return 'Done';
+  if (on.isTurnOver) return 'Did not finish';
+  return isWaitingOnUser(tool, message, on.waitingToolCallIds ?? []) ? 'Needs you' : 'Working';
+}
+
+export function subagentTaskOf(tool: ToolExecution, message: ChatMessage, on: TaskContext): SubagentTask {
+  const texts = (tool.steps ?? []).flatMap((step) => (step.kind === 'text' ? [step.text] : []));
+  const lastText = texts[texts.length - 1];
+  return {
+    toolId: tool.id,
+    title: tool.name,
+    ...(tool.agentType ? { agentType: tool.agentType } : {}),
+    stepCount: childrenOf(tool, message).length,
+    status: statusOf(tool, message, on),
+    ...(tool.startedAt === undefined ? {} : { startedAt: tool.startedAt }),
+    ...(lastText ? { lastText } : {}),
+  };
+}
+
+/** A subagent's steps and the tools they name, in the order the steps name them. */
+export function stepsOf(tool: ToolExecution, message: ChatMessage): { parts: ChatMessagePart[]; tools: ToolExecution[] } {
+  const parts = tool.steps ?? [];
+  const byId = new Map(childrenOf(tool, message).map((child) => [child.id, child]));
+  const ids = parts.flatMap((part) => (part.kind === 'tools' ? part.toolIds : []));
+  return { parts, tools: ids.flatMap((id) => byId.get(id) ?? []) };
+}
+
+/** "1 step" or "N steps": the tool calls a subagent made. */
+export function stepsLabel(count: number): string {
+  return count === 1 ? '1 step' : `${count} steps`;
+}
+
+/** The row's second line: the subagent's type and how much it did. */
+export function secondLine(task: SubagentTask): string {
+  const steps = stepsLabel(task.stepCount);
+  return task.agentType ? `${task.agentType} · ${steps}` : steps;
+}
+
+/** The subagent tool call a task tab is for, with the reply that holds it; undefined once a rewind removed it. */
+export function findTaskTool(
+  messages: readonly ChatMessage[],
+  toolId: string,
+): { tool: ToolExecution; message: ChatMessage } | undefined {
+  for (const message of messages) {
+    const tool = message.tools?.find((candidate) => candidate.id === toolId);
+    if (tool) return tool.steps === undefined ? undefined : { tool, message };
+  }
+  return undefined;
+}
