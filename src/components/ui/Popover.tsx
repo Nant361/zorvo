@@ -29,10 +29,13 @@ export interface PopoverProps {
   children: ReactNode;
 }
 
-/** The panel's look without its position, for a list that keeps focus in a text field (the `/` and `@` menus). */
-export const POPOVER_PANEL_STYLE = "rounded-panel border border-border bg-surface-3 p-1 shadow-popover";
+/**
+ * The panel's look without its position, for a list that keeps focus in a text field (the `/` and `@` menus).
+ * It opens with the menu token: a fade and a scale from 0.97, from its trigger's side where `SIDES` says it.
+ */
+export const POPOVER_PANEL_STYLE = "rounded-panel border border-border bg-surface-3 p-1 shadow-popover motion-safe:animate-menu-in";
 const PANEL = `absolute z-50 ${POPOVER_PANEL_STYLE}`;
-const SIDES = { bottom: "top-full mt-1", top: "bottom-full mb-1" } as const;
+const SIDES = { bottom: "top-full mt-1 origin-top", top: "bottom-full mb-1 origin-bottom" } as const;
 const ALIGNS = { start: "left-0", end: "right-0" } as const;
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 

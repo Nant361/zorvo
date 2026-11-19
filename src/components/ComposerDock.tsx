@@ -609,7 +609,7 @@ export function ComposerDock({
       )}
       <div
         data-composer-card=""
-        className="relative flex w-full flex-col gap-2.5 rounded-xl border border-border bg-surface-2 p-3 shadow-popover transition-all focus-within:border-border-strong"
+        className="relative flex w-full flex-col gap-2.5 rounded-[14px] border border-border bg-surface-2 p-3 transition-all focus-within:border-border-strong"
       >
         {attachments.length > 0 && (
           <AttachmentChips

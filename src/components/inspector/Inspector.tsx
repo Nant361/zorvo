@@ -103,7 +103,9 @@ export function Inspector({ tab, tabs, width, counts, isViewingFile = false, max
     <section
       aria-label="Inspector"
       style={{ width: shown }}
-      className="relative flex shrink-0 text-ui text-fg"
+      // It fades in when it opens (the panel token). Only opacity: a slide would move the box the artifact's
+      // native view is placed by while the animation runs.
+      className="relative flex shrink-0 text-ui text-fg motion-safe:animate-panel-in"
     >
       <div
         role="separator"

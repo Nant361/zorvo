@@ -62,11 +62,14 @@ describe("the permission card, as drawn", () => {
   it("is an attention card with a 600 title, the files it edits, and right-aligned plain buttons", () => {
     render(<ActionCard card={editCard} agentName="Claude Code" onChoose={vi.fn()} />);
     const card = screen.getByTestId("action-card-c-1");
-    expect(card).toHaveClass("flex", "flex-col", "gap-3", "px-4", "py-3.5", "rounded-xl", "border-attention-border", "bg-attention-surface");
+    expect(card).toHaveClass("flex", "flex-col", "gap-3", "px-4", "py-3.5", "rounded-panel", "border-attention-border", "bg-surface-2");
     expect(screen.getByRole("heading")).toHaveClass("text-ui", "font-semibold", "text-fg");
 
     const files = within(card).getByRole("list", { name: "Files to edit" });
-    expect(files).toHaveClass("rounded-md", "border-border", "bg-ground");
+    // Plain rows on the card: no box inside the card.
+    expect(files).toHaveClass("flex", "flex-col", "gap-1");
+    expect(files).not.toHaveClass("border");
+    expect(files).not.toHaveClass("bg-ground");
     const [first, second] = within(files).getAllByRole("listitem");
     // The path text sits in a bdi inside the mono span that cuts it at its start.
     expect(within(first).getByText("src/components/sidebar/SessionRow.tsx").parentElement).toHaveClass(
@@ -131,7 +134,7 @@ describe("the question card, as drawn", () => {
     expect(within(card).getByText(form.message)).toHaveClass("text-ui", "text-fg-muted");
 
     expect(within(card).getByText("Target branch").closest("label")).toHaveClass("text-ui", "font-medium", "text-fg-secondary");
-    expect(within(card).getByRole("textbox")).toHaveClass("h-8", "rounded-lg", "border-border-strong", "bg-ground", "px-2.5");
+    expect(within(card).getByRole("textbox")).toHaveClass("h-8", "rounded-lg", "border-border-strong", "bg-surface-2", "px-2.5");
 
     const decline = within(card).getByRole("button", { name: "Decline" });
     const submit = within(card).getByRole("button", { name: "Submit" });

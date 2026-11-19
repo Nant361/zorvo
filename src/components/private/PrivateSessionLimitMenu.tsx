@@ -37,7 +37,7 @@ export function PrivateSessionLimitMenu({ cap, model, credits, ownKey, onChange 
           type="button"
           disabled
           aria-describedby="session-limit-off"
-          className={`${COMPOSER_CHIP} disabled:text-fg-muted disabled:hover:bg-chip disabled:hover:text-fg-muted`}
+          className={`${COMPOSER_CHIP} disabled:text-fg-muted disabled:hover:bg-transparent disabled:hover:text-fg-muted`}
         >
           <Clock size={12} aria-hidden="true" className="shrink-0 text-fg-muted" />
           Session limit

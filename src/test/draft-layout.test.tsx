@@ -82,10 +82,10 @@ describe("the draft's column", () => {
 });
 
 describe("the draft's chips", () => {
-  it("are 26px, radius 6, filled with chip, like the composer's own", () => {
+  it("are 26px, radius 6, with no fill until hovered, like the composer's own", () => {
     render(<ComposerDock onSendMessage={() => {}} folder={folder} />);
     const chip = screen.getByRole("button", { name: /^Branch: main/ });
-    expect(chip).toHaveClass("h-6.5", "rounded-md", "bg-chip", "px-2", "text-ui-sm");
+    expect(chip).toHaveClass("h-6.5", "rounded-md", "bg-transparent", "hover:bg-surface-hover", "px-2", "text-ui-sm");
     expect(chip.className).not.toContain("surface-1");
     expect(within(chip).getByText("main")).toHaveClass("font-mono", "text-caption");
     expect(within(chip).getByText(/new worktree/)).toHaveClass("text-fg-subtle");

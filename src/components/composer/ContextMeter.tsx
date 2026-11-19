@@ -113,7 +113,7 @@ export function ContextMeter({ used, size, cost }: ContextUsage) {
         <div
           role="dialog"
           aria-label="Context usage"
-          className="absolute bottom-full right-0 z-50 mb-2 w-56 rounded-panel border border-border bg-surface-3 p-3 text-ui-sm shadow-popover"
+          className="absolute bottom-full right-0 z-50 mb-2 w-56 origin-bottom-right rounded-panel border border-border bg-surface-3 p-3 text-ui-sm shadow-popover motion-safe:animate-menu-in"
         >
           <p className="mb-2 font-medium text-fg-secondary">Context usage</p>
           <dl className="space-y-1">

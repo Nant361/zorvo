@@ -1,5 +1,6 @@
 import type { ModelPrice } from "../lib/private-credits";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useArrivedKeys } from "../hooks/useArrivedKeys";
 import { MessageRow } from "./chat/MessageRow";
 import { WorkingIndicator } from "./chat/ReplyExtras";
 import { waitingToolCallIds } from "../lib/task-view";
@@ -98,6 +99,18 @@ export interface ChatCanvasProps {
   replyBlockedReason?: string;
 }
 
+/** The key of a message's permission or input card, which can arrive after the message itself. */
+function cardKeyOf(message: ChatMessage): string | undefined {
+  if (message.actionCard) return `card:${message.actionCard.id}`;
+  if (message.elicitation) return `elicitation:${message.elicitation.key}`;
+  return undefined;
+}
+
+function appearKeysOf(message: ChatMessage): string[] {
+  const card = cardKeyOf(message);
+  return card ? [message.id, card] : [message.id];
+}
+
 export function ChatCanvas({
   messages,
   jumpTo,
@@ -133,6 +146,9 @@ export function ChatCanvas({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const readAloud = useReadAloud();
   const visibleMessages = useMemo(() => messages.filter(hasSomethingToShow), [messages]);
+  // What arrived while this chat is on screen fades in once: a message, and a card that came after its message.
+  const appearKeys = useMemo(() => visibleMessages.flatMap(appearKeysOf), [visibleMessages]);
+  const arrived = useArrivedKeys(conversationId, appearKeys);
   const lastMessage = visibleMessages[visibleMessages.length - 1];
   // While a turn runs, its replies (one or more, after the last user message)
   // are still being written: copying or forking them makes no sense yet.
@@ -259,7 +275,7 @@ export function ChatCanvas({
       onTouchStart={stickToBottom.onTouchStart}
       onTouchMove={stickToBottom.onTouchMove}
       data-testid="chat-canvas-container"
-      className="flex-1 overflow-y-auto pt-7 px-6 pb-4 space-y-[22px]"
+      className="flex-1 overflow-y-auto pt-9 px-8 pb-4 space-y-8"
     >
       {header && <div className="mx-auto w-full max-w-chat">{header}</div>}
       {delegatedFrom && <div className="mx-auto w-full max-w-chat">{delegatedFrom}</div>}
@@ -290,6 +306,8 @@ export function ChatCanvas({
           onOpenTask={onOpenTask ? handleOpenTask : undefined}
           openTaskId={openTaskId}
           waitingToolCallIds={waiting}
+          appears={arrived.has(msg.id)}
+          cardAppears={!arrived.has(msg.id) && arrived.has(cardKeyOf(msg) ?? "")}
         />
       ))}
       {tasksFooter && <div className="mx-auto w-full max-w-chat">{tasksFooter}</div>}

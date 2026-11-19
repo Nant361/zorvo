@@ -33,10 +33,11 @@ const mine: ChatMessage = { id: "u-1", role: "user", content: "Show the status a
 const reply: ChatMessage = { id: "a-1", role: "agent", content: "Updating the row now.", timestamp: HOUR_AGO, isComplete: true };
 
 describe("messages, as drawn", () => {
-  it("draws your message as a 12px-radius bubble, with no time under it", () => {
+  it("draws your message as a soft 14px-radius fill with no edge, with no time under it", () => {
     const row = renderRow(mine);
     const bubble = within(row).getByText("Show the status as words.").closest("[data-selectable-text]") as HTMLElement;
-    expect(bubble).toHaveClass("px-3.5", "py-2.5", "rounded-xl", "border-border", "bg-surface-2", "text-body", "text-fg", "max-w-[80%]");
+    expect(bubble).toHaveClass("px-3.5", "py-2.5", "rounded-[14px]", "bg-chip", "text-body", "text-fg", "max-w-[80%]");
+    expect(bubble).not.toHaveClass("border");
     expect(within(row).queryByText("1 hour ago")).toBeNull();
     // The time is not lost: the bubble's tooltip says it.
     expect(bubble.getAttribute("title")).toBe("1 hour ago");
@@ -54,10 +55,15 @@ describe("messages, as drawn", () => {
     expect(header).toHaveClass("gap-2", "mb-2");
   });
 
-  it("fills an ended reply with surface-2 on hover, with its actions as 24px secondary icons", () => {
+  it("puts no box and no hover fill under an ended reply, with its actions as 24px secondary icons", () => {
     const row = renderRow(reply);
     const body = row.querySelector("[data-message-body]") as HTMLElement;
-    expect(body).toHaveClass("group-hover:bg-surface-2", "p-3", "-mx-3", "rounded-[10px]");
+    // No class of the reply or anything in it fills a background under the pointer.
+    for (const element of [body, ...body.querySelectorAll("*")]) {
+      expect(element.getAttribute("class") ?? "", element.tagName).not.toMatch(/(^|\s)(group-)?hover:bg-/);
+    }
+    expect(body).not.toHaveClass("p-3");
+    expect(body).not.toHaveClass("-mx-3");
     const actions = within(row).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
     expect(actions).toEqual(["Copy message", "Fork from here"]);
     for (const button of within(row).getAllByRole("button")) {
