@@ -180,8 +180,8 @@ Two sources post to the one channel, each through its own Discord webhook so eit
 
 **Repository webhook to Discord's `/github` endpoint.** Events: Pull requests, Pull request reviews, Issues, Check suites. Releases is deliberately not ticked: GitHub sends a `release` event with action `created` for a draft, and `node scripts/sign-release.mjs` creates the draft before it is published. Pushes are not ticked because they are noise next to the pull requests that carry them.
 
-**Workflow `.github/workflows/discord-release.yml`.** Posts one message per published release.
-- Trigger: `release: types: [published]`, and only when `github.event.release.prerelease` is false.
+**Workflow `.github/workflows/discord-release.yml`.** Posts one message per release.
+- Trigger: `release: types: [released]`, which GitHub sends when a release is published and when a prerelease is later marked as a release, and only when `github.event.release.prerelease` is false. A draft or a prerelease posts nothing.
 - `permissions: {}`. No checkout, no `pnpm install`, no project code. One step that builds a JSON body from the event with `jq` and sends it with `curl` to the webhook in the secret `DISCORD_RELEASES_WEBHOOK`.
 - Message: an embed titled `Zorvo <tag>`, linking to the release page, with the release notes cut to 1,500 characters and a "Read the full notes" link when cut.
 - Risk of the secret: any workflow in the repository can read a repository secret. If it leaks, the worst case is messages posted to `#activity`; the fix is deleting the webhook in Discord and making a new one. It does not touch `release.yml`, so `scripts/release-workflow.test.mjs` is unaffected.
@@ -193,7 +193,7 @@ Webhook URLs are secrets. The bot creates them through the Discord API and they 
 Done with the bot's Administrator permission through the Discord REST API, except steps marked (maintainer).
 
 1. Guild settings: verification Medium, explicit content filter all members, default notifications only mentions.
-2. Roles: create Founder, Team and Contributor with their colours, Founder above Team; give Founder and Team to `933427452439564330`.
+2. Roles: create Founder, Team, Contributor and Member with their colours; give Founder and Team to `933427452439564330` and Member to every other human member. (maintainer) Drag the `zorvolabs` role to the top of Server Settings, Roles, once: every role starts at the same position and a bot cannot move roles at or above its own. Then the bot orders them Jockie, Founder, Team, Contributor, Member.
 3. Categories and channels: create START HERE, COMMUNITY, SUPPORT, TEAM; create `#welcome`, `#announcements`, `#activity`, `#team`, `#mod-updates`; move and rename `#general` and voice General to Lounge; set the category overwrites and sync every channel; delete the two empty default categories.
 4. Community: enable it with `#welcome` and `#mod-updates`, set language and description; convert `#announcements` to an announcement channel; create the three forums with tags and post guidelines.
 5. Content: post the `#welcome` text. Set up Onboarding defaults and rules screening. (maintainer) If the API refuses rules screening, the maintainer pastes the prepared rules in Server Settings.
@@ -230,3 +230,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - The two OpenAI and Anthropic key patterns start with `\b`. Without it they matched hyphenated words such as `fix/task-tabs-for-background-subagents`, so AutoMod blocked ordinary messages about branches and files.
 - START HERE also denies `@everyone` Use Application Commands, so a member cannot make a bot (Jockie has Administrator) answer a slash command in a read-only channel.
 - Member role added on request: cyan-600, no permissions, not shown apart, lowest human role, given through the Onboarding question above. The one human member who joined before it got it from the bot.
+- From the PR review: the release workflow listens to `released` instead of `published`, so a prerelease later marked as a release is posted; it cuts long notes at a line break, leaves the description out when the notes are empty (Discord refuses an empty one), and lets curl retry a 429 or 5xx three times.
