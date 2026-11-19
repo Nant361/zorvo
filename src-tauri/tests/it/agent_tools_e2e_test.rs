@@ -154,6 +154,35 @@ use zorvo_lib::agent_tools::commands::{tools_for_session, with_tools_env};
 use zorvo_lib::agent_tools::ToolsPath;
 use zorvo_lib::store::AppStore;
 
+fn store_with(dir: &std::path::Path, agent_tools: bool, computer_use: bool) -> AppStore {
+    let store = AppStore::new(dir.join("store"));
+    let mut state = store.load_state().expect("a fresh state");
+    state.settings.agent_tools = agent_tools;
+    state.settings.computer_use = computer_use;
+    store.save_state(&state).expect("the state saves");
+    store
+}
+
+#[test]
+fn computer_use_alone_still_passes_zorvos_server() {
+    let rig = rig("cu-alone");
+    let store = store_with(&rig.dir, false, true);
+    let mcp = tools_for_session(&rig.tools, &store, "s1", "qwen-code", true).unwrap();
+    assert_eq!(mcp.servers[0]["name"], "zorvo");
+    assert_eq!(mcp.path, Some(ToolsPath::Mcp));
+    let command = tools_for_session(&rig.tools, &store, "s2", "pi-acp", true).unwrap();
+    assert_eq!(command.path, Some(ToolsPath::Command));
+    let none = tools_for_session(
+        &rig.tools,
+        &store_with(&rig.dir.join("off"), false, false),
+        "s3",
+        "qwen-code",
+        true,
+    )
+    .unwrap();
+    assert_eq!(none.path, None);
+}
+
 fn store_with_tools(dir: &std::path::Path, on: bool) -> AppStore {
     let store = AppStore::new(dir.join("store"));
     let mut state = store.load_state().expect("a fresh state");

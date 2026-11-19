@@ -101,6 +101,10 @@ pub struct Settings {
     /// before the setting existed, or a value of another type, reads as on.
     #[serde(deserialize_with = "lenient_on")]
     pub agent_tools: bool,
+    /// Whether agents may use apps on this Mac (computer use). Off unless the
+    /// state says `true`: any other value, or none, reads as off.
+    #[serde(deserialize_with = "strict_on")]
+    pub computer_use: bool,
 }
 
 impl Default for Settings {
@@ -115,6 +119,7 @@ impl Default for Settings {
             notified_updates: BTreeMap::new(),
             signed_in_agents: Vec::new(),
             agent_tools: true,
+            computer_use: false,
             payment_source: String::new(),
             secret_guard: true,
             private_low_balance_notified: false,
@@ -438,6 +443,12 @@ fn lenient_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::E
 /// any other value.
 fn lenient_on<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
     Ok(serde_json::Value::deserialize(deserializer)?.as_bool() != Some(false))
+}
+
+/// True only for a JSON `true`: a setting that is off by default stays off for
+/// any other value.
+fn strict_on<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    Ok(serde_json::Value::deserialize(deserializer)?.as_bool() == Some(true))
 }
 
 /// A string, or none when it is not one.
@@ -765,6 +776,18 @@ fn unix_millis_now() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn computer_use_setting_reads_false_unless_set_to_true() {
+        let missing: Settings = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(!missing.computer_use);
+        let on: Settings =
+            serde_json::from_value(serde_json::json!({ "computerUse": true })).unwrap();
+        assert!(on.computer_use);
+        let odd: Settings =
+            serde_json::from_value(serde_json::json!({ "computerUse": "yes" })).unwrap();
+        assert!(!odd.computer_use);
+    }
 
     /// A panic while a save holds the lock must not stop every later save:
     /// the lock only orders writes, it guards no data a panic could leave half-done.

@@ -23,8 +23,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::bridge::{SOCKET_VARIABLE, TOKEN_VARIABLE, TOOLS_VARIABLE};
+use super::path::ToolsPath;
 use super::protocol::{handle_line, tool_result, Step, MAX_LINE_BYTES};
-use super::socket::{socket_path, Listener, Tokens};
+use super::socket::{socket_path, Caller, Capabilities, Listener, Tokens};
 
 static NEXT_CALL: AtomicU64 = AtomicU64::new(1);
 static NEXT_CONNECTION: AtomicU64 = AtomicU64::new(1);
@@ -51,7 +52,7 @@ type Ended = Arc<dyn Fn(String) + Send + Sync>;
 
 struct Connection {
     id: u64,
-    session: String,
+    caller: Caller,
     writer: Mutex<UnixStream>,
     /// A second handle to the same socket, used only to shut it down: it is
     /// outside the writer's mutex, so a blocked write cannot hold `close` up.
@@ -163,8 +164,8 @@ impl AgentTools {
         thread::spawn(move || {
             // `accept_loop` never returns the listener, so its Drop cannot
             // remove the socket file: `shutdown` does that.
-            listener.accept_loop(tokens, move |session, stream| {
-                accepting.serve(session, stream)
+            listener.accept_loop(tokens, move |caller, stream| {
+                accepting.serve(caller, stream)
             });
         });
         Ok(service)
@@ -189,10 +190,18 @@ impl AgentTools {
     /// The `mcpServers` value for a session: one stdio entry with a fresh
     /// token, or `[]` when `enabled` is false or this instance is disabled.
     pub fn servers_for(&self, app_session_id: &str, enabled: bool) -> Value {
-        if !enabled || !self.enabled {
+        self.servers_with(
+            app_session_id,
+            Capabilities::agent_tools_only(enabled, ToolsPath::Mcp),
+        )
+    }
+
+    /// The same for a session with these capabilities: `[]` when it has none.
+    pub fn servers_with(&self, app_session_id: &str, capabilities: Capabilities) -> Value {
+        if !capabilities.any() || !self.enabled {
             return json!([]);
         }
-        let token = self.tokens.issue(app_session_id);
+        let token = self.tokens.issue(app_session_id, capabilities);
         json!([{
             "name": "zorvo",
             "command": self.bridge.to_string_lossy(),
@@ -209,10 +218,22 @@ impl AgentTools {
     /// runs `zorvo tools`. Empty when `enabled` is false or this instance is
     /// disabled.
     pub fn launch_env_for(&self, app_session_id: &str, enabled: bool) -> Vec<(String, String)> {
-        if !enabled || !self.enabled {
+        self.launch_env_with(
+            app_session_id,
+            Capabilities::agent_tools_only(enabled, ToolsPath::Command),
+        )
+    }
+
+    /// The same for a session with these capabilities: empty when it has none.
+    pub fn launch_env_with(
+        &self,
+        app_session_id: &str,
+        capabilities: Capabilities,
+    ) -> Vec<(String, String)> {
+        if !capabilities.any() || !self.enabled {
             return Vec::new();
         }
-        let token = self.tokens.issue(app_session_id);
+        let token = self.tokens.issue(app_session_id, capabilities);
         vec![
             (
                 SOCKET_VARIABLE.to_string(),
@@ -257,13 +278,13 @@ impl AgentTools {
         self.tokens.forget(app_session_id);
         let doomed: Vec<Arc<Connection>> = lock(&self.connections)
             .values()
-            .filter(|c| c.session == app_session_id)
+            .filter(|c| c.caller.session == app_session_id)
             .cloned()
             .collect();
         for connection in &doomed {
             connection.close();
         }
-        self.end_pending(|p| p.connection.session == app_session_id);
+        self.end_pending(|p| p.connection.caller.session == app_session_id);
     }
 
     /// Removes the socket file and closes every connection. Call it when the
@@ -296,7 +317,7 @@ impl AgentTools {
         }
     }
 
-    fn serve(self: &Arc<Self>, session: String, stream: UnixStream) {
+    fn serve(self: &Arc<Self>, caller: Caller, stream: UnixStream) {
         let (Ok(writer), Ok(shutter)) = (stream.try_clone(), stream.try_clone()) else {
             return;
         };
@@ -306,13 +327,13 @@ impl AgentTools {
         }
         let connection = Arc::new(Connection {
             id: NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed),
-            session,
+            caller,
             writer: Mutex::new(writer),
             shutter,
         });
         lock(&self.connections).insert(connection.id, Arc::clone(&connection));
         // A session forgotten while this connection was being set up.
-        if self.tokens_forgot(&connection.session) {
+        if self.tokens_forgot(&connection.caller.session) {
             connection.close();
         }
         let mut reader = BufReader::new(stream);
@@ -337,7 +358,7 @@ impl AgentTools {
     }
 
     fn handle(self: &Arc<Self>, connection: &Arc<Connection>, line: &str) {
-        match handle_line(line) {
+        match handle_line(line, &connection.caller) {
             Step::Reply(value) => connection.send(&value),
             Step::Silent => {}
             Step::Cancel { request_id } => {
@@ -395,7 +416,7 @@ impl AgentTools {
         }
         (self.emit)(ToolCall {
             call_id: call_id.clone(),
-            session_id: connection.session.clone(),
+            session_id: connection.caller.session.clone(),
             tool,
             args,
         });
@@ -482,7 +503,10 @@ mod tests {
             .expect("timeout");
         let connection = Connection {
             id: 1,
-            session: "s-1".to_string(),
+            caller: Caller {
+                session: "s-1".to_string(),
+                capabilities: Capabilities::agent_tools_only(true, ToolsPath::Mcp),
+            },
             writer: Mutex::new(ours.try_clone().expect("clone")),
             shutter: ours,
         };

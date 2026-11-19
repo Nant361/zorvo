@@ -9,6 +9,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use zorvo_lib::agent_tools::path::ToolsPath;
+use zorvo_lib::agent_tools::socket::Capabilities;
+
+const CAPS: Capabilities = Capabilities {
+    agent_tools: true,
+    computer_use: false,
+    path: ToolsPath::Mcp,
+};
+
 use zorvo_lib::agent_tools::socket::{socket_path, Listener, Tokens};
 
 fn scratch(tag: &str) -> PathBuf {
@@ -33,7 +42,7 @@ fn serve(tag: &str) -> (PathBuf, Arc<Tokens>, mpsc::Receiver<String>) {
     let tx = std::sync::Mutex::new(tx);
     thread::spawn(move || {
         listener.accept_loop(accept_tokens, move |session, stream| {
-            tx.lock().unwrap().send(session).unwrap();
+            tx.lock().unwrap().send(session.session).unwrap();
             let mut writer = stream.try_clone().unwrap();
             for line in BufReader::new(stream).lines() {
                 let Ok(line) = line else { break };
@@ -53,7 +62,7 @@ fn token_line(token: &str) -> String {
 #[test]
 fn a_known_token_reaches_on_connection_with_its_session() {
     let (path, tokens, rx) = serve("known");
-    let token = tokens.issue("s1");
+    let token = tokens.issue("s1", CAPS);
     assert_eq!(token.len(), 64);
     assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
     let mut stream = UnixStream::connect(&path).unwrap();
@@ -68,17 +77,20 @@ fn a_known_token_reaches_on_connection_with_its_session() {
 #[test]
 fn issuing_again_replaces_the_token() {
     let tokens = Tokens::new();
-    let first = tokens.issue("s1");
-    let second = tokens.issue("s1");
+    let first = tokens.issue("s1", CAPS);
+    let second = tokens.issue("s1", CAPS);
     assert_ne!(first, second);
-    assert_eq!(tokens.session_of(&first), None);
-    assert_eq!(tokens.session_of(&second), Some("s1".to_string()));
+    assert_eq!(tokens.caller_of(&first).map(|c| c.session), None);
+    assert_eq!(
+        tokens.caller_of(&second).map(|c| c.session),
+        Some("s1".to_string())
+    );
 }
 
 #[test]
 fn an_unknown_or_forgotten_token_is_closed_without_a_callback() {
     let (path, tokens, rx) = serve("unknown");
-    let forgotten = tokens.issue("s1");
+    let forgotten = tokens.issue("s1", CAPS);
     tokens.forget("s1");
     for token in [forgotten, "ab".repeat(32)] {
         let mut stream = UnixStream::connect(&path).unwrap();
@@ -175,7 +187,7 @@ fn the_bridge_binary_copies_lines_both_ways() {
     let path = socket_path(&dir);
     let listener = Listener::bind(&path).unwrap();
     let tokens = Arc::new(Tokens::new());
-    let token = tokens.issue("s1");
+    let token = tokens.issue("s1", CAPS);
     let (tx, rx) = mpsc::channel::<UnixStream>();
     let tx = std::sync::Mutex::new(tx);
     let accept_tokens = Arc::clone(&tokens);
