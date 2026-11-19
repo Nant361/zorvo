@@ -223,6 +223,16 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("bash -lc", NOW - 59_000), one(wrapped))).toBeUndefined();
   });
 
+  it("matches a launch whose program replaced its shell under its interpreter", () => {
+    const unit = launch("unit", "pnpm test:unit", NOW - 60_000);
+    const py = launch("py", "./serve.py --port 8000", NOW - 60_000);
+
+    expect(shellToolFor(process("node /app/pnpm test:unit", NOW - 59_000), one(unit))?.id).toBe("unit");
+    expect(shellToolFor(process("/usr/bin/python3 /work/serve.py --port 8000", NOW - 59_000), one(py))?.id).toBe("py");
+    expect(shellToolFor(process("node /app/pnpm test:e2e", NOW - 59_000), one(unit))).toBeUndefined();
+    expect(shellToolFor(process("node /app/other-pnpm test:unit", NOW - 59_000), one(unit))).toBeUndefined();
+  });
+
   it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
     const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
     const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });

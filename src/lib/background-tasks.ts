@@ -221,11 +221,31 @@ function sameCommand(a: string, b: string): boolean {
   return a === b;
 }
 
+/** The most words an interpreter may put before a program that replaced its shell (`/usr/bin/env python3`). */
+const MAX_INTERPRETER_WORDS = 2;
+
+const baseName = (word: string): string => word.split('/').pop() ?? word;
+
+/**
+ * Whether `command` is `launched` after its program replaced the shell under an interpreter:
+ * `pnpm test:unit` shows as `node /app/pnpm test:unit`, `./serve.py` as `python3 /work/serve.py`.
+ * The program must be the same file name and every argument the same.
+ */
+function isExecOf(command: string, launched: string): boolean {
+  const [program, ...args] = launched.split(' ');
+  const words = command.split(' ');
+  for (let index = 1; index <= MAX_INTERPRETER_WORDS && index < words.length; index++) {
+    if (baseName(words[index]) !== baseName(program)) continue;
+    if (words.slice(index + 1).join(' ') === args.join(' ')) return true;
+  }
+  return false;
+}
+
 /** Whether a launch ran `command`, the scan's text for a process. */
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
   const launched = normalized(scriptOf(normalized(tool.command ?? '')));
-  return launched !== '' && sameCommand(launched, command);
+  return launched !== '' && (sameCommand(launched, command) || isExecOf(command, launched));
 }
 
 /** The launch that started last, the one with no start time counting as earliest. */
