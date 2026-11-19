@@ -1,0 +1,63 @@
+<!doctype html>
+<!-- X header banner, 1500x500. The avatar covers the bottom-left (about x < 380, y > 330),
+     so nothing sits there; the copy stays inside y 70-430 for the mobile crop. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: "Instrument Sans";
+    src: url("../../../site/node_modules/@fontsource-variable/instrument-sans/files/instrument-sans-latin-wght-normal.woff2") format("woff2");
+    font-weight: 400 700;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("../../../site/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 900;
+  }
+  :root { --ink: #0a0a0a; --raised: #18181b; --line: #27272a; --muted: #71717a; --soft: #a1a1aa; --paper: #fafafa; }
+  html, body { margin: 0; background: var(--ink); }
+  .banner { position: relative; width: 1500px; height: 500px; overflow: hidden; background: var(--ink); font-family: "Instrument Sans", sans-serif; color: var(--paper); }
+
+  /* One project, three agents: a quiet session list, top-left, above the avatar. */
+  .project { position: absolute; left: 88px; top: 78px; width: 450px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); font-family: "Geist Mono", monospace; font-size: 15px; }
+  .project header { padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--soft); display: flex; gap: 10px; align-items: center; }
+  .project header svg { width: 16px; height: 16px; }
+  .row { display: grid; grid-template-columns: 128px 1fr auto; gap: 12px; padding: 12px 18px; color: var(--soft); }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .agent { color: var(--paper); }
+  .row .state { color: var(--muted); }
+
+  .copy { position: absolute; left: 640px; top: 84px; }
+  .lockup { display: flex; align-items: center; gap: 12px; }
+  .lockup svg { width: 40px; height: 40px; }
+  .wordmark { font-size: 38px; font-weight: 600; letter-spacing: -0.04em; line-height: 1; }
+  h1 { margin: 34px 0 0; font-size: 66px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; }
+  p { margin: 22px 0 0; font-size: 22px; line-height: 1.4; color: var(--soft); }
+  .url { margin-top: 18px; font-family: "Geist Mono", monospace; font-size: 18px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div class="project">
+      <header>
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7l10 7-10 7"/><path d="M18 19l10 7-10 7"/></svg>
+        ~/my-app
+      </header>
+      <div class="row"><span class="agent">Claude Code</span><span>feat/checkout</span><span class="state">working</span></div>
+      <div class="row"><span class="agent">Codex</span><span>fix/login-bug</span><span class="state">review</span></div>
+      <div class="row"><span class="agent">Qwen Code</span><span>refactor/api</span><span class="state">done</span></div>
+    </div>
+
+    <div class="copy">
+      <div class="lockup">
+        <svg viewBox="0 0 40 40" fill="none" stroke="#fafafa" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7l10 7-10 7"/><path d="M18 19l10 7-10 7"/><path d="M30 33h5"/></svg>
+        <span class="wordmark">zorvo</span>
+      </div>
+      <h1>Every coding agent.<br>One desktop.</h1>
+      <p>Claude Code, Codex and Qwen Code on one project, side by side.<br>Free and open source for Mac. No API keys.</p>
+      <div class="url">zorvolabs.xyz</div>
+    </div>
+  </div>
+</body>
+</html>
