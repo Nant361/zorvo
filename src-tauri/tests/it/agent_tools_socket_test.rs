@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use zorvo_lib::agent_tools::path::ToolsPath;
+use zorvo_lib::agent_tools::peer::ProcessId;
 use zorvo_lib::agent_tools::socket::Capabilities;
 
 const CAPS: Capabilities = Capabilities {
@@ -55,6 +56,40 @@ fn serve(tag: &str) -> (PathBuf, Arc<Tokens>, mpsc::Receiver<String>) {
     (path, tokens, rx)
 }
 
+/// A token for "s1", bound to this test process, which then connects as the
+/// session's agent would.
+fn issue_bound(tokens: &Tokens) -> String {
+    let token = tokens.issue("s1", CAPS);
+    tokens.bind_process("s1", ProcessId::of(std::process::id() as i32).unwrap());
+    token
+}
+
+#[test]
+fn connection_from_outside_the_agents_tree_is_closed() {
+    let (path, tokens, rx) = serve("outside");
+    let token = tokens.issue("s1", CAPS);
+    let mut agent = Command::new("/bin/sleep").arg("5").spawn().unwrap();
+    tokens.bind_process("s1", ProcessId::of(agent.id() as i32).unwrap());
+    let mut stream = UnixStream::connect(&path).unwrap();
+    stream.write_all(token_line(&token).as_bytes()).unwrap();
+    let accepted = rx.recv_timeout(Duration::from_millis(500));
+    let _ = agent.kill();
+    let _ = agent.wait();
+    assert!(
+        accepted.is_err(),
+        "a connection from outside the agent's tree got in"
+    );
+}
+
+#[test]
+fn connection_for_a_session_with_no_agent_process_is_closed() {
+    let (path, tokens, rx) = serve("unbound");
+    let token = tokens.issue("s1", CAPS);
+    let mut stream = UnixStream::connect(&path).unwrap();
+    stream.write_all(token_line(&token).as_bytes()).unwrap();
+    assert!(rx.recv_timeout(Duration::from_millis(500)).is_err());
+}
+
 fn token_line(token: &str) -> String {
     format!("{{\"token\":\"{token}\"}}\n")
 }
@@ -62,7 +97,7 @@ fn token_line(token: &str) -> String {
 #[test]
 fn a_known_token_reaches_on_connection_with_its_session() {
     let (path, tokens, rx) = serve("known");
-    let token = tokens.issue("s1", CAPS);
+    let token = issue_bound(&tokens);
     assert_eq!(token.len(), 64);
     assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
     let mut stream = UnixStream::connect(&path).unwrap();
@@ -77,8 +112,8 @@ fn a_known_token_reaches_on_connection_with_its_session() {
 #[test]
 fn issuing_again_replaces_the_token() {
     let tokens = Tokens::new();
-    let first = tokens.issue("s1", CAPS);
-    let second = tokens.issue("s1", CAPS);
+    let first = issue_bound(&tokens);
+    let second = issue_bound(&tokens);
     assert_ne!(first, second);
     assert_eq!(tokens.caller_of(&first).map(|c| c.session), None);
     assert_eq!(
@@ -90,7 +125,7 @@ fn issuing_again_replaces_the_token() {
 #[test]
 fn an_unknown_or_forgotten_token_is_closed_without_a_callback() {
     let (path, tokens, rx) = serve("unknown");
-    let forgotten = tokens.issue("s1", CAPS);
+    let forgotten = issue_bound(&tokens);
     tokens.forget("s1");
     for token in [forgotten, "ab".repeat(32)] {
         let mut stream = UnixStream::connect(&path).unwrap();
@@ -187,7 +222,7 @@ fn the_bridge_binary_copies_lines_both_ways() {
     let path = socket_path(&dir);
     let listener = Listener::bind(&path).unwrap();
     let tokens = Arc::new(Tokens::new());
-    let token = tokens.issue("s1", CAPS);
+    let token = issue_bound(&tokens);
     let (tx, rx) = mpsc::channel::<UnixStream>();
     let tx = std::sync::Mutex::new(tx);
     let accept_tokens = Arc::clone(&tokens);

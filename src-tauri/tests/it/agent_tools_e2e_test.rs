@@ -73,6 +73,7 @@ fn logged(path: &std::path::Path) -> Vec<Value> {
 fn the_fake_agent_calls_a_tool_through_the_bridge_and_gets_the_answer() {
     let rig = rig("ok");
     let (manager, rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, log) = mcp_agent(&rig);
     manager
         .start("s1", &cwd(), &launch, rig.tools.servers_for("s1", true))
@@ -102,6 +103,7 @@ fn the_fake_agent_calls_a_tool_through_the_bridge_and_gets_the_answer() {
 fn a_disabled_session_gets_no_server_and_the_fake_agent_says_so() {
     let rig = rig("off");
     let (manager, rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, _log) = mcp_agent(&rig);
     let servers = rig.tools.servers_for("s1", false);
     assert_eq!(servers, json!([]));
@@ -130,6 +132,7 @@ fn an_instance_that_could_not_start_gives_every_session_no_server() {
 fn stopping_the_session_ends_its_waiting_call() {
     let rig = rig("stop");
     let (manager, _rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, _log) = mcp_agent(&rig);
     manager
         .start("s1", &cwd(), &launch, rig.tools.servers_for("s1", true))
@@ -251,6 +254,7 @@ fn a_command_path_session_gets_the_variables_and_no_server() {
     let rig = rig("cmdenv");
     let store = store_with_tools(&rig.dir, true);
     let (manager, _rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, env_log, params_log, _) = command_agent(&rig, &[]);
     let tools = tools_for_session(&rig.tools, &store, "s1", "pi-acp", true).unwrap();
     let launch = with_tools_env(launch, &tools.env);
@@ -272,6 +276,7 @@ fn an_mcp_session_gets_the_server_and_no_variables() {
     let rig = rig("mcpenv");
     let store = store_with_tools(&rig.dir, true);
     let (manager, _rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, env_log, params_log, _) = command_agent(&rig, &[]);
     let tools = tools_for_session(&rig.tools, &store, "s1", "qwen-code", true).unwrap();
     let launch = with_tools_env(launch, &tools.env);
@@ -293,6 +298,7 @@ fn the_fake_agent_runs_zorvo_tools_and_gets_the_answer() {
     let rig = rig("cmdrun");
     let store = store_with_tools(&rig.dir, true);
     let (manager, rx) = manager();
+    bind_processes(&manager, &rig.tools);
     let (launch, _, _, run_log) = command_agent(&rig, &[]);
     let tools = tools_for_session(&rig.tools, &store, "s1", "pi-acp", true).unwrap();
     manager
@@ -354,4 +360,17 @@ fn an_empty_tools_environment_leaves_the_launch_as_it_was() {
     let before = launch.env.clone();
     assert_eq!(with_tools_env(launch, &[]).env, before);
     rig.tools.shutdown();
+}
+
+/// Binds every session the manager starts to its agent process, as the app does.
+fn bind_processes(
+    manager: &std::sync::Arc<zorvo_lib::acp::manager::AcpManager>,
+    tools: &std::sync::Arc<AgentTools>,
+) {
+    let tools = std::sync::Arc::clone(tools);
+    manager.set_process_listener(std::sync::Arc::new(move |session, pid| {
+        if let Some(process) = zorvo_lib::agent_tools::peer::ProcessId::of(pid as i32) {
+            tools.bind_process(session, process);
+        }
+    }));
 }

@@ -431,6 +431,20 @@ pub fn run() {
             let _ = app.emit(ACP_EVENT, event_payload(&event));
         }
     }));
+    // Agent tools accept a session's token only from its agent process or
+    // below it, so they learn each session's process as it starts.
+    let process_holder = Arc::clone(&app_handle_holder);
+    acp_manager.set_process_listener(Arc::new(move |session_id, pid| {
+        let Some(app) = process_holder.lock().ok().and_then(|guard| guard.clone()) else {
+            return;
+        };
+        let Some(process) = agent_tools::peer::ProcessId::of(pid as i32) else {
+            return;
+        };
+        if let Some(tools) = app.try_state::<Arc<agent_tools::AgentTools>>() {
+            tools.bind_process(session_id, process);
+        }
+    }));
     let proxy_for_setup = Arc::clone(&private_proxy);
 
     tauri::Builder::default()

@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 
 use super::bridge::{SOCKET_VARIABLE, TOKEN_VARIABLE, TOOLS_VARIABLE};
 use super::path::ToolsPath;
+use super::peer::ProcessId;
 use super::protocol::{handle_line, tool_result, Step, MAX_LINE_BYTES};
 use super::socket::{socket_path, Caller, Capabilities, Listener, Tokens};
 
@@ -270,6 +271,12 @@ impl AgentTools {
         if now {
             (self.ended)(call_id);
         }
+    }
+
+    /// The session runs in this agent process: only it and its descendants
+    /// may use the session's token.
+    pub fn bind_process(&self, app_session_id: &str, process: ProcessId) {
+        self.tokens.bind_process(app_session_id, process);
     }
 
     /// The session stopped: its token is forgotten, its connections close and

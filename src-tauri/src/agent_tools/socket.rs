@@ -19,6 +19,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::path::ToolsPath;
+use super::peer::{descends_from, peer_process, ProcessId, SystemProcessTable};
 
 /// macOS allows 104 bytes in a socket path, the terminating NUL included.
 const MAX_SOCKET_PATH_BYTES: usize = 100;
@@ -72,6 +73,9 @@ pub struct Caller {
 #[derive(Default)]
 pub struct Tokens {
     by_session: Mutex<HashMap<String, (String, Capabilities)>>,
+    /// The agent process each session runs in: only it and its descendants
+    /// may connect with the session's token.
+    processes: Mutex<HashMap<String, ProcessId>>,
 }
 
 impl Tokens {
@@ -101,6 +105,26 @@ impl Tokens {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(app_session_id);
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(app_session_id);
+    }
+
+    /// The agent process the session runs in; a second call replaces the first.
+    pub fn bind_process(&self, app_session_id: &str, process: ProcessId) {
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(app_session_id.to_string(), process);
+    }
+
+    fn process_of(&self, app_session_id: &str) -> Option<ProcessId> {
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(app_session_id)
+            .copied()
     }
 
     /// The caller a token belongs to. Every stored token is compared, and
@@ -275,6 +299,12 @@ fn authenticate(mut stream: UnixStream, tokens: &Tokens) -> Option<(Caller, Unix
     }
     let value: Value = serde_json::from_slice(&line).ok()?;
     let caller = tokens.caller_of(value.get("token")?.as_str()?)?;
+    // The token must come from the session's own agent process or below it.
+    let agent = tokens.process_of(&caller.session)?;
+    let peer = peer_process(&stream)?;
+    if !descends_from(&SystemProcessTable, peer, agent) {
+        return None;
+    }
     stream.set_read_timeout(None).ok()?;
     Some((caller, stream))
 }
