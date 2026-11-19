@@ -7,7 +7,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 use tauri::State;
@@ -82,7 +81,7 @@ pub fn branch_slug(title: &str) -> String {
 
 /// Runs git in `dir` and returns its trimmed output, or its error message.
 pub(crate) fn run_git(git: &Path, dir: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(git)
+    let output = crate::spawn::command(git)
         .arg("-C")
         .arg(dir)
         .args(args)

@@ -9,8 +9,6 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg(target_os = "macos")]
-use std::process::Command;
-#[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
 
 /// Longest session id accepted in a window label or a popout URL.
@@ -120,7 +118,7 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn reveal_directory(dir: &Path) -> Result<(), String> {
-    let status = Command::new("open")
+    let status = crate::spawn::command("open")
         .arg(dir)
         .status()
         .map_err(|e| format!("Failed to run `open {}`: {}", dir.display(), e))?;
@@ -166,7 +164,7 @@ pub fn open_external_url(url: String) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 pub(crate) fn open_url(url: &str) -> Result<(), String> {
-    let status = Command::new("open")
+    let status = crate::spawn::command("open")
         .arg(url)
         .status()
         .map_err(|e| format!("Failed to open {url}: {e}"))?;

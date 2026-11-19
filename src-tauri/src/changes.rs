@@ -45,7 +45,7 @@ pub struct FileChange {
 
 /// git, reading paths literally rather than as patterns.
 fn git_command(git: &Path, dir: &Path, args: &[&str]) -> Command {
-    let mut command = Command::new(git);
+    let mut command = crate::spawn::command(git);
     command
         .arg("--literal-pathspecs")
         .arg("-C")

@@ -9,7 +9,7 @@
 //! a pid the UI held on to cannot reach a process that reused it.
 
 use std::collections::{HashMap, HashSet};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
@@ -366,7 +366,7 @@ pub fn parse_lsof_ports(output: &str) -> HashMap<u32, Vec<u16>> {
 /// Every process, from `ps`.
 #[cfg(target_os = "macos")]
 pub fn read_processes() -> Result<Vec<ProcessRow>, String> {
-    let output = Command::new("/bin/ps")
+    let output = crate::spawn::command("/bin/ps")
         .args(["-axo", "pid=,ppid=,pgid=,etime=,command="])
         .output()
         .map_err(|e| format!("Could not list processes: {e}"))?;
@@ -398,7 +398,7 @@ fn listening_ports(pids: &[u32]) -> HashMap<u32, Vec<u16>> {
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    Command::new("/usr/sbin/lsof")
+    crate::spawn::command("/usr/sbin/lsof")
         .args([
             "-b",
             "-w",
@@ -455,7 +455,7 @@ pub fn scan(roots: &[(String, u32)], with_ports: bool) -> Result<Vec<BackgroundP
 /// may not signal) yet still signals the rest, so only failing to run it is
 /// an error.
 fn send_signal(signal: &str, pids: &[u32]) -> Result<(), String> {
-    Command::new("/bin/kill")
+    crate::spawn::command("/bin/kill")
         .arg(signal)
         .args(pids.iter().map(u32::to_string))
         .stderr(Stdio::null())

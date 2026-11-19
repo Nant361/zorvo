@@ -582,7 +582,6 @@ pub fn session_diff_stats_since(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -594,7 +593,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("zorvo-stats-pipe-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create dir");
-        let status = Command::new("mkfifo")
+        let status = crate::spawn::command("mkfifo")
             .arg(dir.join("pipe"))
             .status()
             .expect("run mkfifo");
