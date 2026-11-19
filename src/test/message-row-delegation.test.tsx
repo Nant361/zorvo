@@ -51,10 +51,8 @@ describe("a delegation report in the chat", () => {
     expect(bubble).toHaveClass(
       "ml-auto",
       "max-w-[80%]",
-      "rounded-xl",
-      "border",
-      "border-border",
-      "bg-surface-2",
+      "rounded-[14px]",
+      "bg-chip",
       "px-3.5",
       "py-2.5",
       "text-body",

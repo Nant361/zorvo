@@ -1111,7 +1111,7 @@ describe("ChatCanvas: the two kinds of message", () => {
     render(<ChatCanvas messages={messages} agentName="Codex" />);
     const yours = screen.getByTestId("chat-message-u-1");
     const bubble = yours.querySelector("[data-selectable-text]") as HTMLElement;
-    expect(bubble.classList.contains("bg-surface-2")).toBe(true);
+    expect(bubble.classList.contains("bg-chip")).toBe(true);
     expect(bubble.classList.contains("ml-auto")).toBe(true);
     expect(within(yours).queryByText("You")).toBeNull();
     expect(yours.querySelector("[data-message-header]")).toBeNull();
@@ -1156,10 +1156,11 @@ describe("ChatCanvas: the two kinds of message", () => {
     }
   });
 
-  it("edges your bubble, so it shows on the light theme's near-white ground", () => {
+  it("fills your bubble softly with no edge, so it never reads as a card", () => {
     render(<ChatCanvas messages={messages} agentName="Codex" />);
     const bubble = screen.getByTestId("chat-message-u-1").querySelector("[data-selectable-text]") as HTMLElement;
-    expect(bubble.classList.contains("border-border")).toBe(true);
+    expect(bubble.classList.contains("bg-chip")).toBe(true);
+    expect(bubble.classList.contains("border")).toBe(false);
   });
 
   it("offers Fork from here on the agent's message", () => {

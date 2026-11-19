@@ -36,7 +36,7 @@ function StatusLine({ status }: { status: NonNullable<View["status"]> }) {
   return (
     <span className="flex items-center gap-2 text-ui-sm text-fg-secondary">
       {status.spinner ? (
-        <Loader2 size={14} aria-hidden="true" className="shrink-0 animate-spin" />
+        <Loader2 size={14} aria-hidden="true" className="shrink-0 motion-safe:animate-spin" />
       ) : (
         <span
           aria-hidden="true"

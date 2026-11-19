@@ -25,6 +25,9 @@ function timeLabelOf(message: ChatMessage): string | undefined {
 import { ArtifactCardRow } from "./ArtifactCardRow";
 import type { ArtifactCard } from "../../types";
 
+/** A message or card that arrives on screen fades in once (the appear token); streamed text does not move. */
+const APPEAR = "motion-safe:animate-appear";
+
 export interface MessageRowProps {
   message: ChatMessage;
   agentName: string;
@@ -62,6 +65,10 @@ export interface MessageRowProps {
   openTaskId?: string;
   /** The tool calls the turn's open permission requests are for, wherever in the turn they sit. */
   waitingToolCallIds?: readonly string[];
+  /** True when the message arrived while its chat was on screen: it fades in once. */
+  appears?: boolean;
+  /** True when its permission or input card arrived on screen after the message itself: the card fades in once. */
+  cardAppears?: boolean;
 }
 
 type CallSegment = { kind: "tools"; tools: ToolExecution[] } | { kind: "task"; tool: ToolExecution };
@@ -127,6 +134,8 @@ export const MessageRow = memo(function MessageRow({
   onOpenTask,
   openTaskId,
   waitingToolCallIds,
+  appears = false,
+  cardAppears = false,
 }: MessageRowProps) {
   const isUser = message.role === "user";
   const timeLabel = timeLabelOf(message);
@@ -144,8 +153,8 @@ export const MessageRow = memo(function MessageRow({
       title={isUser ? timeLabel : undefined}
       className={`text-left select-text [&_button]:select-none ${
         isUser
-          ? // The edge carries the bubble on the light theme, where surface-2 is barely off the chat's ground.
-            "ml-auto max-w-[80%] rounded-xl border border-border bg-surface-2 px-3.5 py-2.5 text-body text-fg"
+          ? // A soft fill with no edge and a 14px corner, so your message never reads as a card.
+            "ml-auto max-w-[80%] rounded-[14px] bg-chip px-3.5 py-2.5 text-body text-fg"
           : "w-full text-body text-fg-secondary"
       }`}
     >
@@ -197,31 +206,35 @@ export const MessageRow = memo(function MessageRow({
 
       {/* The agent's permission request, answered with one of its options */}
       {message.actionCard && (
-        <ActionCard
-          card={message.actionCard}
-          agentName={agentName}
-          agentProfileId={agentProfileId}
-          onChoose={
-            onChooseOption
-              ? (optionId, answers) =>
-                  answers
-                    ? onChooseOption(message.actionCard!.id, optionId, answers)
-                    : onChooseOption(message.actionCard!.id, optionId)
-              : undefined
-          }
-        />
+        <div className={cardAppears ? APPEAR : undefined}>
+          <ActionCard
+            card={message.actionCard}
+            agentName={agentName}
+            agentProfileId={agentProfileId}
+            onChoose={
+              onChooseOption
+                ? (optionId, answers) =>
+                    answers
+                      ? onChooseOption(message.actionCard!.id, optionId, answers)
+                      : onChooseOption(message.actionCard!.id, optionId)
+                : undefined
+            }
+          />
+        </div>
       )}
 
       {/* The agent's request for input or to open a page; keyed so typed values never move between cards */}
       {message.elicitation && (
-        <ElicitationCard
-          key={message.elicitation.key}
-          card={message.elicitation}
-          agentName={agentName}
-          agentProfileId={agentProfileId}
-          onAnswer={onAnswerElicitation}
-          onReopen={onReopenElicitationUrl}
-        />
+        <div className={cardAppears ? APPEAR : undefined}>
+          <ElicitationCard
+            key={message.elicitation.key}
+            card={message.elicitation}
+            agentName={agentName}
+            agentProfileId={agentProfileId}
+            onAnswer={onAnswerElicitation}
+            onReopen={onReopenElicitationUrl}
+          />
+        </div>
       )}
 
       {/* Where the agent showed a page */}
@@ -240,7 +253,7 @@ export const MessageRow = memo(function MessageRow({
       id={`message-${message.id}`}
       tabIndex={-1}
       data-testid={`chat-message-${message.id}`}
-      className={`group focus-ring data-[jumped]:outline data-[jumped]:outline-1 data-[jumped]:outline-offset-1 data-[jumped]:outline-focus-ring flex flex-col ${isUser ? "items-end" : "items-start"} w-full max-w-chat mx-auto`}
+      className={`group focus-ring data-[jumped]:outline data-[jumped]:outline-1 data-[jumped]:outline-offset-1 data-[jumped]:outline-focus-ring flex flex-col ${isUser ? "items-end" : "items-start"} w-full max-w-chat mx-auto ${appears ? APPEAR : ""}`}
     >
       {isUser ? (
         <>
@@ -268,12 +281,9 @@ export const MessageRow = memo(function MessageRow({
           />
         </>
       ) : (
-        // The reply's box: its padding is there from the start, so nothing moves when the turn
-        // ends; only an ended reply fills surface-1 on hover, never one whose card still waits.
-        <div
-          data-message-body=""
-          className={`-mx-3 self-stretch rounded-[10px] p-3 transition-colors ${showActions ? "group-hover:bg-surface-2" : ""}`}
-        >
+        // The reply sits on the chat itself: no box and no fill under the pointer. Its actions show
+        // on hover or focus, through opacity alone, so nothing under the text changes.
+        <div data-message-body="" className="self-stretch">
           {/* The agent's reply is headed by its tile, name and time; your own message only when a delegate wrote it. */}
           <div data-message-header="" className="mb-2 flex min-w-0 max-w-full items-center gap-2">
             <AgentTile profileId={agentProfileId ?? ""} name="" size={22} />

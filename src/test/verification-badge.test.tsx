@@ -77,7 +77,7 @@ describe("VerificationBadge", () => {
     }
 
     const checking = render(<VerificationBadge verification={{ ...VERIFIED, state: "checking" }} />);
-    expect(checking.container.querySelector(".animate-spin")).not.toBeNull();
+    expect(checking.container.querySelector(`[class~="motion-safe:animate-spin"]`)).not.toBeNull();
     checking.unmount();
   });
 

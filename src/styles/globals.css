@@ -50,7 +50,7 @@
   --color-line-selected: rgba(161, 161, 170, 0.18);
 
   /* The chat's column: messages, cards, notices and the composer share it. */
-  --container-chat: 680px;
+  --container-chat: 720px;
   /* The new-session draft's column, and the compare run's columns side by side. */
   --container-draft: 720px;
   --container-compare: 1040px;
@@ -72,6 +72,45 @@
 
   --shadow-popover: var(--elevation-popover);
   --shadow-dialog: var(--elevation-dialog);
+
+  /* Motion. Four durations and one curve; motion says where something came from, and only a spinner
+     of work that really runs loops. Diffs, terminals, the chat following new output and changing
+     numbers do not move. */
+  --transition-duration-quick: 120ms; /* hover, press, a colour change */
+  --transition-duration-menu: 180ms; /* menus and popovers, from their trigger's side */
+  --transition-duration-panel: 240ms; /* the inspector opening */
+  --transition-duration-appear: 160ms; /* a new message or card, once */
+  --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* A transition that names no duration, which is every one in the app, takes quick. */
+  --default-transition-duration: var(--transition-duration-quick);
+  --default-transition-timing-function: ease-out;
+  --animate-menu-in: menu-in var(--transition-duration-menu) var(--ease-soft);
+  --animate-panel-in: fade-in var(--transition-duration-panel) var(--ease-soft);
+  --animate-appear: fade-in var(--transition-duration-appear) ease-out;
+
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/* Reduce motion in macOS: every transition and animation ends at once, and nothing slides or scales. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 :root {

@@ -5,8 +5,10 @@ import type { FormValue } from "../../lib/elicitation-form";
 /** A radio group holds up to this many options; more become a select. */
 const MAX_RADIO_OPTIONS = 4;
 
+// On the card's own surface, not a dark well. The edge stays border-strong: a field's outline must
+// keep 3:1 against the card to read as a field.
 export const INPUT =
-  "h-8 w-full rounded-lg border border-border-strong bg-ground px-2.5 text-ui text-fg " +
+  "h-8 w-full rounded-lg border border-border-strong bg-surface-2 px-2.5 text-ui text-fg " +
   "placeholder:text-fg-subtle focus-ring disabled:opacity-40";
 
 export interface ElicitationFieldsProps {

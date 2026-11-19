@@ -37,12 +37,13 @@ function choiceVariant(kind: string): ButtonVariant {
  */
 function EditedFiles({ edits }: { edits: NonNullable<ActionCardType["edits"]> }) {
   return (
-    <ul aria-label="Files to edit" className="rounded-md border border-border bg-ground">
+    // Plain rows on the card itself: a box inside the card would be a second level of borders.
+    <ul aria-label="Files to edit" className="flex flex-col gap-1">
       {edits.map((edit, index) => (
         <li
           // A request can carry two diffs for one file, so the path alone is not a key.
           key={`${index}-${edit.path}`}
-          className="flex items-center gap-2 border-b border-border px-2.5 py-[7px] last:border-b-0"
+          className="flex items-center gap-2"
         >
           <PathText path={edit.path} className="flex-1 text-ui-sm text-fg-secondary" />
           {edit.added !== undefined && edit.added > 0 && (
@@ -126,7 +127,8 @@ export function ActionCard({ card, onChoose, disabled = false, agentName = "The 
   return (
     <div
       data-testid={`action-card-${card.id}`}
-      className="my-3 flex flex-col gap-3 rounded-xl border border-attention-border bg-attention-surface px-4 py-3.5 text-left transition-all"
+      // The card's own surface: amber only in the icon and the thin edge, so the request reads calm.
+      className="my-3 flex flex-col gap-3 rounded-panel border border-attention-border bg-surface-2 px-4 py-3.5 text-left transition-all"
     >
       {/* One sentence says what the agent wants; the agent's own title follows only when the sentence cannot hold it. */}
       <div className="flex items-center gap-2">

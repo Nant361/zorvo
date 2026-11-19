@@ -4,6 +4,11 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Changed
+
+- **A calmer chat.** A reply no longer lights up under the pointer, and the chat is wider (720px) with more room between messages and lines. Your messages sit in a soft fill without an edge, a permission request is a plain card with a thin amber edge and its files listed without a box, and the message box lost its shadow; its chips fill only when you point at them.
+- **Smooth motion.** Menus and popovers open with a short fade from their button, the inspector fades in, and a new message or permission request fades in once. Hover and colour changes take 120ms everywhere. With Reduce motion on in macOS, nothing moves.
+
 ### Fixed
 
 - **A link no longer opens inside Zorvo.** A right-click on a link showed the Mac's menu, whose Open Link loaded the page in Zorvo's own window with no way back. A right-click on a link now shows **Open in browser** and **Copy link**, and any page that still tries to load in Zorvo's window opens in your browser instead.

@@ -30,11 +30,12 @@ function renderDock(props: Partial<Parameters<typeof ComposerDock>[0]> = {}) {
 const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
 describe("the composer card", () => {
-  it("is a 12px-padded column with a 10px gap, on surface-2 with the pop shadow", () => {
+  it("is a 12px-padded column with a 10px gap and a 14px radius, on surface-2 with no shadow", () => {
     renderDock();
     const prompt = screen.getByRole("textbox", { name: "Prompt" });
     const card = prompt.closest("[data-composer-card]");
-    expect(card).toHaveClass("flex", "flex-col", "gap-2.5", "p-3", "rounded-xl", "border", "border-border", "bg-surface-2", "shadow-popover");
+    expect(card).toHaveClass("flex", "flex-col", "gap-2.5", "p-3", "rounded-[14px]", "border", "border-border", "bg-surface-2");
+    expect(card).not.toHaveClass("shadow-popover");
     expect(prompt).toHaveAttribute("rows", "2");
     expect(prompt).toHaveClass("min-h-11", "px-1", "text-body");
     const footer = card?.closest("footer");
@@ -72,7 +73,7 @@ describe("the composer's chips", () => {
   it("are 28px, borderless and quiet, with no leading icon and a 12px chevron", () => {
     renderDock({ controls: { model } });
     const chip = screen.getByRole("button", { name: "Model: Opus" });
-    expect(chip).toHaveClass("h-6.5", "rounded-md", "bg-chip", "px-2", "text-ui-sm", "text-fg-secondary");
+    expect(chip).toHaveClass("h-6.5", "rounded-md", "bg-transparent", "hover:bg-surface-hover", "px-2", "text-ui-sm", "text-fg-secondary");
     expect(chip).not.toHaveClass("border");
     expect(chip.firstElementChild?.tagName.toLowerCase()).toBe("span");
     const chevron = chip.lastElementChild!;

@@ -97,6 +97,8 @@ describe("light theme contrast", () => {
     expectContrast("on-primary", "primary-hover", 4.5);
     // The number on an artifact comment, and on its mark in the page.
     expectContrast("on-mark", "mark", 4.5);
+    // A permission card is the card surface with amber only in its icon, which must still read.
+    expectContrast("status-attention", "surface-2", 3);
   });
 
   it("redefines every non-terminal @theme color in the light block", () => {

@@ -12,7 +12,7 @@ export interface SlashCommandMenuProps {
 }
 
 /** Where the `/` and `@` lists open against the composer's card. */
-export const PROMPT_LIST_SIDES = { top: "bottom-full mb-2", bottom: "top-full mt-2" } as const;
+export const PROMPT_LIST_SIDES = { top: "bottom-full mb-2 origin-bottom", bottom: "top-full mt-2 origin-top" } as const;
 
 /** The agent's commands matching what follows the `/`, above the prompt (under the card in a draft). */
 export function SlashCommandMenu({ commands, highlighted, onPick, agentName, side = "top" }: SlashCommandMenuProps) {

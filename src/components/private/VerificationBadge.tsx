@@ -14,7 +14,7 @@ const LOOK: Record<
   verified: { icon: ShieldCheck, chip: "", iconClass: "text-status-running" },
   didnt_verify: { icon: ShieldX, chip: "border-danger text-danger", iconClass: "" },
   not_signed: { icon: ShieldMinus, chip: "text-fg-muted", iconClass: "" },
-  checking: { icon: Loader2, chip: "text-fg-muted", iconClass: "animate-spin" },
+  checking: { icon: Loader2, chip: "text-fg-muted", iconClass: "motion-safe:animate-spin" },
 };
 
 const BODY: Record<"didnt_verify" | "not_signed" | "checking", string> = {

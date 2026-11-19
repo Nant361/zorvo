@@ -94,10 +94,10 @@ const COMPONENTS: Components = {
   h2: ({ children }) => <h2 className="text-base font-semibold tracking-tight text-fg pt-1">{children}</h2>,
   h3: ({ children }) => <h3 className="text-sm font-semibold tracking-tight text-fg-secondary">{children}</h3>,
   h4: ({ children }) => <h4 className="text-sm font-semibold text-fg-secondary">{children}</h4>,
-  p: ({ children }) => <p className="text-sm leading-relaxed text-fg-secondary break-words">{children}</p>,
-  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-fg-secondary">{children}</ul>,
+  p: ({ children }) => <p className="text-body leading-6 text-fg-secondary break-words">{children}</p>,
+  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-body leading-6 text-fg-secondary">{children}</ul>,
   ol: ({ children }) => (
-    <ol className="my-2 list-decimal space-y-1 pl-5 text-sm leading-relaxed text-fg-secondary">{children}</ol>
+    <ol className="my-2 list-decimal space-y-1 pl-5 text-body leading-6 text-fg-secondary">{children}</ol>
   ),
   strong: ({ children }) => <strong className="font-semibold text-fg">{children}</strong>,
   blockquote: ({ children }) => (
