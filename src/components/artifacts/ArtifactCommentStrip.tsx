@@ -9,6 +9,7 @@ import {
   type CheckedArtifactComment,
 } from "../../lib/artifact-comments";
 import { newestVersion } from "../../lib/artifacts";
+import { MAX_COMMENT_LENGTH } from "../../lib/review-comments";
 import type { ArtifactCommentsState } from "../../hooks/useArtifactComments";
 import type { AddArtifactReview } from "../../hooks/useReviewWiring";
 import type { Artifact, ArtifactComment } from "../../types";
@@ -68,6 +69,7 @@ function CandidateBox({ comments, number }: { comments: ArtifactCommentsState; n
         <textarea
           ref={boxRef}
           rows={2}
+          maxLength={MAX_COMMENT_LENGTH}
           value={body}
           aria-label={`Comment on ${summary}`}
           onChange={(event) => {
@@ -123,6 +125,7 @@ function CommentRow({ checked, word, note, isMissing, canAdd, blockedReason, onA
       ) : (
         <textarea
           rows={2}
+          maxLength={MAX_COMMENT_LENGTH}
           value={draft}
           aria-label={`Edit comment ${number}`}
           onChange={(event) => setDraft(event.target.value)}

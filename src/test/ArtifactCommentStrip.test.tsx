@@ -4,6 +4,7 @@ import { ArtifactCommentStrip } from "../components/artifacts/ArtifactCommentStr
 import type { ArtifactCommentsState } from "../hooks/useArtifactComments";
 import type { AddArtifactReview } from "../hooks/useReviewWiring";
 import type { Artifact, ArtifactComment } from "../types";
+import { MAX_COMMENT_LENGTH } from "../lib/review-comments";
 
 const ARTIFACT: Artifact = {
   id: "a-0123456789abcdef",
@@ -62,6 +63,15 @@ describe("ArtifactCommentStrip", () => {
     strip(state({ candidate, isCommenting: true }));
 
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /^Comment on/ }));
+  });
+
+  it("stops a comment at 2,000 characters while it is written, so nothing is cut when it is saved", () => {
+    const candidate = { page: PAGE, anchor: comment("c1").anchor, isPickHeld: false };
+    strip(state({ candidate, comments: [comment("c2")] }));
+
+    expect(screen.getByRole("textbox", { name: /^Comment on/ }).getAttribute("maxlength")).toBe(String(MAX_COMMENT_LENGTH));
+    fireEvent.click(within(rows()[0]).getByRole("button", { name: "Edit" }));
+    expect(within(rows()[0]).getByRole("textbox", { name: "Edit comment 1" }).getAttribute("maxlength")).toBe(String(MAX_COMMENT_LENGTH));
   });
 
   it("gives the keyboard back to a held comment when another pick is refused", () => {
