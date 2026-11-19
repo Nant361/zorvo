@@ -16,6 +16,9 @@ const ROOT = "[data-landing]";
 const scene = (trigger: Element): ScrollTrigger.Vars => ({ trigger, start: "top 72%", toggleActions: "play none none none" });
 const typing = { clipPath: "inset(0 100% 0 0)" };
 const typed = { clipPath: "inset(0 0% 0 0)" };
+// A status dot pulses for 4.5 s (an odd number of repeats ends it lit), never on a loop: anything that
+// moves for over 5 s would need a pause control.
+const PULSE = { opacity: 0.35, duration: 0.75, repeat: 5, yoyo: true, ease: "sine.inOut" } as const;
 
 const prepped: HTMLElement[] = [];
 const counted: HTMLElement[] = [];
@@ -98,7 +101,12 @@ function start(root: HTMLElement) {
       ease: "none",
       scrollTrigger: { trigger: "[data-hero]", start: "top top", end: "bottom top", scrub: 0.6 },
     });
-    gsap.to(q(".lp-pulse"), { opacity: 0.35, duration: 0.9, repeat: -1, yoyo: true, ease: "sine.inOut" });
+    // Each dot pulses when it scrolls into view; the delegate's status dot waits for its scene to show it.
+    const statusDot = one("[data-dlg-status] .lp-pulse");
+    q(".lp-pulse")
+      .filter((dot) => dot !== statusDot)
+      .forEach((dot) => gsap.to(dot, { ...PULSE, scrollTrigger: scene(dot) }));
+    const statusPulse = gsap.to(statusDot, { ...PULSE, paused: true });
 
     // Compare: the prompt is typed, three agents run at their own pace, one is picked.
     const cmp = one("[data-compare]");
@@ -128,6 +136,8 @@ function start(root: HTMLElement) {
       .from(q("[data-dlg-pane]"), { y: 28, autoAlpha: 0, duration: 0.6, stagger: 0.12 })
       .to("[data-dlg-ph]", { autoAlpha: 0, duration: 0.1 })
       .fromTo("[data-dlg-type]", { ...typing, autoAlpha: 1 }, { ...typed, duration: 1.3, ease: "steps(38)" })
+      // The send button is there only while the @ mention is in the box (hidden by CSS otherwise).
+      .to("[data-dlg-send]", { autoAlpha: 1, duration: 0.15 }, "<")
       .fromTo(
         "[data-dlg-pop]",
         { autoAlpha: 0, y: 8, scale: 0.97 },
@@ -136,14 +146,17 @@ function start(root: HTMLElement) {
       )
       .to("[data-dlg-pop]", { autoAlpha: 0, y: 6, duration: 0.25 }, "+=0.5")
       .to("[data-dlg-send]", { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1, ease: "power1.inOut" })
-      .to("[data-dlg-type]", { autoAlpha: 0, duration: 0.15 })
+      .to("[data-dlg-type], [data-dlg-send]", { autoAlpha: 0, duration: 0.15 })
       .to("[data-dlg-ph]", { autoAlpha: 1, duration: 0.15 }, "<")
       .from("[data-dlg-msg]", { y: 12, autoAlpha: 0, duration: 0.4 }, "<")
-      .from("[data-dlg-status]", { y: 6, autoAlpha: 0, duration: 0.35 })
+      // The status line is hidden by CSS: it shows only while Codex works, as in the app.
+      .fromTo("[data-dlg-status]", { y: 6, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.35 })
+      .call(() => void statusPulse.restart())
       .fromTo("[data-dlg-dot]", { left: "0%", autoAlpha: 1 }, { left: "100%", duration: 0.8, ease: "power2.inOut" })
       .from(q("[data-dlg-b]"), { y: 10, autoAlpha: 0, duration: 0.4, stagger: 0.22 })
       .to("[data-dlg-dot]", { left: "0%", duration: 0.8, ease: "power2.inOut" })
       .to("[data-dlg-dot]", { autoAlpha: 0, duration: 0.2 })
+      .to("[data-dlg-status]", { autoAlpha: 0, duration: 0.2 }, "<")
       .from("[data-dlg-report]", { y: 14, autoAlpha: 0, scale: 0.97, duration: 0.5, ease: "back.out(1.5)" }, "<");
 
     // Private: the session arrives, its answer is verified, the balance ticks down.
@@ -156,7 +169,7 @@ function start(root: HTMLElement) {
       .fromTo("[data-prv-badge]", { borderColor: "#27272a" }, { borderColor: "#34d399", duration: 0.25, yoyo: true, repeat: 1 }, "<");
     q("[data-prv] [data-count]").forEach((el) => count(prv, el, 0.9, ">-0.2"));
 
-    // NEAR: the path of a private answer lights up step by step, and ends verified.
+    // Private mode: the path of a private answer lights up step by step, and ends verified.
     const flow = gsap.timeline({ scrollTrigger: scene(one("[data-flow]")), defaults: { ease: "power3.out" } });
     flow
       .from(q("[data-flow-step]"), { x: -12, autoAlpha: 0, duration: 0.35, stagger: 0.16 })
@@ -168,7 +181,9 @@ function start(root: HTMLElement) {
     const term = gsap.timeline({ scrollTrigger: scene(one("[data-term]")) });
     term
       .fromTo("[data-term-type]", typing, { ...typed, duration: 1.4, ease: "steps(44)" })
-      .from(q("[data-term-out]"), { autoAlpha: 0, duration: 0.01, stagger: 0.09 }, "+=0.2");
+      .from(q("[data-term-out]"), { autoAlpha: 0, duration: 0.01, stagger: 0.09 }, "+=0.2")
+      // The cursor blinks for about 4.5 s after the listing, then stays lit.
+      .to(".lp-cursor", { opacity: 0, duration: 0.01, repeat: 7, yoyo: true, repeatDelay: 0.55 });
     gsap.fromTo(
       q("[data-draw] path"),
       { strokeDasharray: 1, strokeDashoffset: 1 },

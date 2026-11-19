@@ -8,6 +8,11 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 - **Artifacts.** An agent can show you a web page it made (a report, a diagram, a dashboard, a mockup) beside the chat, in the new **Artifacts** tab. Each time the agent changes the page you get a new version and can go back to an older one. **Export** saves the page as one HTML file, and **Artifacts** in the sidebar lists the pages of every session. A page runs in a window part of its own with no access to Zorvo or your files; it may load scripts from cdnjs, jsDelivr, unpkg, the Tailwind CDN and code.jquery.com and fonts from Google Fonts, and can send nothing anywhere. Pages stay on this Mac and are deleted with their session. Agents that get Zorvo's tools get this too; the switch in **Settings → Agents** turns it off.
 
+### Changed
+
+- **The website explains credits and leaves private mode for last.** A new docs page, Credits terms, says who sells private mode credits, what they cost, and what happens to a payment and a balance. Private mode is now one section, after everything Zorvo does for free, with the path of a private answer folded into it. The first Download says the build is not signed yet and links to how to open it, the header names Private mode apart from Privacy, the footer's Privacy opens its docs page, and the Control section no longer says you approve every step. On the page, the delegate scene ends with the report alone, and status dots and the terminal cursor stop moving after a few seconds.
+- **The privacy docs name private mode's hosts.** Privacy and your data now lists private mode's two hosts and when each is contacted (the Zorvo Credits server from the first time you open Settings, Private mode, and at each start after that; NEAR AI Cloud during private sessions), what your browser opens instead of Zorvo (PingPay's checkout and NEAR AI's Verification Center), and which secrets private mode keeps in your Keychain.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added
