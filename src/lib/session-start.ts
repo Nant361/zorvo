@@ -28,7 +28,7 @@ export interface TitlePlace {
  */
 export function titleFor({ text, attachments }: FirstMessage, place?: TitlePlace): string {
   if (place && isCommandOnly(text)) return `${place.agentName} in ${place.folderName}`;
-  return titleFromPrompt(text || fileNameOf(attachments?.[0] ?? ''));
+  return titleFromPrompt(text.trim() || fileNameOf(attachments?.[0] ?? ''));
 }
 
 /** The agent and folder a session's title names when its first message is only a command. */
@@ -127,7 +127,9 @@ export function importedSessionSpec(
   // Rust accepts a leap second (`:60`), which Date reads as invalid: date it by the import time instead.
   const updatedAt = Number.isNaN(parsed.getTime()) ? new Date(now) : parsed;
   const date = updatedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const name = firstLine ? titleFromPrompt(firstLine) : `${agent.name} session, ${date}`;
+  // A listed title is often the first prompt, so a bare command gets the same name as one typed here.
+  const place = { agentName: agent.name, folderName: folderNameOf(cwd) };
+  const name = firstLine ? titleFor({ text: firstLine }, place) : `${agent.name} session, ${date}`;
   const titleSource = firstLine ? titleSourceFor(firstLine, name) : undefined;
   return {
     agent,

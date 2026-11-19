@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { folderNameOf, groupSessionsByWorkspace, isCommandOnly, mostRecentSessionId, nextSessionName, isAutoName, titleFromPrompt } from "../lib/session-helpers";
+import { folderNameOf, groupSessionsByWorkspace, isCommandOnly, mostRecentSessionId, nextSessionName, isAutoName, titleFromPrompt, titleSourceFor } from "../lib/session-helpers";
 import type { SessionNode } from "../lib/session-helpers";
 import type { Session } from "../types";
 
@@ -134,6 +134,14 @@ describe("titleFromPrompt", () => {
     expect(title.length).toBeLessThanOrEqual(61);
   });
 
+  it("cuts between characters, never inside an emoji", () => {
+    const title = titleFromPrompt("🙂".repeat(80));
+    expect(title).toBe(`${"🙂".repeat(60)}…`);
+    expect(title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    const source = titleSourceFor(`${"a".repeat(499)}🙂 tail`, "short");
+    expect(source).toBe(`${"a".repeat(499)}🙂`);
+  });
+
   it("falls back when the prompt has no text", () => {
     expect(titleFromPrompt("   \n ")).toBe("New session");
     expect(titleFromPrompt("      ")).toBe("New session");
@@ -154,6 +162,12 @@ describe("titleFromPrompt", () => {
       "cek docs.near.ai lalu bandingkan dengan verify.rs",
     );
     expect(titleFromPrompt("why does http://www.example.com:8080/a?b=1 fail")).toBe("why does example.com fail");
+    // The site, never the account a link signs in with.
+    expect(titleFromPrompt("fetch https://deploy:s3cret@registry.example.com/v2")).toBe("fetch registry.example.com");
+    // A markdown link already says what it is.
+    expect(titleFromPrompt("read [the NEAR docs](https://docs.near.ai/cloud/verification) first")).toBe(
+      "read the NEAR docs first",
+    );
   });
 
   it("shortens a long path to its last two parts, quoted or not", () => {

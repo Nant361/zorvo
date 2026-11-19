@@ -36,8 +36,13 @@ const GITHUB_LINK = new RegExp(
   String.raw`(?<![\w.-])(?:https?:\/\/)?(?:www\.)?github\.com\/([\w-]+(?:\.[\w-]+)*)\/([\w-]+(?:\.[\w-]+)*)` + LINK_REST,
   'gi',
 );
-/** Any other web link: its host, without `www.` or a port. */
-const WEB_LINK = new RegExp(String.raw`\bhttps?:\/\/(?:www\.)?([^\s\/?#:"'<>]+)(?::\d+)?` + LINK_REST, 'gi');
+/** Any other web link: its host, without a user name, `www.` or a port. */
+const WEB_LINK = new RegExp(
+  String.raw`\bhttps?:\/\/(?:[^\s\/?#@"'<>]*@)?(?:www\.)?([^\s\/?#:@"'<>]+)(?::\d+)?` + LINK_REST,
+  'gi',
+);
+/** A markdown link to the web: its own text says what it is. */
+const MARKDOWN_LINK = /\[([^\]\n]+)\]\((?:https?:\/\/|(?:www\.)?github\.com\/)[^)\s]*\)/gi;
 /**
  * A Mac path in quotes or backticks, which may hold spaces ("Application Support"). The closing mark must
  * end a word, so an apostrophe inside a later word ("isn't") never closes it.
@@ -55,6 +60,7 @@ function lastTwoParts(path: string): string {
 /** Links and long paths shortened to the part a reader knows them by. */
 function tidied(line: string): string {
   return line
+    .replace(MARKDOWN_LINK, (_, text: string) => text)
     .replace(GITHUB_LINK, (_, owner: string, repo: string) => `${owner}/${repo.replace(/\.git$/i, '')}`)
     .replace(WEB_LINK, (_, host: string) => host)
     .replace(QUOTED_PATH, (whole, _quote: string, path: string) => {
@@ -62,6 +68,14 @@ function tidied(line: string): string {
       return short === path ? whole : short;
     })
     .replace(BARE_PATH, (_, before: string, path: string) => `${before}${lastTwoParts(path)}`);
+}
+
+/**
+ * The first `count` characters of `text`, counted as code points: a cut by UTF-16 units can split an emoji
+ * into a lone surrogate, which serde_json refuses, and the whole state would then fail to save.
+ */
+function firstChars(text: string, count: number): string {
+  return Array.from(text).slice(0, count).join('');
 }
 
 /** A message's first line with its white space collapsed: what a title is made from. */
@@ -81,10 +95,10 @@ export function isCommandOnly(text: string): boolean {
 export function titleFromPrompt(prompt: string): string {
   const firstLine = tidied(firstLineOf(prompt));
   if (!firstLine) return 'New session';
-  if (firstLine.length <= MAX_TITLE_LENGTH) return firstLine;
-  const cut = firstLine.slice(0, MAX_TITLE_LENGTH + 1);
+  if (Array.from(firstLine).length <= MAX_TITLE_LENGTH) return firstLine;
+  const cut = firstChars(firstLine, MAX_TITLE_LENGTH + 1);
   const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : firstLine.slice(0, MAX_TITLE_LENGTH)).trimEnd()}…`;
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : firstChars(firstLine, MAX_TITLE_LENGTH)).trimEnd()}…`;
 }
 
 /** A title's whole line can be long; the hover keeps this much of it. */
@@ -92,7 +106,7 @@ const MAX_TITLE_SOURCE = 500;
 
 /** The whole first line a title was made from, for its hover, when the title shortened it. */
 export function titleSourceFor(text: string, title: string): string | undefined {
-  const line = firstLineOf(text).slice(0, MAX_TITLE_SOURCE);
+  const line = firstChars(firstLineOf(text), MAX_TITLE_SOURCE);
   return line !== '' && line !== title ? line : undefined;
 }
 

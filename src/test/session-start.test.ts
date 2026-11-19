@@ -66,6 +66,12 @@ describe("importedSessionSpec", () => {
     ...(updatedAt === undefined ? {} : { updatedAt }),
   });
 
+  it("names an imported session whose listed title is only a command by its agent and folder", () => {
+    const spec = importedSessionSpec(listed("/init"), CLAUDE, "/w/antigravity-bridge", 1);
+    expect(spec.name).toBe("Claude Code in antigravity-bridge");
+    expect(spec.titleSource).toBe("/init");
+  });
+
   it("names the session after its title in the agent's list", () => {
     const spec = importedSessionSpec(listed("Fix the login bug"), CLAUDE, "/w/zorvo", 1);
 
@@ -188,6 +194,8 @@ describe("titleFor", () => {
     expect(titleFor({ text: "fix the login bug" }, place)).toBe("fix the login bug");
     expect(titleFor({ text: "/init" })).toBe("/init");
     expect(titleFor({ text: "", attachments: ["/Users/mac/shots/screen.png"] }, place)).toBe("screen.png");
+    // Stray spaces are not text: the file still names the session.
+    expect(titleFor({ text: "   ", attachments: ["/Users/mac/shots/screen.png"] }, place)).toBe("screen.png");
   });
 });
 
