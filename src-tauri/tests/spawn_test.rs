@@ -1,4 +1,6 @@
 //! The spawn path that disclaims macOS responsibility (computer use spec §1).
+//! Its own test binary: `spawn::set_trampoline` sets process-wide state for
+//! good, which would change how every other integration test spawns.
 //!
 //! Every test sets the trampoline to the real `zorvo` binary, which cargo
 //! builds for integration tests, so the `disclaim-exec` mode is exercised as
@@ -9,6 +11,10 @@
 
 use std::time::Duration;
 use zorvo_lib::spawn;
+
+#[path = "it/common/mod.rs"]
+#[allow(dead_code)] // shared with the main test binary; this one uses two helpers
+mod common;
 
 /// Waits until `pid` runs `program` (the trampoline has exec'd), at most 5 s.
 fn wait_for_exec(pid: u32, program: &str) {
@@ -93,11 +99,11 @@ fn acp_agent_is_disclaimed() {
     use zorvo_lib::acp::connection::{AcpConnection, EventSink};
 
     use_trampoline();
-    let launch = crate::common::fake_agent();
+    let launch = common::fake_agent();
     let connection = AcpConnection::spawn(
         &launch.program,
         &launch.args,
-        &crate::common::cwd(),
+        &common::cwd(),
         &[],
         |_| -> EventSink { Arc::new(|_| {}) },
     )

@@ -47,7 +47,6 @@ mod registry_history_test;
 mod registry_icons_test;
 mod registry_resolve_test;
 mod registry_schema_test;
-mod spawn_test;
 mod store_test;
 mod workspace_files_test;
 mod workspace_terminal_test;
@@ -55,7 +54,11 @@ mod workspaces_test;
 mod worktrees_test;
 
 /// Test files that are binaries of their own, directly in `tests/`.
-const OWN_BINARIES: &[&str] = &["installer_state_test.rs", "private_proxy_test.rs"];
+const OWN_BINARIES: &[&str] = &[
+    "installer_state_test.rs",
+    "private_proxy_test.rs",
+    "spawn_test.rs",
+];
 
 /// The `.rs` file names directly in `dir`.
 fn rust_files_in(dir: &std::path::Path) -> Vec<String> {
