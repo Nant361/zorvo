@@ -13,11 +13,14 @@ const KEEPS_MENU = [
 /**
  * True when a right-click should still show WebKit's menu: in a text field or a terminal, or on
  * the selected text itself. A selection elsewhere does not count, or a right-click on the app's
- * chrome would bring back Reload while a reply's sentence stays selected.
+ * chrome would bring back Reload while a reply's sentence stays selected. A link never keeps it,
+ * even when the right-click selected its text (macOS selects the word under the pointer): WebKit's
+ * "Open Link" loads the page inside Zorvo's window. `LinkMenuLayer` shows Zorvo's own menu there.
  */
 export function keepsNativeMenu(target: EventTarget | null, selection: Selection | null): boolean {
   if (!(target instanceof Node)) return false;
   const element = target instanceof Element ? target : target.parentElement;
+  if (element?.closest("a[href]")) return false;
   if (element?.closest(KEEPS_MENU)) return true;
   return isSelected(target, selection);
 }

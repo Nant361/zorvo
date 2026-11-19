@@ -17,6 +17,7 @@ pub mod fork_handoff;
 pub mod git_info;
 pub mod github;
 pub mod installer;
+pub mod navigation_guard;
 pub mod pasted_images;
 pub mod private_mode;
 pub mod profiles;
@@ -455,6 +456,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(navigation_guard::plugin())
         .manage(manager)
         .manage(acp_manager)
         .manage(app_update::PendingAppUpdate::default())
