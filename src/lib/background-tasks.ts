@@ -332,8 +332,10 @@ function withoutComments(command: string): string {
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
   // Lines stay apart until the forms are made: a line break separates commands as `;` does.
-  const given = withoutComments((tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')).trim();
-  return launchForms(given).some(
+  const given = (tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+  // An agent's own wrapper keeps the comments, a process that replaced its shell has none.
+  const forms = new Set([...launchForms(given), ...launchForms(withoutComments(given).trim())]);
+  return [...forms].some(
     (launched) => sameCommand(launched, command) || isExecOf(command, launched),
   );
 }
