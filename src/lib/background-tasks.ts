@@ -252,9 +252,39 @@ function isExecOf(command: string, launched: string): boolean {
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
+/**
+ * The command's words as the shell splits them: a space inside quotes or after a backslash does
+ * not end a word. Each word keeps its quotes, so joining them gives the text back.
+ */
+function shellWords(command: string): string[] {
+  const words: string[] = [];
+  let word = '';
+  let quote: string | null = null;
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
+    if (char === '\\' && quote !== "'") {
+      word += char + (command[index + 1] ?? '');
+      index++;
+    } else if (quote) {
+      if (char === quote) quote = null;
+      word += char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      word += char;
+    } else if (/\s/.test(char)) {
+      if (word !== '') words.push(word);
+      word = '';
+    } else {
+      word += char;
+    }
+  }
+  if (word !== '') words.push(word);
+  return words;
+}
+
 /** The command without the variables it sets first (`PORT=3001 pnpm dev`), which no process shows. */
 function withoutAssignments(command: string): string {
-  const words = command.split(' ');
+  const words = shellWords(command);
   let index = 0;
   while (index < words.length - 1 && ASSIGNMENT.test(words[index])) index++;
   return words.slice(index).join(' ');
@@ -266,7 +296,7 @@ const REDIRECTION = /^(?:\d*>>?|&>>?|\d*<)(&\d+|.*)?$/;
 /** The command without its redirections and a trailing `&`, which no process shows in its arguments. */
 function withoutRedirections(command: string): string {
   // A redirection may touch the word before it (`/dev/null>/dev/null`): it ends that word all the same.
-  const words = command.replace(/(?<=[^\s\d&<>])(?=>|<)/g, ' ').split(' ');
+  const words = shellWords(command.replace(/(?<=[^\s\d&<>"'])(?=>|<)/g, ' '));
   const kept: string[] = [];
   for (let index = 0; index < words.length; index++) {
     const match = REDIRECTION.exec(words[index]);
@@ -332,7 +362,8 @@ function withoutComments(command: string): string {
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
   // Lines stay apart until the forms are made: a line break separates commands as `;` does.
-  const given = (tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+  // A launch whose input names no command is matched by its title, as a whole command.
+  const given = (tool.command ?? tool.name).replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
   // An agent's own wrapper keeps the comments, a process that replaced its shell has none.
   const forms = new Set([...launchForms(given), ...launchForms(withoutComments(given).trim())]);
   return [...forms].some(
