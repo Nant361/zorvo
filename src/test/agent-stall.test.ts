@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   activityKeyOf,
   failureReportOf,
-  hasRunningTool,
   isNewsUpdate,
   nextFailures,
+  runningToolOf,
   stallNoticeParts,
   stallNoticeText,
   STALL_MIN_FAILURES,
+  STALL_TOOL_SILENCE_MS,
+  STOP_IGNORED_MS,
+  stopIgnoredParts,
 } from "../lib/agent-stall";
 import type { ChatMessage } from "../types";
 
@@ -155,13 +158,47 @@ describe("stallNoticeText", () => {
   });
 });
 
-describe("hasRunningTool", () => {
-  it("is true while the turn's last reply has a tool that has not finished", () => {
-    const running = agentReply({ tools: [{ id: "t", name: "pnpm build", kind: "execute", status: "running" }] });
-    const done = agentReply({ tools: [{ id: "t", name: "pnpm build", kind: "execute", status: "completed" }] });
-    expect(hasRunningTool([running])).toBe(true);
-    expect(hasRunningTool([done])).toBe(false);
-    expect(hasRunningTool([])).toBe(false);
+describe("runningToolOf", () => {
+  it("names the first tool of the turn's last reply that has not finished", () => {
+    const tools = [
+      { id: "a", name: "Read file", kind: "read" as const, status: "completed" as const },
+      { id: "b", name: "Glob: '**/btc-eth-540.png'", kind: "search" as const, status: "running" as const },
+      { id: "c", name: "pnpm build", kind: "execute" as const, status: "running" as const },
+    ];
+    expect(runningToolOf([agentReply({ tools })])).toBe("Glob: '**/btc-eth-540.png'");
+    expect(runningToolOf([agentReply({ tools: [tools[0]] })])).toBeUndefined();
+    expect(runningToolOf([])).toBeUndefined();
+  });
+
+  it("spells out control and bidi characters and cuts a long name", () => {
+    const name = `rm\u202E${"x".repeat(200)}`;
+    const shown = runningToolOf([agentReply({ tools: [{ id: "t", name, kind: "execute", status: "running" }] })]);
+    expect(shown).not.toContain("\u202E");
+    expect(shown?.startsWith("rm\\u202E")).toBe(true);
+    expect(shown?.length).toBeLessThanOrEqual(81);
+    expect(shown?.endsWith("…")).toBe(true);
+  });
+});
+
+describe("a tool that runs for long", () => {
+  const glob = "Glob: '**/btc-eth-540.png'";
+
+  it("stays quiet for five minutes without news, since builds and tests take a while", () => {
+    expect(STALL_TOOL_SILENCE_MS).toBe(5 * 60_000);
+    expect(stallNoticeParts("Qwen Code", { runningTool: glob, silentForMs: STALL_TOOL_SILENCE_MS - 1 })).toBeNull();
+  });
+
+  it("then names the agent, how long and the tool, with no guess at the cause", () => {
+    expect(stallNoticeParts("Qwen Code", { runningTool: glob, silentForMs: 12 * 60_000 + 5_000 })).toEqual({
+      title: "Qwen Code has been running one tool for 12 minutes.",
+      body: `${glob}. It may be stuck.`,
+    });
+  });
+
+  it("still puts the agent's failure report first", () => {
+    expect(
+      stallNoticeText("Qwen Code", { failures: { count: 2, source: "qwen-lifecycle" }, runningTool: glob, silentForMs: 10 * 60_000 }),
+    ).toBe("Qwen Code's requests failed 2 times in a row.");
   });
 });
 
@@ -196,5 +233,18 @@ describe("stallNoticeParts", () => {
       body: "It may be stuck.",
     });
     expect(stallNoticeParts("Codex", { silentForMs: 1_000 })).toBeNull();
+  });
+});
+
+describe("a Stop the agent does not act on", () => {
+  it("waits ten seconds, as an agent may finish a step before it ends the turn", () => {
+    expect(STOP_IGNORED_MS).toBe(10_000);
+  });
+
+  it("says the agent has not stopped and what End agent does", () => {
+    expect(stopIgnoredParts("Qwen Code")).toEqual({
+      title: "Qwen Code hasn't stopped.",
+      body: "End agent stops its process now. You can continue this session afterwards.",
+    });
   });
 });

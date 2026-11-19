@@ -391,6 +391,19 @@ describe("permission requests", () => {
     expect(settled.flatMap((m) => (m.actionCard ? [m.actionCard.chosenOptionId] : []))).toEqual([undefined, undefined]);
   });
 
+  it("settles only the named card when Stop answered it", () => {
+    const ids = ctx();
+    const first = applyPermissionRequest([], request, ids);
+    const both = applyPermissionRequest(first, { ...request, requestId: "second" }, ids);
+    const [one, two] = both.map((m) => m.actionCard!);
+
+    const settled = settlePermissionCards(both, one.id);
+
+    expect(settled.map((m) => m.actionCard?.status)).toEqual(["rejected", "pending"]);
+    expect(settled[1].actionCard).toBe(two);
+    expect(settlePermissionCards(settled, one.id)).toBe(settled);
+  });
+
   it("settling the permission cards keeps answered cards and returns the same list when none waits", () => {
     const withCard = applyPermissionRequest([], request, ctx());
     const answered = resolvePermissionCard(withCard, withCard[0].actionCard!.id, "allow");

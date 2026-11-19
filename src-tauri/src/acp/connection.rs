@@ -321,10 +321,21 @@ impl AcpConnection {
         }
     }
 
+    /// Ends the agent and everything it started. An agent may run its real
+    /// process as a child (Qwen Code's launcher does), and a stuck one ignores
+    /// TERM: killing only the process Zorvo started left it, and what it ran,
+    /// going for good. The tree is read while the agent still holds it; what
+    /// survives TERM gets KILL after a grace period.
     pub fn kill(&self) {
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
+        let Ok(mut child) = self.child.lock() else {
+            return;
+        };
+        if matches!(child.try_wait(), Ok(None)) {
+            if let Err(error) = crate::background_processes::end_tree(child.id(), true) {
+                eprintln!("Could not end what the agent started: {error}");
+            }
         }
+        let _ = child.kill();
     }
 }
 

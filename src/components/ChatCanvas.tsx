@@ -70,6 +70,10 @@ export interface ChatCanvasProps {
   failures?: AgentFailures;
   /** Stops the turn; offered in the notice shown when the agent seems stuck. */
   onStop?: () => void;
+  /** When the user pressed Stop in this turn, until it ends. */
+  stopAskedAt?: number;
+  /** Ends the agent's process, offered when it has not acted on Stop. */
+  onEndAgent?: () => void;
   /** Which conversation is shown; switching starts at its newest output. */
   conversationId?: string;
   /** Starts again from before one of your messages; Rewind is offered only when given. */
@@ -112,6 +116,8 @@ export function ChatCanvas({
   isWorking = false,
   failures,
   onStop,
+  stopAskedAt,
+  onEndAgent,
   conversationId,
   onRewind,
   header,
@@ -290,7 +296,14 @@ export function ChatCanvas({
       {delegationStatus}
       {isWorking && <WorkingIndicator agentName={shownAgentName} since={workStartedAt} />}
       {isWorking && (
-        <AgentStallNotice agentName={shownAgentName} messages={messages} failures={failures} onStop={onStop} />
+        <AgentStallNotice
+          agentName={shownAgentName}
+          messages={messages}
+          failures={failures}
+          onStop={onStop}
+          stopAskedAt={stopAskedAt}
+          onEndAgent={onEndAgent}
+        />
       )}
       {footer && <div className="mx-auto w-full max-w-chat">{footer}</div>}
       {chatSelection.selected && (

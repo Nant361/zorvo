@@ -11,7 +11,7 @@ use zorvo_lib::acp::manager::{
 };
 use zorvo_lib::acp::terminal_auth::SignInAttempts;
 
-use crate::common::{agent_text, cwd, fake_agent, manager, wait_for, WAIT};
+use crate::common::{agent_text, cwd, eventually, fake_agent, is_alive, manager, wait_for, WAIT};
 
 #[test]
 fn starts_a_session_and_reports_its_modes() {
@@ -501,6 +501,81 @@ fn stopping_a_session_forgets_it() {
 
     let err = manager.prompt("s-1", "hi", &[]).unwrap_err();
     assert!(err.contains("not found"), "unexpected error: {err}");
+}
+
+#[test]
+fn stopping_a_session_ends_what_its_agent_started_even_when_it_ignores_term() {
+    // Qwen Code's launcher runs the real Qwen as a child: killing only the
+    // launcher left a stuck Qwen, and whatever it had started, running for good.
+    let pid_file = std::env::temp_dir().join(format!("zorvo-acp-child-{}.pid", std::process::id()));
+    let _ = std::fs::remove_file(&pid_file);
+    let (manager, _rx) = manager();
+    let launch = with_env(
+        fake_agent(),
+        "FAKE_ACP_CHILD_PID_FILE",
+        pid_file.to_str().unwrap(),
+    );
+    manager.start("s-1", &cwd(), &launch, json!([])).unwrap();
+    let child: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert!(is_alive(child));
+
+    manager.stop("s-1");
+
+    let ended = eventually(Duration::from_secs(30), || !is_alive(child));
+    let _ = std::fs::remove_file(&pid_file);
+    if !ended {
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-KILL", &child.to_string()])
+            .status();
+    }
+    assert!(ended, "the agent's child {child} outlived the stop");
+}
+
+#[test]
+fn ending_an_agent_ends_its_process_and_every_session_on_it() {
+    // A native fork shares its source's process, so stopping one session leaves
+    // the process up; End agent is for a process that has to go.
+    let pid_file = std::env::temp_dir().join(format!("zorvo-acp-end-{}.pid", std::process::id()));
+    let _ = std::fs::remove_file(&pid_file);
+    let (manager, rx) = manager();
+    let launch = with_env(
+        fake_agent(),
+        "FAKE_ACP_CHILD_PID_FILE",
+        pid_file.to_str().unwrap(),
+    );
+    manager.start("s-1", &cwd(), &launch, json!([])).unwrap();
+    manager.fork("s-1", "s-2", &cwd(), json!([])).unwrap();
+    let child: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    manager.end_agent("s-2").unwrap();
+
+    let mut exited = std::collections::BTreeSet::new();
+    while exited.len() < 2 {
+        if let AcpEvent::Exited { session_id, .. } =
+            wait_for(&rx, |e| matches!(e, AcpEvent::Exited { .. }))
+        {
+            exited.insert(session_id);
+        }
+    }
+    assert_eq!(exited, ["s-1", "s-2"].map(String::from).into());
+    let ended = eventually(Duration::from_secs(30), || !is_alive(child));
+    let _ = std::fs::remove_file(&pid_file);
+    assert!(ended, "the agent's child {child} outlived End agent");
+    assert!(manager.prompt("s-1", "hi", &[]).is_err());
+}
+
+#[test]
+fn ending_the_agent_of_an_unknown_session_is_refused() {
+    let (manager, _rx) = manager();
+    assert!(manager.end_agent("nope").is_err());
 }
 
 #[test]

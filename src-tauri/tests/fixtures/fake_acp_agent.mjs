@@ -72,6 +72,17 @@ import { appendFileSync, closeSync, mkdirSync, readFileSync, writeFileSync } fro
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
+// FAKE_ACP_CHILD_PID_FILE -> at start, starts a child that ignores TERM and lives on its own
+// (as Qwen Code's launcher does with the real Qwen), and writes the child's pid to that file.
+if (process.env.FAKE_ACP_CHILD_PID_FILE) {
+  const child = spawn(
+    process.execPath,
+    ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
+    { stdio: "ignore" },
+  );
+  writeFileSync(process.env.FAKE_ACP_CHILD_PID_FILE, String(child.pid));
+}
+
 if (process.env.FAKE_ACP_ENV_LOG) {
   const present = {
     socket: Boolean(process.env.ZORVO_MCP_SOCKET),

@@ -1908,9 +1908,15 @@ export default function App() {
                       onReopenElicitationUrl={(key) => acp.reopenElicitationUrl(activeSessionId, key)}
                       artifactIds={artifactIds}
                       onOpenArtifact={openArtifactCard}
-                      isWorking={isSessionBusy(activeSessionId) && !isAwaitingUser(currentMessages)}
+                      // After Stop the agent is the one to act, whatever card still waits: End agent must be reachable.
+                      isWorking={
+                        isSessionBusy(activeSessionId) &&
+                        (!isAwaitingUser(currentMessages) || acp.stopAskedAt(activeSessionId) !== undefined)
+                      }
                       failures={acp.failuresOf(activeSessionId)}
                       onStop={() => handleInterrupt(activeSessionId)}
+                      stopAskedAt={acp.stopAskedAt(activeSessionId)}
+                      onEndAgent={() => void acp.endAgent(activeSessionId)}
                     />
                   ) : draftWorkspace ? (
                     // The draft's heading, then its chips and card (the composer, below), then its sessions.

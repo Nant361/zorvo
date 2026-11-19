@@ -136,6 +136,15 @@ export function useAcpEngine({
   // events must not write a transcript back, and a start still in flight must
   // end the agent as soon as it is up.
   const stoppedRef = useRef(new Set<string>());
+  // When the user pressed Stop in each session's current turn, until the turn ends: an
+  // agent waiting on a stuck tool may never end it, and the chat then offers End agent.
+  const [stopAsked, setStopAsked] = useState<Record<string, number>>({});
+  const forgetStopAsked = (sessionId: string) =>
+    setStopAsked((prev) => {
+      if (!(sessionId in prev)) return prev;
+      const { [sessionId]: _asked, ...rest } = prev;
+      return rest;
+    });
   // Sessions whose `session/load` replay is still streaming: their user chunks
   // open a turn instead of landing in the agent's current reply.
   const replayingRef = useRef(new Set<string>());
@@ -213,6 +222,7 @@ export function useAcpEngine({
     }),
     onTurnEnd: unlessStopped((sessionId, { stopReason, error }: TurnResult) => {
       agentFailures.clear(sessionId);
+      forgetStopAsked(sessionId);
       updateNow(sessionId, closeTurn);
       saveSoon?.(sessionId);
       if (isPrivateSession(sessionId)) onPrivateTurnEnd?.(sessionId);
@@ -252,6 +262,7 @@ export function useAcpEngine({
     }),
     onExit: unlessStopped((sessionId, code: number | null) => {
       agentFailures.clear(sessionId);
+      forgetStopAsked(sessionId);
       updateNow(sessionId, closeTurn);
       saveSoon?.(sessionId);
       // The agent leaves no more updates: the cards it showed are the ones marked unanswered.
@@ -739,6 +750,7 @@ export function useAcpEngine({
     // a deleted session's transcript goes away after these land, not before.
     queued.flush();
     agentFailures.clear(sessionId);
+    forgetStopAsked(sessionId);
     // The backend cancels the open requests, and the agent's later events (its exit) are ignored.
     elicitations.abandon(sessionId);
     stoppedRef.current.add(sessionId);
@@ -779,13 +791,21 @@ export function useAcpEngine({
       return;
     }
     agentFailures.clear(sessionId);
+    // Only a turn that runs can ignore Stop: a click that lands after the turn ended (a stale
+    // background-tasks row) would otherwise offer End agent in the next one. A second Stop
+    // keeps the first one's time, so the wait for End agent does not start over.
+    if (acp.isBusy(sessionId)) setStopAsked((prev) => (sessionId in prev ? prev : { ...prev, [sessionId]: Date.now() }));
     for (const card of pendingCardsInTurn(messages ?? [])) {
       if (card.requestId === undefined) continue;
-      acp.respondPermission(sessionId, card.requestId, null).catch((error: unknown) => {
-        // An agent that is gone waits on nothing: the card is settled, and the backend's wording (with the session id) stays out of the notice.
-        if (isSessionGoneError(error)) updateNow(sessionId, settlePermissionCards);
-        else reportFailure('Could not answer the agent')(error);
-      });
+      acp.respondPermission(sessionId, card.requestId, null).then(
+        // Answered: the agent no longer waits on it, so the chat stops waiting on the user too.
+        () => updateNow(sessionId, (prev) => settlePermissionCards(prev, card.id)),
+        (error: unknown) => {
+          // An agent that is gone waits on nothing: the card is settled, and the backend's wording (with the session id) stays out of the notice.
+          if (isSessionGoneError(error)) updateNow(sessionId, settlePermissionCards);
+          else reportFailure('Could not answer the agent')(error);
+        },
+      );
     }
     // The backend answers the open elicitations as cancelled and names them; one that comes after stays open.
     elicitations.forget(sessionId);
@@ -794,6 +814,24 @@ export function useAcpEngine({
       reportFailure('Failed to stop the agent'),
     );
   };
+
+  /**
+   * Ends the agent's process for a Stop it did not act on (it waits on a stuck
+   * tool before it ends the turn). The process goes whatever other session
+   * shares it (a native fork lives in its source's), and each session on it
+   * gets the agent's `exit`, so it reads ended and is continued the usual way.
+   * Resolves with whether the process was ended.
+   */
+  const endAgent = (sessionId: string): Promise<boolean> =>
+    acp.endAgent(sessionId).then(
+      () => true,
+      (error: unknown) => {
+        // Already gone (a second click, or it died meanwhile): what End agent was for is done.
+        if (isSessionGoneError(error)) return true;
+        reportFailure('Could not end the agent')(error);
+        return false;
+      },
+    );
 
   const setMode = (sessionId: string, modeId: string) => {
     // Read now, not once the change lands: a request asked meanwhile is in the new mode.
@@ -879,6 +917,9 @@ export function useAcpEngine({
     answerElicitation: elicitations.answer,
     reopenElicitationUrl: elicitations.reopen,
     interrupt,
+    endAgent,
+    /** When the user pressed Stop in the session's current turn, until it ends. */
+    stopAskedAt: (sessionId: string): number | undefined => stopAsked[sessionId],
     setMode,
     setModel,
     setConfigOption,

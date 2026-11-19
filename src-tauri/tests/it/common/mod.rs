@@ -81,3 +81,26 @@ pub fn called_methods(path: &Path) -> Vec<String> {
         .map(str::to_string)
         .collect()
 }
+
+/// Answers whether `pid` is a process this user can signal.
+pub fn is_alive(pid: u32) -> bool {
+    std::process::Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// Polls `condition` every 50 ms until it holds or `limit` passes.
+pub fn eventually(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        if condition() {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
