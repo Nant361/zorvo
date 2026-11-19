@@ -346,8 +346,30 @@ const CONTROL_WORDS = /^(?:if|then|else|elif|fi|while|until|do|done|\{|\}|\(|\)|
  * words of a compound command around it gone (`if true; then exec sleep 300; fi`, `{ …; }`,
  * `( … )`): a shell may replace itself with any of them. An `exec` in front goes with the wrappers.
  */
+const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+
+/**
+ * The command without the bodies of its heredocs (`cat <<EOF` … `EOF`): their text is data, so a
+ * quote in it must not hide the commands after it. The line that opens one stays.
+ */
+function withoutHeredocBodies(command: string): string {
+  const kept: string[] = [];
+  const ends: { word: string; tabs: boolean }[] = [];
+  for (const line of command.split('\n')) {
+    if (ends.length > 0) {
+      const end = ends[0];
+      if ((end.tabs ? line.replace(/^\t+/, '') : line) === end.word) ends.shift();
+      continue;
+    }
+    kept.push(line);
+    for (const match of line.matchAll(HEREDOC)) ends.push({ word: match[3], tabs: match[1] === '-' });
+  }
+  return kept.join('\n');
+}
+
 /** The commands of a list, split on `&&`, `||`, `;` and line breaks that are not quoted or escaped. */
-function splitList(command: string): string[] {
+function splitList(given: string): string[] {
+  const command = withoutHeredocBodies(given);
   const parts: string[] = [];
   let part = '';
   let quote: string | null = null;

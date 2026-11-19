@@ -228,6 +228,13 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("real", `echo 'a;b' && sleep 300`, NOW - 60_000)))?.id).toBe("real");
   });
 
+  it("reads past a heredoc whose body holds quotes", () => {
+    const at = (command: string) => shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(launch("h", command, NOW - 60_000)))?.id;
+
+    expect(at("cat <<EOF > note.txt\nIt's ready\nEOF\npnpm dev")).toBe("h");
+    expect(at("cat <<-'END'\n\tsay \"hi\nEND\npnpm dev")).toBe("h");
+  });
+
   it("prefers a launch that matches whole to the fallback", () => {
     const whole = launch("whole", "sleep 300", NOW - 60_000);
     const holder = launch("holder", "stdbuf -oL sleep 300", NOW - 59_500);
