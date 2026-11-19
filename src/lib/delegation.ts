@@ -98,6 +98,9 @@ function sourceBlockedReason(input: {
     return "A delegated session can't delegate.";
   }
   if (!input.hasMessages) return '';
+  // A delegate is an ordinary session of another agent, started on a handoff of this conversation:
+  // from a private session that would send it to that agent's provider with no question asked.
+  if (source.privateMode) return "A private session can't delegate: the task would leave the TEE.";
   if (!input.isSourceBusyAllowed && input.isBusy(source.id)) {
     return `Wait for ${input.agentNameOf(source.profileId)} to finish.`;
   }

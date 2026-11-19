@@ -164,7 +164,7 @@ describe("a private session on the user's own key", () => {
         "NEAR AI turned the request down: your organization has no credits left. Add credits or stake more NEAR in your NEAR AI dashboard, or switch this Mac to Zorvo credits.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Your message is back in the box.")).toBeInTheDocument();
+    expect(screen.getByText("A message Qwen Code had not started on is back in the box.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Switch to Zorvo credits" }));
     fireEvent.click(screen.getByRole("button", { name: "Open NEAR AI dashboard" }));
     expect(onSwitchToCredits).toHaveBeenCalledTimes(1);

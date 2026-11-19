@@ -236,12 +236,10 @@ fn end_orphaned_sessions(
     let count = terminals.len() + agents.len();
     std::thread::spawn(move || {
         workspace_terminal::end_sessions(&app.state::<PtySessionManager>(), &terminals);
-        agents.into_iter().for_each(|(id, session)| {
-            let _ = app
-                .state::<private_mode::service::PrivateMode>()
-                .end_session_cap(&id);
-            session.end();
-        });
+        // A capped session keeps its limit, as it does on Stop: the new UI reopens it under the
+        // same id, and ending the limit here would race that reopen and delete the key it just
+        // took over. A session nobody reopens is swept by the Worker after 24 hours.
+        agents.into_iter().for_each(|(_, session)| session.end());
     });
     count
 }

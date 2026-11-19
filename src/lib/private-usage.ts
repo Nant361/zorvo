@@ -1,4 +1,4 @@
-import { modelLabel, turnsFor, type ModelPrice } from "./private-credits";
+import { CREDITS_PER_USD_COST, modelLabel, turnsFor, type ModelPrice } from "./private-credits";
 import type { Session } from "../types";
 
 /** The backend's answer for one private session. */
@@ -6,6 +6,8 @@ export interface PrivateSessionUsage {
   credits: number;
   estimated: boolean;
   calls: number;
+  /** The session these calls are counted for right now, when it is another one (a native fork's source). */
+  countedFor?: string;
 }
 
 /** A per-model row in Settings' "Used by N models" list. */
@@ -32,6 +34,9 @@ export function parsePrivateSessionUsage(value: unknown): PrivateSessionUsage | 
     credits: candidate.credits,
     estimated: candidate.estimated,
     calls: typeof candidate.calls === "number" && Number.isFinite(candidate.calls) ? candidate.calls : 0,
+    ...(typeof candidate.countedFor === "string" && candidate.countedFor !== ""
+      ? { countedFor: candidate.countedFor }
+      : {}),
   };
 }
 
@@ -51,10 +56,10 @@ export function usageLead(credits: number, estimated: boolean): string {
   return `${estimated ? "about " : ""}${formatUsageCredits(credits)}`;
 }
 
-/** A private usage total in dollars: NEAR AI bills 120 credits per dollar of cost. */
+/** A private usage total in dollars, at the rate the balance burns per dollar of cost. */
 export function usageUsd(credits: number): string {
   if (!Number.isFinite(credits) || credits < 0) return "$0.00";
-  return `$${(credits / 120).toFixed(2)}`;
+  return `$${(credits / CREDITS_PER_USD_COST).toFixed(2)}`;
 }
 
 /** The total used, summed per model, from the persisted session totals. */

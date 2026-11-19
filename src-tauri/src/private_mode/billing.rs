@@ -15,14 +15,12 @@ use url::{Host, Url};
 use super::client::ModelPrice;
 use super::launch::NEAR_AI_BASE_URL;
 use super::proxy::ProxyRecord;
-use super::PrivateError;
+use super::{PrivateError, CREDITS_PER_USD_COST};
 
 /// `/v1/billing/costs` takes at most this many ids in one call.
 pub const MAX_COST_IDS: usize = 100;
 /// Three asks, then an estimate: the endpoint may lag right after a turn, and is deprecated.
 pub const MAX_COST_ASKS: u8 = 3;
-/// Credits charged per US dollar of model cost.
-const CREDITS_PER_USD: f64 = 120.0;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(20);
 const MAX_BODY_BYTES: u64 = 256 * 1024;
@@ -57,6 +55,11 @@ pub struct PrivateSessionUsage {
     pub credits: f64,
     pub estimated: bool,
     pub calls: u32,
+    /// The session this one's calls are counted for right now, when that is another one: a
+    /// native fork spends on a token made for its source. The UI reads that session's total
+    /// too, so the fork's spending is in a total at once. Set by the service, not here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counted_for: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,8 +89,16 @@ impl UsageTracker {
         let mut ids = Vec::new();
         let mut seen = HashSet::new();
         let mut pending = Vec::new();
+        // Calls NEAR AI gave no request id for: billing cannot price them, so they are
+        // estimated from their token counts every time.
+        let mut unbilled = 0.0;
+        let mut has_unbilled = false;
         for record in records {
             let Some(id) = record.inference_id.as_deref() else {
+                if record.usage.is_some() {
+                    has_unbilled = true;
+                    unbilled += price_estimate(record, models).unwrap_or(0.0);
+                }
                 continue;
             };
             if !seen.insert(id.to_string()) {
@@ -142,19 +153,26 @@ impl UsageTracker {
             }
         }
 
-        let mut credits = 0.0;
-        let mut estimated = false;
+        let mut credits = unbilled;
+        let mut estimated = has_unbilled;
         let cache = lock(&self.cache);
         for id in ids {
-            if let Some(entry) = cache.get(&id).filter(|entry| entry.settled) {
-                credits += entry.credits;
-                estimated |= entry.estimated;
+            match cache.get(&id) {
+                Some(entry) if entry.settled => {
+                    credits += entry.credits;
+                    estimated |= entry.estimated;
+                }
+                // Asked out and still no price: the total leaves this call out, so it is
+                // not an exact figure.
+                Some(entry) if entry.attempts >= MAX_COST_ASKS => estimated = true,
+                _ => {}
             }
         }
         PrivateSessionUsage {
             credits,
             estimated,
             calls,
+            counted_for: None,
         }
     }
 
@@ -186,7 +204,7 @@ impl UsageTracker {
         lock(&self.cache).insert(
             id.to_string(),
             CachedCost {
-                credits: cost_nano_usd as f64 / 1e9 * CREDITS_PER_USD,
+                credits: cost_nano_usd as f64 / 1e9 * CREDITS_PER_USD_COST,
                 estimated: false,
                 attempts: MAX_COST_ASKS,
                 settled: true,
@@ -211,16 +229,7 @@ impl UsageTracker {
             );
             return;
         };
-        let credits = record
-            .usage
-            .as_ref()
-            .map(|usage| {
-                (usage.prompt_tokens as f64 * model.input_per_m
-                    + usage.completion_tokens as f64 * model.output_per_m)
-                    / 1e6
-                    * CREDITS_PER_USD
-            })
-            .unwrap_or(0.0);
+        let credits = token_credits(record, model);
         lock(&self.cache).insert(
             id.to_string(),
             CachedCost {
@@ -231,6 +240,39 @@ impl UsageTracker {
             },
         );
     }
+}
+
+/// The session the newest call on `session_id`'s tokens was recorded for, when that is another
+/// one. Read from the records, not from the live token: they outlive a Stop or an archive, and
+/// the usage checks of a turn go on for a while after it.
+pub fn counted_for(records: &[ProxyRecord], session_id: &str) -> Option<String> {
+    records
+        .iter()
+        .max_by_key(|record| record.started)
+        .map(|record| record.app_session_id.clone())
+        .filter(|owner| owner != session_id)
+}
+
+/// What a call's tokens cost at the catalog's price, or zero when it reported none.
+fn token_credits(record: &ProxyRecord, model: &ModelPrice) -> f64 {
+    record
+        .usage
+        .as_ref()
+        .map(|usage| {
+            (usage.prompt_tokens as f64 * model.input_per_m
+                + usage.completion_tokens as f64 * model.output_per_m)
+                / 1e6
+                * CREDITS_PER_USD_COST
+        })
+        .unwrap_or(0.0)
+}
+
+/// The same estimate for a record whose model the catalog still lists.
+fn price_estimate(record: &ProxyRecord, models: &[ModelPrice]) -> Option<f64> {
+    models
+        .iter()
+        .find(|model| model.id == record.model)
+        .map(|model| token_credits(record, model))
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -559,11 +601,39 @@ mod tests {
         let fake = FakeBilling::new(Err(PrivateError::Unreachable));
         let tracker = UsageTracker::default();
 
-        for _ in 0..4 {
+        for ask in 1..=4 {
             let usage = tracker.usage(&records, &[], Some(KEY), &fake);
-            assert_eq!((usage.credits, usage.estimated), (0.0, false));
+            // Once billing was asked out, the total leaves the call out and says so.
+            assert_eq!((usage.credits, usage.estimated), (0.0, ask >= 3));
         }
         assert_eq!(lock(&fake.calls).len(), 3);
+    }
+
+    #[test]
+    fn a_forks_calls_name_the_session_they_are_counted_for() {
+        // `record` labels its calls "session": a fork that shares that token sees them too.
+        let mut newer = record("b");
+        newer.started = 5;
+        let records = vec![record("a"), newer];
+
+        assert_eq!(counted_for(&records, "fork"), Some("session".to_string()));
+        assert_eq!(counted_for(&records, "session"), None);
+        assert_eq!(counted_for(&[], "fork"), None);
+    }
+
+    #[test]
+    fn a_call_without_a_request_id_is_estimated_from_its_tokens() {
+        let mut unbilled = record("unused");
+        unbilled.inference_id = None;
+        let fake = FakeBilling::new(Err(PrivateError::Unreachable));
+        let tracker = UsageTracker::default();
+
+        let usage = tracker.usage(&[unbilled], &models(), Some(KEY), &fake);
+
+        assert_eq!(
+            (usage.credits, usage.estimated, usage.calls),
+            (12.0, true, 0)
+        );
     }
 
     #[test]

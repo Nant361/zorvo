@@ -33,6 +33,11 @@ export type ActionResult = { ok: true } | { ok: false; text: string };
 /** `code` is the backend's plain error code (`not_found`: no checkout address is kept, as after a restart). */
 export type OpenCheckoutResult = { ok: true } | { ok: false; code: string };
 
+export interface MarkCreditsOutOptions {
+  onBalanceLagging?: () => void;
+  isOwnKey?: boolean;
+}
+
 export interface PrivateCredits {
   /** null until the first read answers. */
   status: PrivateStatus | null;
@@ -67,8 +72,10 @@ export interface PrivateCredits {
   /**
    * Marks the session; for `empty` reads the balance afresh and calls `onBalanceLagging` when that read
    * already shows credits (the server's balance lags NEAR AI's refusal), which clears the mark at once.
+   * `isOwnKey` says the session pays with the user's own NEAR AI key: its mark does not depend on
+   * Zorvo's balance or key, and stays until that key changes or the user comes back to the window.
    */
-  markCreditsOut: (sessionId: string, reason: CreditsOutReason, onBalanceLagging?: () => void) => void;
+  markCreditsOut: (sessionId: string, reason: CreditsOutReason, options?: MarkCreditsOutOptions) => void;
   /** Clears a mark after the user chooses another payment source. */
   clearCreditsOut: (sessionId: string) => void;
   /** True once this Mac holds credits and the user has not yet been asked to save the recovery code. */
@@ -78,6 +85,8 @@ export interface PrivateCredits {
 const POLL_MS = 3_000;
 /** A paid top-up waiting for stock can take long; asking every 3 s would only load the server. */
 const STOCK_POLL_MS = 15_000;
+/** The longest wait between two asks about a top-up while the server cannot be reached. */
+const MAX_POLL_BACKOFF_MS = 5 * 60_000;
 /** How long after its hold ends a waiting top-up is still asked about while the server cannot answer. */
 const GIVE_UP_AFTER_HOLD_MS = 10 * 60_000;
 /** The same, for a top-up whose hold's end is unknown, counted from when polling started. */
@@ -136,11 +145,29 @@ function giveUpAt(topup: PendingTopup, startedAt: number): number {
     : Math.max(holdEnds, startedAt) + GIVE_UP_AFTER_HOLD_MS;
 }
 
-function pruneCreditsOut(marks: CreditsOut, status: PrivateStatus): CreditsOut {
+/** What the status says about the user's own NEAR AI key, as one comparable string. */
+function ownKeyStamp(status: PrivateStatus): string {
+  const key = status.ownKey;
+  return `${key?.saved === true}|${key?.addedAt ?? ''}|${key?.noCredits === true}`;
+}
+
+/**
+ * `ownKeyMarks` holds the sessions marked on the user's own key, each with that key's stamp when it
+ * was marked. Zorvo's balance and device key say nothing about such a refusal, so its mark stays
+ * until the own key itself changes (added again, checked again, removed). A null stamp is a mark
+ * made before any status was read: nothing is known to compare it with yet, so it stays.
+ */
+function pruneCreditsOut(
+  marks: CreditsOut,
+  status: PrivateStatus,
+  ownKeyMarks: ReadonlyMap<string, string | null>,
+): CreditsOut {
   const hasCredits = freshCreditsOf(status) > 0;
   const keyFixed = status.keyReady && status.keyError === null;
-  const kept = Object.entries(marks).filter(([, reason]) => {
+  const kept = Object.entries(marks).filter(([sessionId, reason]) => {
     if (reason === 'session_limit') return true;
+    const stampWhenMarked = ownKeyMarks.get(sessionId);
+    if (stampWhenMarked !== undefined) return stampWhenMarked === null || stampWhenMarked === ownKeyStamp(status);
     return !(reason === 'empty' ? hasCredits : keyFixed);
   });
   return kept.length === Object.keys(marks).length ? marks : Object.fromEntries(kept);
@@ -180,6 +207,9 @@ export function usePrivateCredits(): PrivateCredits {
   // The top-ups a credit notification was sent for: one per top-up, however often its credit is seen.
   const notifiedTopups = useRef<Set<string>>(new Set());
   const isResumed = useRef(false);
+  const statusRef = useRef<PrivateStatus | null>(null);
+  // Sessions marked on the user's own key: see `pruneCreditsOut`.
+  const ownKeyMarks = useRef<Map<string, string | null>>(new Map());
   // A promo redeem is on its way: it will make the pending top-up, so no buy or second redeem may start.
   const isRedeeming = useRef(false);
 
@@ -198,8 +228,13 @@ export function usePrivateCredits(): PrivateCredits {
 
   const applyStatus = useCallback(
     (next: PrivateStatus) => {
+      statusRef.current = next;
       setStatus(next);
-      setCreditsOut((prev) => pruneCreditsOut(prev, next));
+      setCreditsOut((prev) => pruneCreditsOut(prev, next, ownKeyMarks.current));
+      // A mark made before the first status takes this one as its stamp: the first read is not a change.
+      ownKeyMarks.current.forEach((stamp, sessionId) => {
+        if (stamp === null) ownKeyMarks.current.set(sessionId, ownKeyStamp(next));
+      });
       // After a restart, or after polling gave up, a top-up the backend still holds is followed from where it was left.
       if (!isResumed.current) {
         isResumed.current = true;
@@ -327,14 +362,30 @@ export function usePrivateCredits(): PrivateCredits {
     let isReading = false;
     const followedTopup = toppedUp(flowRef.current);
     const stopAt = followedTopup ? giveUpAt(followedTopup, Date.now()) : Number.POSITIVE_INFINITY;
+    // While the server cannot be reached, the asks about a paid top-up thin out: it is never given
+    // up on, but it must not be asked about every few seconds for the app's lifetime.
+    let failures = 0;
+    let ticksToSkip = 0;
     const poll = async () => {
       // A slow answer is waited for: a second call on top of it would only race the first.
       if (isReading) return;
+      if (ticksToSkip > 0) {
+        ticksToSkip -= 1;
+        return;
+      }
       isReading = true;
       try {
         const state = await invoke<TopupState>('private_topup_status', { topupId });
+        failures = 0;
         if (!isStopped) settle(topupId, state);
       } catch (error) {
+        // A waiting top-up is given up on below, soon after its hold ends, so it keeps its pace.
+        // A paid one is never given up on: its first failure is asked again at the next tick, and
+        // each one after it waits twice as long, up to `MAX_POLL_BACKOFF_MS`.
+        failures += 1;
+        if (flowRef.current.kind !== 'waiting') {
+          ticksToSkip = Math.min(2 ** Math.min(failures - 1, 10) - 1, Math.floor(MAX_POLL_BACKOFF_MS / pollMs));
+        }
         // A cancel or a dismiss may have taken this top-up away before the effect stopped.
         if (toppedUp(flowRef.current)?.topupId !== topupId) return;
         const code = codeOf(error);
@@ -509,6 +560,7 @@ export function usePrivateCredits(): PrivateCredits {
   }, [refresh, updateFlow]);
 
   const clearCreditsOut = useCallback((sessionId: string) => {
+    ownKeyMarks.current.delete(sessionId);
     setCreditsOut((prev) => {
       if (!(sessionId in prev)) return prev;
       const { [sessionId]: _cleared, ...rest } = prev;
@@ -517,9 +569,13 @@ export function usePrivateCredits(): PrivateCredits {
   }, []);
 
   const markCreditsOut = useCallback(
-    (sessionId: string, reason: CreditsOutReason, onBalanceLagging?: () => void) => {
+    (sessionId: string, reason: CreditsOutReason, { onBalanceLagging, isOwnKey = false }: MarkCreditsOutOptions = {}) => {
+      const known = statusRef.current;
+      if (isOwnKey && reason !== 'session_limit') ownKeyMarks.current.set(sessionId, known ? ownKeyStamp(known) : null);
+      else ownKeyMarks.current.delete(sessionId);
       setCreditsOut((prev) => (prev[sessionId] === reason ? prev : { ...prev, [sessionId]: reason }));
-      if (reason !== 'empty') return;
+      // The user's own key was refused: Zorvo's balance has no say, so nothing is read or compared.
+      if (reason !== 'empty' || isOwnKey) return;
       // The balance shown elsewhere (the Private tab, Settings) must not contradict the refusal.
       void loadStatus(true).then((next) => {
         if (next !== null && freshCreditsOf(next) > 0) onBalanceLagging?.();
@@ -527,6 +583,22 @@ export function usePrivateCredits(): PrivateCredits {
     },
     [loadStatus],
   );
+
+  // Zorvo cannot see the credits of the user's own NEAR AI organization. Coming back to the window
+  // (from the NEAR AI dashboard, say) lets an own-key session that ran out try again; a prompt that
+  // is still refused marks it again.
+  useEffect(() => {
+    const onFocus = () => {
+      setCreditsOut((prev) => {
+        const kept = Object.entries(prev).filter(
+          ([sessionId, reason]) => !(reason === 'empty' && ownKeyMarks.current.has(sessionId)),
+        );
+        return kept.length === Object.keys(prev).length ? prev : Object.fromEntries(kept);
+      });
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   const needsRecoveryDialog =
     status !== null &&

@@ -57,7 +57,8 @@ export function useSessionActions(deps: SessionActionsDeps): SessionActions {
   const deleteSession = (sessionId: string) => {
     const session = sessionById(sessionId);
     const stopped = stopAgent(session);
-    void invoke('private_forget_session', { sessionId }).catch(() => {});
+    // Only a private session has proxy records, a limit or a key to forget.
+    if (session?.privateMode) void invoke('private_forget_session', { sessionId }).catch(() => {});
     deps.navigation.remove(sessionId);
     deps.updateState((prev) => removeSessionFrom(prev, sessionId));
     deps.removeTranscript(sessionId);
