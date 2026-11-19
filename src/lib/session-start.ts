@@ -1,4 +1,4 @@
-import { isCommandOnly, titleFromPrompt, titleSourceFor } from './session-helpers';
+import { folderNameOf, isCommandOnly, titleFromPrompt, titleSourceFor, workspacePathOf } from './session-helpers';
 import { fileNameOf } from './attachments';
 import type { ListedSession } from './session-list';
 import type { FirstMessage } from '../hooks/session-engine/useAcpEngine';
@@ -29,6 +29,12 @@ export interface TitlePlace {
 export function titleFor({ text, attachments }: FirstMessage, place?: TitlePlace): string {
   if (place && isCommandOnly(text)) return `${place.agentName} in ${place.folderName}`;
   return titleFromPrompt(text || fileNameOf(attachments?.[0] ?? ''));
+}
+
+/** The agent and folder a session's title names when its first message is only a command. */
+export function titlePlaceOf(session: Session, agents: readonly AgentProfile[]): TitlePlace | undefined {
+  const agentName = agents.find((agent) => agent.id === session.profileId)?.name;
+  return agentName ? { agentName, folderName: folderNameOf(workspacePathOf(session)) } : undefined;
 }
 
 /** A session's name from its first message, with the whole line it was cut from when it was cut. */

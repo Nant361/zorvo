@@ -161,6 +161,10 @@ describe("titleFromPrompt", () => {
       titleFromPrompt('Read the file "/Users/mac/Library/Application Support/xyz.zorvo.desktop/state.json" and tell me why it is so big'),
     ).toBe("Read the file xyz.zorvo.desktop/state.json and tell me why…");
     expect(titleFromPrompt("fix ~/developer/zorvo/src/App.tsx, please")).toBe("fix src/App.tsx, please");
+    expect(titleFromPrompt("why does `/Users/mac/developer/zorvo/src/App.tsx` crash")).toBe("why does src/App.tsx crash");
+    expect(titleFromPrompt("see (/Users/mac/developer/zorvo/README.md) first")).toBe("see (zorvo/README.md) first");
+    // An apostrophe in a later word never closes a quote that opened before a path.
+    expect(titleFromPrompt("check '/a/b/c/d isn't there")).toBe("check '/a/b/c/d isn't there");
     // Two parts or fewer are already short.
     expect(titleFromPrompt("look at /etc/hosts")).toBe("look at /etc/hosts");
   });

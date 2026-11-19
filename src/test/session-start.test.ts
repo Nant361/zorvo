@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { importedSessionSpec, isWaitingForAnswer, namingFor, newSessionRecord, titleFor } from "../lib/session-start";
+import { importedSessionSpec, isWaitingForAnswer, namingFor, newSessionRecord, titleFor, titlePlaceOf } from "../lib/session-start";
 import type { ListedSession } from "../lib/session-list";
 import { TRANSPORT_ACP, type AgentProfile, type ChatMessage, type Session } from "../types";
 
@@ -209,5 +209,19 @@ describe("namingFor", () => {
     const record = newSessionRecord({ agent: CLAUDE, cwd: "/w", ...namingFor({ text: "see https://github.com/a/b/issues/3" }) });
     expect(record.name).toBe("see a/b");
     expect(record.titleSource).toBe("see https://github.com/a/b/issues/3");
+  });
+});
+
+describe("titlePlaceOf", () => {
+  const base = { id: "s-1", name: "Session #1", profileId: "claude-acp", status: "idle", createdAt: 1, transport: TRANSPORT_ACP } as Session;
+
+  it("names the agent and the folder, the repository's for a session in a worktree", () => {
+    expect(titlePlaceOf({ ...base, cwd: "/w/zorvo" }, [CLAUDE])).toEqual({ agentName: "Claude Code", folderName: "zorvo" });
+    const inWorktree = { ...base, cwd: "/data/worktrees/zorvo/fix", worktree: { repoPath: "/w/zorvo", path: "/data/worktrees/zorvo/fix", branch: "agent/fix" } };
+    expect(titlePlaceOf(inWorktree, [CLAUDE])).toEqual({ agentName: "Claude Code", folderName: "zorvo" });
+  });
+
+  it("has no place when the agent is not known", () => {
+    expect(titlePlaceOf({ ...base, cwd: "/w/zorvo" }, [QWEN])).toBeUndefined();
   });
 });

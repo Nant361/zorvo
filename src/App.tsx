@@ -60,6 +60,7 @@ import {
   isWaitingForAnswer,
   newSessionRecord,
   namingFor,
+  titlePlaceOf,
   type SessionSpec,
   type StartSessionOptions,
 } from "./lib/session-start";
@@ -1226,9 +1227,7 @@ export default function App() {
     const isFirstMessage = !(transcripts[sessionId]?.some((m) => m.role === "user") ?? false);
     const sent = await acp.send(sessionId, message.text, message.attachments);
     if (sent && session && isFirstMessage && isAutoName(session.name) && !session.namedByUser) {
-      const agentName = agents.find((agent) => agent.id === session.profileId)?.name;
-      const place = agentName ? { agentName, folderName: folderNameOf(workspacePathOf(session)) } : undefined;
-      patchSession(sessionId, { titleSource: undefined, ...namingFor(message, place) });
+      patchSession(sessionId, { titleSource: undefined, ...namingFor(message, titlePlaceOf(session, agents)) });
     }
     return sent;
   };

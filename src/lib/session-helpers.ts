@@ -38,10 +38,13 @@ const GITHUB_LINK = new RegExp(
 );
 /** Any other web link: its host, without `www.` or a port. */
 const WEB_LINK = new RegExp(String.raw`\bhttps?:\/\/(?:www\.)?([^\s\/?#:"'<>]+)(?::\d+)?` + LINK_REST, 'gi');
-/** A Mac path in quotes, which may hold spaces ("Application Support"). */
-const QUOTED_PATH = /(["'])((?:~\/|\/)[^"'\n]+)\1/g;
-/** A Mac path as one word, from the start of the line or after a space. */
-const BARE_PATH = /(^|\s)((?:~\/|\/)[^\s"']+?)(?=[.,;:!?)]*(?:\s|$))/g;
+/**
+ * A Mac path in quotes or backticks, which may hold spaces ("Application Support"). The closing mark must
+ * end a word, so an apostrophe inside a later word ("isn't") never closes it.
+ */
+const QUOTED_PATH = /(["'`])((?:~\/|\/)[^"'`\n]+)\1(?!\w)/g;
+/** A Mac path as one word, from the start of the line or after a space or an opening bracket. */
+const BARE_PATH = /(^|[\s([])((?:~\/|\/)[^\s"'`]+?)(?=[.,;:!?)\]]*(?:\s|$))/g;
 
 /** A path's last two parts when it has more than two, else the path as written. */
 function lastTwoParts(path: string): string {
@@ -61,6 +64,11 @@ function tidied(line: string): string {
     .replace(BARE_PATH, (_, before: string, path: string) => `${before}${lastTwoParts(path)}`);
 }
 
+/** A message's first line with its white space collapsed: what a title is made from. */
+function firstLineOf(text: string): string {
+  return text.trim().split('\n')[0].replace(/\s+/g, ' ').trim();
+}
+
 /** True when a message is only a slash command (`/init`, `/review src`), which says nothing a title could use. */
 export function isCommandOnly(text: string): boolean {
   return /^\/[\w:-]+(?:[ \t][^\n]*)?$/.test(text.trim());
@@ -71,7 +79,7 @@ export function isCommandOnly(text: string): boolean {
  * link as its site and a long path as its last two parts, cut at a word boundary.
  */
 export function titleFromPrompt(prompt: string): string {
-  const firstLine = tidied(prompt.trim().split('\n')[0].replace(/\s+/g, ' ').trim());
+  const firstLine = tidied(firstLineOf(prompt));
   if (!firstLine) return 'New session';
   if (firstLine.length <= MAX_TITLE_LENGTH) return firstLine;
   const cut = firstLine.slice(0, MAX_TITLE_LENGTH + 1);
@@ -84,7 +92,7 @@ const MAX_TITLE_SOURCE = 500;
 
 /** The whole first line a title was made from, for its hover, when the title shortened it. */
 export function titleSourceFor(text: string, title: string): string | undefined {
-  const line = text.trim().split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_SOURCE);
+  const line = firstLineOf(text).slice(0, MAX_TITLE_SOURCE);
   return line !== '' && line !== title ? line : undefined;
 }
 
