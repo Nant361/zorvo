@@ -287,6 +287,7 @@ function shellWords(command: string): string[] {
  * each whose value is the next word: no process shows them or what they set.
  */
 const WRAPPERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['command', new Set<string>()],
   ['env', new Set(['-u', '-C', '-P', '-S', '--unset', '--chdir', '--split-string'])],
   ['exec', new Set(['-a'])],
   ['nohup', new Set<string>()],
@@ -296,7 +297,7 @@ const WRAPPERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 
 /**
  * The command without the variables it sets first (`PORT=3001 pnpm dev`) and without the wrappers
- * that run it (`nohup`, `nice -n 10`, `env -u TAG`, `exec`), however they are stacked.
+ * that run it (`nohup`, `nice -n 10`, `env -u TAG`, `exec`, `command -p`), however they are stacked.
  */
 function withoutAssignments(command: string): string {
   const words = shellWords(command);
