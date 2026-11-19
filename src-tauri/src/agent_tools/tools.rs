@@ -87,7 +87,7 @@ pub fn tool_list() -> Value {
         },
         {
             "name": "show_artifact",
-            "description": "Show the user a web page you wrote, beside the chat. Write one self-contained .html file in this folder or the temporary folder, then call this with its path. Calling it again for the same path shows a new version. Scripts may come only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm/, unpkg.com, cdn.tailwindcss.com and code.jquery.com, with an exact version; fonts from Google Fonts; images as data URIs. The page cannot fetch anything or keep data. Call artifact_guide before your first page.",
+            "description": "Show the user a web page you wrote, beside the chat. Use it without being asked whenever your answer is better seen than read: a report, a summary of what changed, a comparison, a chart, a diagram, a dashboard, a mockup of a screen, or something the user can click through. Do not use it for an answer that is short text or code. Write one self-contained .html file in this folder or the temporary folder, then call this with its path. Calling it again for the same path shows a new version. Scripts may come only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm/, unpkg.com, cdn.tailwindcss.com and code.jquery.com, with an exact version; fonts from Google Fonts; images as data URIs. The page cannot fetch anything or keep data. Call artifact_guide before your first page.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -308,6 +308,27 @@ fn put_max_chars(out: &mut Map<String, Value>, object: &Map<String, Value>) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn description_of(name: &str) -> String {
+        tool_list()
+            .as_array()
+            .and_then(|tools| tools.iter().find(|tool| tool["name"] == name))
+            .and_then(|tool| tool["description"].as_str())
+            .expect("a listed tool")
+            .to_string()
+    }
+
+    #[test]
+    fn show_artifact_says_when_to_use_it_unasked() {
+        // An agent reads only this: with no word on when, it shows a page only when told to.
+        let description = description_of("show_artifact");
+
+        assert!(description.contains("without being asked"), "{description}");
+        for kind in ["report", "chart", "diagram", "dashboard", "mockup"] {
+            assert!(description.contains(kind), "{kind} in {description}");
+        }
+        assert!(description.contains("Do not use it"), "{description}");
+    }
 
     #[test]
     fn show_artifact_takes_a_path_and_an_optional_title() {
