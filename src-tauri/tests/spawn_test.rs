@@ -152,3 +152,16 @@ fn missing_pty_command_fails_at_spawn() {
     );
     assert!(result.is_err(), "a missing command must fail at spawn");
 }
+
+#[test]
+fn sigpipe_is_back_to_its_default() {
+    use_trampoline();
+    // With SIGPIPE ignored, `yes` gets EPIPE and complains on stderr instead of
+    // dying quietly when `head` stops reading.
+    let output = spawn::command("/bin/sh")
+        .args(["-c", "/usr/bin/yes | /usr/bin/head -n 1"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+}

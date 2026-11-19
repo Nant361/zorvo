@@ -68,7 +68,16 @@ fn exec(args: &[String]) -> i32 {
             eprintln!("zorvo {MODE}: {message}");
             return NO_DISCLAIM;
         }
-        libc::posix_spawnattr_setflags(&mut attr, libc::POSIX_SPAWN_SETEXEC as libc::c_short);
+        // Rust's runtime ignores SIGPIPE in this process; the program gets the
+        // default back, as a direct `Command` spawn would give it.
+        let mut default_signals: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut default_signals);
+        libc::sigaddset(&mut default_signals, libc::SIGPIPE);
+        libc::posix_spawnattr_setsigdefault(&mut attr, &default_signals);
+        libc::posix_spawnattr_setflags(
+            &mut attr,
+            (libc::POSIX_SPAWN_SETEXEC | libc::POSIX_SPAWN_SETSIGDEF) as libc::c_short,
+        );
         let mut pid: libc::pid_t = 0;
         let code = libc::posix_spawnp(
             &mut pid,
