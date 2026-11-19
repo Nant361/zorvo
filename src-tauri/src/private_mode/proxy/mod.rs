@@ -174,6 +174,7 @@ impl PrivateProxy {
 
     /// A deleted session: no more record lookups, and its records go with its process's last token.
     pub fn forget(&self, app_session_id: &str) {
+        self.topups.forget(app_session_id);
         if let Some(server) = lock(&self.server).as_ref() {
             server.forget(app_session_id);
         }

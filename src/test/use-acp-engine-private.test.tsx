@@ -101,6 +101,8 @@ function renderEngine(session: Session = PRIVATE) {
       onTurnFailed,
       onPrivateCreditsOut,
       giveBack,
+      // As the app passes them: the chat as of this render.
+      transcripts: { [session.id]: messages },
     }),
   );
   return {
@@ -113,6 +115,7 @@ function renderEngine(session: Session = PRIVATE) {
     giveBack,
     session: () => sessions[0],
     userMessages: () => messages.filter((m) => m.role === "user"),
+    agentMessages: () => messages.filter((m) => m.role === "agent"),
     refresh: () => hook.rerender(),
   };
 }
@@ -271,6 +274,29 @@ describe("useAcpEngine with a private session", () => {
     expect(engine.userMessages()).toEqual([]);
     expect(engine.reportError).not.toHaveBeenCalled();
     expect(engine.onTurnFailed).not.toHaveBeenCalledWith("s-1", expect.any(String));
+    expect(engine.result.current.hasFailedPrompt("s-1")).toBe(false);
+  });
+
+  it("keeps a message the agent already worked on in the chat when credits run out mid-turn", async () => {
+    const spy = stub();
+    const engine = renderEngine();
+    await act(async () => {
+      await engine.result.current.start(PRIVATE, { text: "review the module" });
+    });
+    await waitFor(() => expect(callsTo(spy, "acp_prompt")).toHaveLength(1));
+    await emit({
+      kind: "update",
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Reading the module." } },
+    });
+    await waitFor(() => expect(engine.agentMessages()).toHaveLength(1));
+    engine.refresh();
+
+    await emit({ kind: "turn-end", error: 'PRIVATE_CREDITS:{"reason":"empty"}' });
+
+    // The agent holds the message in its own history: giving it back would send it twice.
+    expect(engine.onPrivateCreditsOut).toHaveBeenCalledWith("s-1", "empty");
+    expect(engine.giveBack).not.toHaveBeenCalled();
+    expect(engine.userMessages().map((m) => m.content)).toEqual(["review the module"]);
     expect(engine.result.current.hasFailedPrompt("s-1")).toBe(false);
   });
 

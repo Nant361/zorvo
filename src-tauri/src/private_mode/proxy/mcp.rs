@@ -9,7 +9,9 @@ use serde::Serialize;
 
 use crate::private_mode::client::{Balance, CreditsApi, ModelPrice};
 use crate::private_mode::device::{SecretStore, DEVICE_SECRET};
-use crate::private_mode::PrivateError;
+use crate::private_mode::{
+    PrivateError, CREDITS_PER_USD_COST, TURN_INPUT_TOKENS, TURN_OUTPUT_TOKENS,
+};
 
 use super::records::lock;
 use super::server::TokenEntry;
@@ -20,9 +22,6 @@ use super::topup::{
 const BALANCE_TTL: Duration = Duration::from_secs(30);
 /// A failed balance read is kept briefly too, so a flapping Worker is not asked on every turn.
 const BALANCE_ERROR_TTL: Duration = Duration::from_secs(5);
-const TURN_INPUT_TOKENS: f64 = 20_000.0;
-const TURN_OUTPUT_TOKENS: f64 = 1_000.0;
-const CREDITS_PER_USD_COST: f64 = 120.0;
 
 /// The cached allowlisted catalog shared with `PrivateMode`.
 pub type SharedModels = Arc<Mutex<Option<(Instant, Vec<ModelPrice>)>>>;
@@ -97,6 +96,7 @@ impl McpState {
                 format!("The reason must be 1–{MAX_REASON_CHARS} characters of plain text."),
             ));
         }
+        self.topups.check(&entry.app_session_id)?;
         let secret = self
             .store
             .get(DEVICE_SECRET)
@@ -116,9 +116,18 @@ impl McpState {
             )
         })?;
         let Some(package) = stock.packages.iter().find(|package| package.usd == usd) else {
+            // The agent has no other way to learn the sizes: name them.
+            let offered: Vec<String> = stock
+                .packages
+                .iter()
+                .map(|package| format!("${}", package.usd))
+                .collect();
             return Err(TopupRefusal::new(
                 "bad_request",
-                format!("Zorvo doesn't offer a ${usd} top-up."),
+                format!(
+                    "Zorvo doesn't offer a ${usd} top-up. Its packages: {}.",
+                    offered.join(", ")
+                ),
             ));
         };
         if !package.available {
@@ -469,7 +478,7 @@ mod tests {
             state.request_topup(&entry, 7, "Why"),
             Err(TopupRefusal::new(
                 "bad_request",
-                "Zorvo doesn't offer a $7 top-up."
+                "Zorvo doesn't offer a $7 top-up. Its packages: $5, $10."
             ))
         );
         let refusal = state

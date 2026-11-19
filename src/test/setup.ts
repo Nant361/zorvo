@@ -172,6 +172,7 @@ if (typeof window !== "undefined") {
     (await import("../lib/attachment-previews")).clearAttachmentPreviews();
     (window as unknown as { __FAKE_TAURI_STORE__: FakeTauriStore }).__FAKE_TAURI_STORE__ = emptyFakeStore();
     delete (window as unknown as { __FAKE_ACP_LIST__?: unknown }).__FAKE_ACP_LIST__;
+    window.sessionStorage.clear();
     resetFakePrivate();
   });
 }

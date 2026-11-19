@@ -10,6 +10,8 @@ export { Ledger } from "./ledger/Ledger";
 /** New devices per address and hour. High, since a venue shares one public address; a device holds nothing until it is paid for. */
 const REGISTRATIONS_PER_HOUR = 100;
 const TOPUPS_PER_HOUR = 10;
+/** Across every device of one address: enough for a household or an office, not for holding the stock. */
+const TOPUPS_PER_IP_HOUR = 20;
 const PROMO_ATTEMPTS_PER_HOUR = 5;
 /** Refused promo attempts per address and hour, across devices, so registering devices buys no extra guesses. */
 const PROMO_ATTEMPTS_PER_IP_HOUR = 20;
@@ -76,6 +78,10 @@ async function createTopup(req: Request, env: Env, deviceId: string): Promise<Re
   if (typeof packageUsd !== "number" || !parseConfig(env).packagesUsd.includes(packageUsd)) return error("bad_request", 400);
   const { allowed } = await ledgerOf(env).rateLimit(`topups:${deviceId}`, TOPUPS_PER_HOUR, HOUR_MS);
   if (!allowed) return error("rate_limited", 429);
+  // A top-up holds stock before anyone pays, and a device costs nothing to register: without a
+  // limit per address, one address could hold all of it through many devices.
+  const perAddress = await ledgerOf(env).rateLimit(`topups-ip:${clientIp(req)}`, TOPUPS_PER_IP_HOUR, HOUR_MS);
+  if (!perAddress.allowed) return error("rate_limited", 429);
 
   const result = await ledgerOf(env).createTopup(deviceId, packageUsd, Date.now());
   if (!("error" in result)) return json(result, 201);
