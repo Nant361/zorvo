@@ -42,7 +42,9 @@ fn is_app_page(url: &Url, dev_url: Option<&Url>) -> bool {
     bundled || blank || dev_server
 }
 
-/// The plugin that applies `verdict` to every navigation of every Tauri webview.
+/// The plugin that applies `verdict` to every navigation of every Tauri webview. wry asks about
+/// every frame, not only the top one, so an iframe's load goes through `verdict` too: an `https`
+/// frame would open in the browser and a `blob:` one would be refused. Zorvo's page has no iframe.
 pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("navigation-guard")
         .on_navigation(|webview, url| {

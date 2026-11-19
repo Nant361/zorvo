@@ -114,6 +114,50 @@ describe("LinkMenuLayer", () => {
     expect(document.activeElement).toBe(anchor);
   });
 
+  it("closes on Escape even after focus left its items", () => {
+    render(<LinkMenuLayer />);
+    const anchor = link("https://example.com/docs");
+    rightClick(anchor);
+    (document.activeElement as HTMLElement).blur();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it("goes back to the link on Tab, so Tab moves on from there", () => {
+    render(<LinkMenuLayer />);
+    const anchor = link("https://example.com/docs");
+    rightClick(anchor);
+
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Open in browser" }), { key: "Tab" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(anchor);
+  });
+
+  it("goes to the last item on ArrowUp when no item has focus", () => {
+    render(<LinkMenuLayer />);
+    rightClick(link("https://example.com/docs"));
+    const menu = screen.getByRole("menu", { name: "Link" });
+    (document.activeElement as HTMLElement).blur();
+
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Copy link" }));
+  });
+
+  it("names the address as the menu's description, not as one of its items", () => {
+    render(<LinkMenuLayer />);
+    rightClick(link("https://example.com/docs"));
+
+    const menu = screen.getByRole("menu", { name: "Link" });
+    const description = document.getElementById(menu.getAttribute("aria-describedby") ?? "");
+    expect(description?.textContent).toBe("example.com/docs");
+    expect(description?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("closes on a click outside", () => {
     render(<LinkMenuLayer />);
     rightClick(link("https://example.com/docs"));

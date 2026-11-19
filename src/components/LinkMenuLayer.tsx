@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Copy, ExternalLink } from "lucide-react";
@@ -51,6 +51,7 @@ function pointFor(event: MouseEvent, anchor: HTMLAnchorElement): Point {
 
 function LinkMenu({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const addressId = useId();
   const [place, setPlace] = useState({ left: menu.point.x, top: menu.point.y });
   const { anchor, href } = menu.link;
 
@@ -63,39 +64,44 @@ function LinkMenu({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
     panel.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
   }, [menu.point]);
 
-  // A click outside, leaving the window or resizing it closes it. A scroll does not: the chat scrolls
-  // by itself while an agent writes, and the menu would vanish under the pointer.
+  // A click outside, Escape, leaving the window or resizing it closes it. Escape is heard on the whole
+  // document, since focus can leave the items (a click on the address line) while the menu stays open.
+  // A scroll does not close it: the chat scrolls by itself while an agent writes, and the menu would
+  // vanish under the pointer.
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
       if (!panelRef.current?.contains(event.target as Node)) onClose();
     };
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+      anchor.focus();
+    };
     document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onEscape);
     window.addEventListener("blur", onClose);
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onEscape);
       window.removeEventListener("blur", onClose);
       window.removeEventListener("resize", onClose);
     };
-  }, [onClose]);
-
-  const closeToLink = () => {
-    onClose();
-    anchor.focus();
-  };
+  }, [anchor, onClose]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
     const at = items.indexOf(document.activeElement as HTMLElement);
     const step: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeToLink();
-    } else if (event.key === "Tab") {
+    if (event.key === "Tab") {
+      // Back on the link first, so Tab goes on from it rather than from the top of the window.
       onClose();
+      anchor.focus();
     } else if (event.key in step && items.length > 0) {
       event.preventDefault();
-      items[(at + step[event.key] + items.length) % items.length].focus();
+      const next = at < 0 ? (step[event.key] > 0 ? 0 : items.length - 1) : (at + step[event.key] + items.length) % items.length;
+      items[next].focus();
     } else if ((event.key === "Home" || event.key === "End") && items.length > 0) {
       event.preventDefault();
       items[event.key === "Home" ? 0 : items.length - 1].focus();
@@ -118,6 +124,7 @@ function LinkMenu({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
       ref={panelRef}
       role="menu"
       aria-label="Link"
+      aria-describedby={addressId}
       onKeyDown={onKeyDown}
       style={{ left: place.left, top: place.top }}
       className={`fixed z-50 flex w-60 flex-col ${POPOVER_PANEL_STYLE}`}
@@ -135,7 +142,8 @@ function LinkMenu({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
         </span>
       </PopoverOption>
       <div aria-hidden="true" className="mx-1.5 my-1 h-px bg-border" />
-      <p title={href} className="truncate px-2 pb-1 font-mono text-caption text-fg-subtle">
+      {/* Not a menu item, so hidden as a child of the menu; it is the menu's description instead. */}
+      <p id={addressId} aria-hidden="true" title={href} className="truncate px-2 pb-1 font-mono text-caption text-fg-subtle">
         {shownAddress(href)}
       </p>
     </div>

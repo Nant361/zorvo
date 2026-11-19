@@ -54,7 +54,6 @@ function textOf(children: ReactNode): string {
   return "";
 }
 
-
 /**
  * Links open in the user's browser; a click must never navigate the app's
  * webview away. Anything else (a file path an agent mentions, say) is shown
