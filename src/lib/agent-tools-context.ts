@@ -35,7 +35,7 @@ export const MCP_PATH_CONTEXT =
 export type ToolsPath = 'command' | 'mcp';
 
 /** The tools context for `path`, then the message's own hidden context when it has one. */
-export function withToolsContext(context: string | undefined, path: ToolsPath = 'command'): string {
+export function withToolsContext(context: string | undefined, path: ToolsPath): string {
   const note = path === 'mcp' ? MCP_PATH_CONTEXT : COMMAND_PATH_CONTEXT;
   return context ? `${note}\n\n${context}` : note;
 }

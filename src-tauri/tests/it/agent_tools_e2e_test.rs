@@ -153,7 +153,7 @@ fn stopping_the_session_ends_its_waiting_call() {
 // --- The command path: an agent that ignores `mcpServers` gets the socket in
 // its environment and runs `zorvo tools` itself.
 
-use zorvo_lib::agent_tools::commands::{tools_for_session, with_tools_env};
+use zorvo_lib::agent_tools::commands::{servers_for_session, tools_for_session, with_tools_env};
 use zorvo_lib::agent_tools::ToolsPath;
 use zorvo_lib::store::AppStore;
 
@@ -187,6 +187,26 @@ fn computer_use_alone_still_passes_zorvos_server() {
     )
     .unwrap();
     assert_eq!(none.path, None);
+}
+
+#[test]
+fn a_fork_has_the_agent_tools_only_when_the_setting_gives_them() {
+    // A fork reaches Zorvo through servers_for_session, not tools_for_session: the page note
+    // follows its flag the same way.
+    let rig = rig("fork-flag");
+    let computer_use = store_with(&rig.dir.join("cu"), false, true);
+    let alone = servers_for_session(&rig.tools, &computer_use, "f1", true).unwrap();
+    assert_eq!(alone.path, Some(ToolsPath::Mcp));
+    assert!(!alone.agent_tools);
+
+    let both = store_with(&rig.dir.join("both"), true, true);
+    let with_tools = servers_for_session(&rig.tools, &both, "f2", true).unwrap();
+    assert_eq!(with_tools.path, Some(ToolsPath::Mcp));
+    assert!(with_tools.agent_tools);
+
+    let not_asked = servers_for_session(&rig.tools, &both, "f3", false).unwrap();
+    assert_eq!(not_asked.path, None);
+    assert!(!not_asked.agent_tools);
 }
 
 fn store_with_tools(dir: &std::path::Path, on: bool) -> AppStore {
