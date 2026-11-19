@@ -685,3 +685,18 @@ describe("when a turn ends", () => {
     expect(closeTurn(replayed, 9_000)[0].completedAt).toBeUndefined();
   });
 });
+
+describe("a permission request's tool call", () => {
+  const request = (toolCall: Record<string, unknown>) => ({ requestId: 1, toolCall, options: [] });
+
+  it("records the tool call the request is for on the card", () => {
+    const [message] = applyPermissionRequest([], request({ toolCallId: "c2", title: "Run" }), ctx());
+
+    expect(message.actionCard?.toolCallId).toBe("c2");
+  });
+
+  it("leaves it out when the agent names none, or not as a string", () => {
+    expect(applyPermissionRequest([], request({ title: "Run" }), ctx())[0].actionCard).not.toHaveProperty("toolCallId");
+    expect(applyPermissionRequest([], request({ toolCallId: 9 }), ctx())[0].actionCard).not.toHaveProperty("toolCallId");
+  });
+});

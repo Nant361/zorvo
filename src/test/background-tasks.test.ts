@@ -107,7 +107,25 @@ describe("runningToolTasks", () => {
 
     expect(tasks).toEqual([]);
   });
-it("does not list a running tool whose reply already finished", () => {
+it("lists a subagent whose reply an answered permission request closed, while the turn runs", () => {
+    const answered = {
+      id: "a1", sessionId: "s1", title: "Permission requested", prompt: "Run ls", status: "approved", timestamp: 81_000,
+    } as ChatMessage["actionCard"];
+    const tasks = runningToolTasks(
+      {
+        s1: [
+          { id: "u1", role: "user", content: "Go", timestamp: 70_000 },
+          message([{ id: "t1", name: "Explore", status: "running", kind: "think", providerToolName: "Task" }], { actionCard: answered }),
+          message([], { id: "m2" }),
+        ],
+      },
+      [session({})],
+    );
+
+    expect(tasks.map((task) => task.id)).toEqual(["tool:s1:t1"]);
+  });
+
+  it("does not list a running tool whose reply already finished", () => {
     const tasks = runningToolTasks(
       {
         s1: [

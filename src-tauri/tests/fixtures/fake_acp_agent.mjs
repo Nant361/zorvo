@@ -25,6 +25,9 @@
 //   --login      -> the terminal sign-in: prints a greeting and exits
 //   anything else -> echoes the text back as an agent message chunk
 // Environment flags add capabilities and record what it was called with:
+//   FAKE_ACP_SUBAGENT=qwen|claude -> a prompt "subagent" announces an "agent" tool call and sends one
+//                         child tool call and one child text chunk, each marked with its parent
+//                         in that agent's `_meta` shape, then ends the turn
 //   FAKE_ACP_RESUME   -> advertises sessionCapabilities.resume and answers session/resume
 //   FAKE_ACP_LIST     -> advertises sessionCapabilities.list and answers session/list
 //   FAKE_ACP_LIST_PAGES -> names a JSON file of pages (arrays of SessionInfo); without it
@@ -296,6 +299,25 @@ function handlePrompt(id, params) {
         ],
       },
     });
+    return;
+  }
+  if (text === "subagent" && process.env.FAKE_ACP_SUBAGENT) {
+    // A subagent's updates, marked the way Qwen Code or Claude Code marks them.
+    const isQwen = process.env.FAKE_ACP_SUBAGENT === "qwen";
+    const parentId = "sub-parent";
+    const child = (toolName) =>
+      isQwen
+        ? { ...(toolName ? { toolName, provenance: "subagent" } : {}), parentToolCallId: parentId, subagentType: "general-purpose" }
+        : { claudeCode: { ...(toolName ? { toolName } : {}), parentToolUseId: parentId } };
+    const parentMeta = isQwen ? { toolName: "agent" } : { claudeCode: { toolName: "Agent" } };
+    const read = isQwen ? "read_file" : "Read";
+    const sessionId = params.sessionId;
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: parentId, title: "Agent: read the notes", kind: "other", status: "pending", _meta: parentMeta });
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "sub-c1", title: "ReadFile: notes.txt", kind: "read", status: "pending", _meta: child(read) });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "sub-c1", status: "completed", _meta: child(read) });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "notes.txt starts with alpha line." }, _meta: child() });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: parentId, status: "completed", _meta: parentMeta });
+    reply(id, { stopReason: "end_turn" });
     return;
   }
   if (text === "user-question") {

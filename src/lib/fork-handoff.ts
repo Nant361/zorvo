@@ -41,9 +41,20 @@ function buildHeader(meta: ForkHandoffMeta): string {
 }
 
 function buildActivityLines(message: ChatMessage): string[] {
-  const toolLines = (message.tools ?? []).map(
-    (tool) => `- Tool: ${tool.name}`,
-  );
+  const tools = message.tools ?? [];
+  const byId = new Map(tools.map((tool) => [tool.id, tool]));
+  // A subagent's work is listed under its own tool call: its tools, and what it said, which is
+  // kept on the tool and not in the reply's text.
+  const toolLines = tools
+    .filter((tool) => tool.parentId === undefined)
+    .flatMap((tool) => [
+      `- Tool: ${tool.name}`,
+      ...(tool.steps ?? []).flatMap((step) =>
+        step.kind === "text"
+          ? step.text.split("\n").map((line) => `  > ${line}`)
+          : step.toolIds.flatMap((id) => (byId.has(id) ? [`  - Tool: ${byId.get(id)?.name}`] : [])),
+      ),
+    ]);
   const card = message.actionCard;
   const cardLines = card
     ? [`- Approval requested: ${card.prompt} (${card.status})`]

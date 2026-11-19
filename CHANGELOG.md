@@ -4,12 +4,17 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+
+- **Background task tabs.** A subagent or a shell command an agent started opens as a tab beside the chat, and the chat shows one row per subagent instead of every step. With Claude Code and Qwen Code you can follow a subagent's steps as they arrive.
+
 ### Changed
 
 - **A private session no longer delegates.** Delegating starts another agent on a handoff of the conversation, which would send a private session's code outside the TEE without asking. The ⋯ menu and an `@Agent` mention now say so; **Continue with another agent** still asks first.
 - **The private badge says what was checked.** "Verified in TEE" is kept for an answer the model's own TEE signed; one signed by NEAR AI's gateway reads "Signed by NEAR AI". The popover says that NEAR AI's attestation report lists the signer and that Zorvo does not check the hardware quote behind it.
 - **The website explains credits and leaves private mode for last.** A new docs page, Credits terms, says who sells private mode credits, what they cost, and what happens to a payment and a balance. Private mode is now one section, after everything Zorvo does for free, with the path of a private answer folded into it. The first Download says the build is not signed yet and links to how to open it, the header names Private mode apart from Privacy, the footer's Privacy opens its docs page, and the Control section no longer says you approve every step. On the page, the delegate scene ends with the report alone, and status dots and the terminal cursor stop moving after a few seconds.
 - **The privacy docs name private mode's hosts.** Privacy and your data now lists private mode's two hosts and when each is contacted (the Zorvo Credits server from the first time you open Settings, Private mode, and at each start after that; NEAR AI Cloud during private sessions), what your browser opens instead of Zorvo (PingPay's checkout and NEAR AI's Verification Center), and which secrets private mode keeps in your Keychain.
+- **Agents that come as npm packages are downloaded when you install or update them.** Zorvo now installs the package into its own folder and starts the agent from there, instead of letting `npx` fetch it when the first session starts. Starting a session no longer waits on a download or asks the npm registry anything, and two sessions starting at once can no longer leave a broken download behind. After this update Zorvo installs the agents you have used once, in the background; until an agent's row stops saying Installing, it cannot start a session. An agent you never used is not downloaded: its row offers Install. Zorvo also no longer puts an npm-package agent in use just because its package is installed globally.
 
 ### Fixed
 

@@ -251,6 +251,8 @@ export interface ActionCard {
   /** ACP permission requests: the agent's own choices and the request to answer. */
   options?: PermissionChoice[];
   requestId?: string | number;
+  /** The tool call the request is for, when the agent names it. */
+  toolCallId?: string;
   /** The option the user picked, once answered. */
   chosenOptionId?: string;
   /** The mode changed after the agent asked; the card still needs its answer. */
@@ -333,6 +335,16 @@ export interface ToolExecution {
   locations?: string[];
   /** The command it runs, when the agent gives one in its input. */
   command?: string;
+  /** The tool call that started the subagent this tool belongs to, when the agent says so. */
+  parentId?: string;
+  /** On a subagent's own tool call: its type as the agent names it ("Explore"), when reported. */
+  agentType?: string;
+  /** On a subagent's own tool call: what the subagent did, in the order it arrived. */
+  steps?: ChatMessagePart[];
+  /** On a subagent's own tool call: the subagent's visible reasoning. */
+  thinking?: string;
+  /** The subagent wrote more text than is kept. */
+  isTextCut?: boolean;
 }
 
 export type DiffRowKind = 'added' | 'removed' | 'context' | 'skipped';
