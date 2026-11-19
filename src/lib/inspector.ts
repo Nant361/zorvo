@@ -21,8 +21,8 @@ export function clampInspectorWidth(px: number): number {
 }
 
 /**
- * The Terminal, Artifacts and Tasks tabs, and the Files tab while a file is open in it, need room for a
- * shell, a page or a line of code. Artifacts is wide for its list too, so opening a page does not move the edge.
+ * The Terminal, Output and Tasks tabs, and the Files tab while a file is open in it, need room for a
+ * shell, a page or a line of code. Output is wide for its list too, so opening a page does not move the edge.
  */
 function isWideTab(tab: InspectorTab, isViewingFile: boolean): boolean {
   return tab === "terminal" || tab === "artifacts" || tab === "tasks" || (tab === "files" && isViewingFile);
@@ -62,14 +62,13 @@ export function minInspectorWidth(tab: InspectorTab, isViewingFile = false): num
 
 /**
  * The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder,
- * Artifacts while the session has a page its agent showed, Tasks while the session has a task tab open
+ * Output (the `artifacts` tab) for every session, Tasks while the session has a task tab open
  * (both between Files and Terminal), and Private only while a private session is on screen.
  */
 export function offeredTabs(on: {
   hasFolder: boolean;
   isRepository: boolean;
   hasSession: boolean;
-  hasArtifacts?: boolean;
   isPrivate?: boolean;
   /** A task tab is open for the session on screen: only then is there a Tasks tab. */
   hasTaskTabs?: boolean;
@@ -78,7 +77,8 @@ export function offeredTabs(on: {
   if (on.hasFolder && on.isRepository) tabs.push("changes");
   if (on.hasSession) tabs.push("activity");
   if (on.hasFolder) tabs.push("files");
-  if (on.hasSession && on.hasArtifacts) tabs.push("artifacts");
+  // Output is always offered for a session: empty, it says what will show there.
+  if (on.hasSession) tabs.push("artifacts");
   if (on.hasSession && on.hasTaskTabs) tabs.push("tasks");
   if (on.hasFolder) tabs.push("terminal");
   if (on.hasSession && on.isPrivate) tabs.push("private");

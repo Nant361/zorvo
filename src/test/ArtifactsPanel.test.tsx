@@ -68,7 +68,7 @@ describe("the list", () => {
 
     expect(screen.getByRole("heading", { name: "Session list performance" })).toBeTruthy();
     await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
-    expect(screen.queryByRole("button", { name: "Back to artifacts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to output" })).toBeNull();
   });
 });
 
@@ -121,7 +121,7 @@ describe("the viewer", () => {
 
   it("goes back to the list", () => {
     const { props } = show(viewingReport);
-    fireEvent.click(screen.getByRole("button", { name: "Back to artifacts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to output" }));
     expect(props.onView).toHaveBeenCalledWith(null);
   });
 
@@ -213,7 +213,7 @@ describe("the viewer", () => {
     rerender(<ArtifactsPanel {...props} isExpanded />);
 
     expect(screen.getByRole("button", { name: "Shrink" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Back to artifacts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to output" })).toBeNull();
   });
 
   it("tells the user when the page cannot be shown", async () => {
@@ -456,3 +456,39 @@ describe("comments", () => {
     expect(screen.queryByRole("region", { name: "Comments on this page" })).toBeNull();
   });
 });
+
+describe("the Output tab's files and empty state", () => {
+  const MADE = [
+    { path: "/w/zorvo/src/lib/pr-chip.ts", at: Date.now() - 6 * 60_000 },
+    { path: "/elsewhere/notes.md", at: Date.now() - 7 * 60_000 },
+  ];
+
+  it("says what will show there while the agent has made nothing", () => {
+    show({ artifacts: [], files: [], agentName: "Claude Code" });
+    expect(screen.getByText("Nothing yet. Pages and files Claude Code makes in this session show here.")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Output" })).toBeNull();
+  });
+
+  it("lists the files the agent made under its pages, and opens one inside the folder in the file viewer", () => {
+    const onOpenFile = vi.fn();
+    show({ artifacts: [REPORT], files: MADE, filesRoot: "/w/zorvo", onOpenFile });
+
+    const rows = within(screen.getByRole("list", { name: "Output" })).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[0].textContent).toContain(REPORT.title);
+    expect(rows[1].textContent).toContain("pr-chip.ts");
+    expect(rows[1].textContent).toContain("New file · src/lib");
+
+    fireEvent.click(within(rows[1]).getByRole("button"));
+    expect(onOpenFile).toHaveBeenCalledWith("src/lib/pr-chip.ts");
+    // A file outside the folder is named, not offered.
+    expect(within(rows[2]).queryByRole("button")).toBeNull();
+    expect(rows[2].textContent).toContain("notes.md");
+  });
+
+  it("opens a single page by itself only when no file is listed beside it", () => {
+    show({ artifacts: [REPORT], files: MADE, filesRoot: "/w/zorvo" });
+    expect(screen.getByRole("list", { name: "Output" })).toBeTruthy();
+  });
+});
+
