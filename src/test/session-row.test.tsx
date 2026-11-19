@@ -52,6 +52,35 @@ const openMenu = (name: string) => fireEvent.click(screen.getByRole("button", { 
 afterEach(() => vi.useRealTimers());
 
 describe("SessionRow", () => {
+  it("shows a pull request's state and number in the time's place, and the time when there is none", () => {
+    const withPr = session({ id: "s-pr", name: "Fix transcript save interval", createdAt: Date.now() - 2 * 3_600_000 });
+    const without = session({ id: "s-none", name: "Add GitHub connection", createdAt: Date.now() - 2 * 3_600_000 });
+    const pullRequest = {
+      branch: "fix/save",
+      number: 244,
+      title: "Fix transcript save interval",
+      url: "https://github.com/o/r/pull/244",
+      state: "open",
+      isDraft: false,
+      checks: { passing: 3, failing: 2, pending: 0 },
+    };
+    const pullRequestOf = (target: Session) => (target.id === "s-pr" ? pullRequest : null);
+
+    const { row: prRow, unmount } = renderRow(withPr, { pullRequestOf });
+    const mark = within(prRow).getByRole("img", { name: "Pull request 244, open, checks failing" });
+    expect(mark).toHaveTextContent("244");
+    expect(mark).toHaveClass("text-danger", "font-mono");
+    expect(within(prRow).queryByText("2h")).toBeNull();
+    expect(within(prRow).getByText(withPr.name).closest("button")?.title).toContain(
+      "#244 Fix transcript save interval, Open · 2 of 5 checks failing",
+    );
+    unmount();
+
+    const { row: plainRow } = renderRow(without, { pullRequestOf });
+    expect(within(plainRow).queryByRole("img", { name: /^Pull request/ })).toBeNull();
+    expect(within(plainRow).getByText(/ago|h$/)).toBeInTheDocument();
+  });
+
   it("shows the whole line a shortened name was cut from on hover, but a name you gave as you gave it", () => {
     const line = 'Read the file "/Users/mac/Library/Application Support/x/state.json" and tell me why it is so big';
     const cut = session({ id: "s-cut", name: "Read the file x/state.json and tell me why it is so big", titleSource: line });

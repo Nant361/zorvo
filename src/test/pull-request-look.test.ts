@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import type { PullRequestStatus } from "../hooks/usePullRequest";
+import {
+  LOOK_STYLE,
+  pullRequestLabel,
+  pullRequestLine,
+  pullRequestLook,
+  pullRequestOnBranch,
+  sessionBranchOf,
+  type FolderPullRequests,
+} from "../lib/pull-request-look";
+import type { Session } from "../types";
+
+function pr(overrides: Partial<PullRequestStatus> = {}): PullRequestStatus {
+  return {
+    branch: "feat/row",
+    number: 250,
+    title: "Redesign the session row",
+    url: "https://github.com/o/r/pull/250",
+    state: "open",
+    isDraft: false,
+    checks: { passing: 0, failing: 0, pending: 0 },
+    ...overrides,
+  };
+}
+
+describe("pullRequestLook", () => {
+  it("reads each state as the artboard draws it", () => {
+    expect(pullRequestLook(pr())).toBe("open");
+    expect(pullRequestLook(pr({ isDraft: true }))).toBe("draft");
+    expect(pullRequestLook(pr({ checks: { passing: 3, failing: 2, pending: 0 } }))).toBe("failing");
+    expect(pullRequestLook(pr({ state: "merged", checks: { passing: 0, failing: 1, pending: 0 } }))).toBe("merged");
+    expect(pullRequestLook(pr({ state: "closed", isDraft: true }))).toBe("closed");
+  });
+
+  it("colours open green, failing red, merged with its token, draft and closed quietly", () => {
+    expect(LOOK_STYLE).toEqual({
+      open: "text-status-running",
+      failing: "text-danger",
+      merged: "text-status-merged",
+      draft: "text-fg-subtle",
+      closed: "text-fg-subtle",
+    });
+  });
+});
+
+describe("what the row says", () => {
+  it("names the number and the state for a screen reader", () => {
+    expect(pullRequestLabel(pr())).toBe("Pull request 250, open");
+    expect(pullRequestLabel(pr({ number: 244, checks: { passing: 3, failing: 2, pending: 0 } }))).toBe(
+      "Pull request 244, open, checks failing",
+    );
+    expect(pullRequestLabel(pr({ state: "merged" }))).toBe("Pull request 250, merged");
+  });
+
+  it("puts the state and the checks in one line", () => {
+    expect(pullRequestLine(pr({ checks: { passing: 3, failing: 2, pending: 0 } }))).toBe("Open · 2 of 5 checks failing");
+    expect(pullRequestLine(pr({ checks: { passing: 1, failing: 0, pending: 2 } }))).toBe("Open · 2 of 3 checks running");
+    expect(pullRequestLine(pr({ checks: { passing: 4, failing: 0, pending: 0 } }))).toBe("Open · checks passing");
+    expect(pullRequestLine(pr({ isDraft: true }))).toBe("Draft");
+    expect(pullRequestLine(pr({ state: "merged", checks: { passing: 4, failing: 0, pending: 0 } }))).toBe("Merged");
+  });
+});
+
+describe("which pull request a session shows", () => {
+  const session = (id: string, overrides: Partial<Session> = {}): Session => ({
+    id,
+    name: id,
+    profileId: "qwen",
+    cwd: "/w/zorvo",
+    status: "idle",
+    createdAt: 1,
+    transport: "acp",
+    ...overrides,
+  });
+  const folder: FolderPullRequests = { branch: "fix/main-checkout", pullRequests: [pr({ branch: "fix/main-checkout", number: 9 }), pr()] };
+
+  it("matches a worktree session by its own branch", () => {
+    const inWorktree = session("w", { worktree: { repoPath: "/w/zorvo", path: "/data/wt/row", branch: "feat/row" } });
+    expect(pullRequestOnBranch(folder, sessionBranchOf(inWorktree, folder, [inWorktree]))?.number).toBe(250);
+  });
+
+  it("gives the folder's checked-out branch only to the newest session there", () => {
+    const older = session("old", { createdAt: 1 });
+    const newer = session("new", { createdAt: 2 });
+    const all = [older, newer];
+    expect(sessionBranchOf(newer, folder, all)).toBe("fix/main-checkout");
+    expect(sessionBranchOf(older, folder, all)).toBeNull();
+    expect(pullRequestOnBranch(folder, sessionBranchOf(older, folder, all))).toBeNull();
+  });
+
+  it("has no pull request for a branch gh did not list", () => {
+    expect(pullRequestOnBranch(folder, "feat/unknown")).toBeNull();
+  });
+});

@@ -4,6 +4,7 @@ import { IconButton } from "./ui/IconButton";
 import { TOP_BAR_TRAFFIC_LIGHT_INSET_PX } from "./TopBar";
 import { isInUse, type EnabledSettings } from "../lib/enabled-agents";
 import type { AgentProfile, Session, Workspace } from "../types";
+import type { PullRequestStatus } from "../hooks/usePullRequest";
 import { FolderGroup } from "./sidebar/FolderGroup";
 import { SessionTree, type SessionListContext } from "./sidebar/SessionList";
 import { SidebarFilter } from "./sidebar/SidebarFilter";
@@ -40,6 +41,8 @@ export interface SidebarProps {
   defaultAgentId?: string;
   /** True while a session's agent is working on a turn. */
   isSessionBusy?: (sessionId: string) => boolean;
+  /** The pull request a session's row shows in place of its time. */
+  pullRequestOf?: (session: Session) => PullRequestStatus | null;
   /** True while a session's agent waits for the user to answer a permission request. */
   isSessionWaiting?: (sessionId: string) => boolean;
   /** Stops the agent's current turn; offered only while it works. */
@@ -131,6 +134,7 @@ export function Sidebar({
   onNewSessionIn,
   defaultAgentId,
   isSessionBusy = () => false,
+  pullRequestOf,
   isSessionWaiting = () => false,
   onStopSession,
   onDeleteSession,
@@ -201,6 +205,7 @@ export function Sidebar({
     onRenameSession,
     onPinSession,
     onArchiveSession,
+    pullRequestOf,
   };
 
   return (

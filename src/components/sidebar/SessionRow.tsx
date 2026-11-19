@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { GitBranch, ShieldCheck, Square } from "lucide-react";
+import { GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ShieldCheck, Square } from "lucide-react";
 import type { Session } from "../../types";
 import { SHOW_IN_ROW, rowSubtitle, rowTime, statusOf } from "../../lib/sidebar-status";
 import { AgentTile } from "../ui/AgentTile";
 import { IconButton } from "../ui/IconButton";
 import { RenameField } from "../ui/RenameField";
+import type { PullRequestStatus } from "../../hooks/usePullRequest";
+import { LOOK_STYLE, pullRequestLabel, pullRequestLine, pullRequestLook, type PullRequestLook } from "../../lib/pull-request-look";
 import type { SessionListContext } from "./SessionList";
 import { SessionMenu } from "./SessionMenu";
 
@@ -15,6 +17,30 @@ export interface SessionRowProps {
   context: SessionListContext;
   /** A row of a run's group: it shows the agent's name, since every session of a run shares one title. */
   isInRun?: boolean;
+}
+
+const LOOK_ICON: Record<PullRequestLook, typeof GitPullRequest> = {
+  open: GitPullRequest,
+  failing: GitPullRequest,
+  draft: GitPullRequestDraft,
+  merged: GitMerge,
+  closed: GitPullRequestClosed,
+};
+
+/** The row's pull request in the time's place: its state as an icon and a colour, and its number. */
+function PullRequestMark({ pullRequest }: { pullRequest: PullRequestStatus }) {
+  const look = pullRequestLook(pullRequest);
+  const Icon = LOOK_ICON[look];
+  return (
+    <span
+      role="img"
+      aria-label={pullRequestLabel(pullRequest)}
+      className={`flex shrink-0 items-center gap-[3px] font-mono text-caption ${LOOK_STYLE[look]} group-hover:hidden group-focus-within:hidden group-has-[[role=menu]]:hidden`}
+    >
+      <Icon size={11} aria-hidden="true" />
+      {pullRequest.number}
+    </span>
+  );
 }
 
 /** The title's colour and weight: the open row in fg at 500, an unread one at 500, the rest fg-secondary. */
@@ -42,6 +68,7 @@ export function SessionRow({ session, context, isInRun = false }: SessionRowProp
   // A run member's title already names the agent.
   const lineAgent = isInRun ? undefined : agentName;
   const time = rowTime(status, session.createdAt);
+  const pullRequest = context.pullRequestOf?.(session) ?? null;
   const isUnread = Boolean(session.hasUnread) && !isBusy;
   // How the session began, when the user did not start it: a fork or a delegated task.
   const origin = session.forkedFrom ? "fork" : session.delegatedFrom ? "delegated" : undefined;
@@ -108,6 +135,7 @@ export function SessionRow({ session, context, isInRun = false }: SessionRowProp
           session.namedByUser ? session.name : (session.titleSource ?? session.name),
           rowSubtitle(agentName, status, session.createdAt, Date.now(), session.privateMode !== undefined),
           session.worktree?.branch,
+          pullRequest && `#${pullRequest.number} ${pullRequest.title}, ${pullRequestLine(pullRequest)}`,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -119,10 +147,14 @@ export function SessionRow({ session, context, isInRun = false }: SessionRowProp
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className={`min-w-0 flex-1 truncate text-ui ${titleClass(isActive, isUnread)}`}>{label}</span>
-            {time && (
-              <span className="shrink-0 text-caption text-fg-subtle group-hover:hidden group-focus-within:hidden group-has-[[role=menu]]:hidden">
-                {time}
-              </span>
+            {pullRequest ? (
+              <PullRequestMark pullRequest={pullRequest} />
+            ) : (
+              time && (
+                <span className="shrink-0 text-caption text-fg-subtle group-hover:hidden group-focus-within:hidden group-has-[[role=menu]]:hidden">
+                  {time}
+                </span>
+              )
             )}
           </span>
           {/* fg-subtle at rest, fg-muted on the surface-hover fill. The status words never truncate. */}

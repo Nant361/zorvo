@@ -14,7 +14,7 @@ use tauri::State;
 
 use crate::env_resolver;
 use crate::files::ensure_known_workspace;
-use crate::git_info::branch_of;
+use crate::git_info::{branch_of, has_github_remote};
 use crate::store::AppStore;
 
 /// How a pull request's checks stand, counted.
@@ -72,14 +72,8 @@ fn check_bucket(check: &Value) -> Option<&'static str> {
     }
 }
 
-/// The first pull request in `gh pr list --json …` output, or None when the
-/// branch has none.
-pub fn parse_pull_request(listed: &str, branch: &str) -> Result<Option<PullRequestStatus>, String> {
-    let parsed: Value =
-        serde_json::from_str(listed).map_err(|e| format!("Unexpected answer from gh: {e}"))?;
-    let Some(pr) = parsed.as_array().and_then(|list| list.first()) else {
-        return Ok(None);
-    };
+/// One pull request of `gh pr list --json …` output, its checks counted, shown beside `branch`.
+fn pull_request_of(pr: &Value, branch: &str) -> PullRequestStatus {
     let mut checks = CheckCounts::default();
     for check in pr
         .get("statusCheckRollup")
@@ -100,7 +94,7 @@ pub fn parse_pull_request(listed: &str, branch: &str) -> Result<Option<PullReque
             .unwrap_or("")
             .to_string()
     };
-    Ok(Some(PullRequestStatus {
+    PullRequestStatus {
         branch: branch.to_string(),
         number: pr.get("number").and_then(Value::as_u64).unwrap_or(0),
         title: text("title"),
@@ -108,7 +102,35 @@ pub fn parse_pull_request(listed: &str, branch: &str) -> Result<Option<PullReque
         state: text("state").to_ascii_lowercase(),
         is_draft: pr.get("isDraft").and_then(Value::as_bool).unwrap_or(false),
         checks,
-    }))
+    }
+}
+
+/// The first pull request in `gh pr list --json …` output, or None when the
+/// branch has none.
+pub fn parse_pull_request(listed: &str, branch: &str) -> Result<Option<PullRequestStatus>, String> {
+    let parsed: Value =
+        serde_json::from_str(listed).map_err(|e| format!("Unexpected answer from gh: {e}"))?;
+    Ok(parsed
+        .as_array()
+        .and_then(|list| list.first())
+        .map(|pr| pull_request_of(pr, branch)))
+}
+
+/// Every pull request in `gh pr list --json …,headRefName,…` output, each shown
+/// beside its head branch; one without a head branch cannot be matched and is left out.
+pub fn parse_workspace_pull_requests(listed: &str) -> Result<Vec<PullRequestStatus>, String> {
+    let parsed: Value =
+        serde_json::from_str(listed).map_err(|e| format!("Unexpected answer from gh: {e}"))?;
+    let Some(list) = parsed.as_array() else {
+        return Err("Unexpected answer from gh: not a list".to_string());
+    };
+    Ok(list
+        .iter()
+        .filter_map(|pr| {
+            let branch = pr.get("headRefName").and_then(Value::as_str)?;
+            (!branch.is_empty()).then(|| pull_request_of(pr, branch))
+        })
+        .collect())
 }
 
 /// True for gh's answer about a repository that is not on GitHub: no remote
@@ -373,6 +395,62 @@ pub fn repo_pull_requests(
         .transpose()
 }
 
+/// The arguments `workspace_pull_requests` runs gh with: the 100 newest pull
+/// requests of every author and state, with their head branch and checks.
+pub const WORKSPACE_PULL_REQUEST_ARGS: [&str; 8] = [
+    "pr",
+    "list",
+    "--state",
+    "all",
+    "--limit",
+    "100",
+    "--json",
+    "number,title,url,state,isDraft,headRefName,statusCheckRollup",
+];
+
+/// A folder's pull requests for the sidebar, with the branch the folder has
+/// checked out, so a session there can be matched without a second call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspacePullRequests {
+    pub branch: Option<String>,
+    pub pull_requests: Vec<PullRequestStatus>,
+}
+
+/// The 100 newest pull requests of the repository at `dir`, newest first.
+pub fn list_workspace_pull_requests(
+    gh: &Path,
+    dir: &Path,
+) -> Result<Option<WorkspacePullRequests>, String> {
+    let args = WORKSPACE_PULL_REQUEST_ARGS.map(String::from);
+    let Some(listed) = run_gh(gh, dir, &args)? else {
+        return Ok(None);
+    };
+    Ok(Some(WorkspacePullRequests {
+        branch: branch_of(dir),
+        pull_requests: parse_workspace_pull_requests(&listed)?,
+    }))
+}
+
+/// The pull requests of a session folder's repository, one gh call for every
+/// session in it. None, and gh is never run, when the repository has no
+/// github.com remote or gh is not installed.
+#[tauri::command(async)]
+pub fn workspace_pull_requests(
+    store: State<'_, AppStore>,
+    path: String,
+) -> Result<Option<WorkspacePullRequests>, String> {
+    ensure_known_workspace(&path, |p| store.is_known_workspace(p))?;
+    let dir = Path::new(&path);
+    if !has_github_remote(dir) {
+        return Ok(None);
+    }
+    let Some(gh) = env_resolver::find_binary_in_user_path("gh") else {
+        return Ok(None);
+    };
+    list_workspace_pull_requests(&gh, dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,6 +581,68 @@ mod tests {
             run_gh(&failing, &dir, &[]).expect_err("a failure"),
             "gh auth login"
         );
+    }
+
+    /// Every argument gh is run with for the sidebar, as the fake gh received them.
+    #[cfg(unix)]
+    #[test]
+    fn runs_gh_with_exactly_the_sidebar_list_arguments() {
+        let out = std::env::temp_dir().join(format!("gh-args-{}.txt", std::process::id()));
+        let gh = fake_gh(
+            "workspace-args",
+            &format!("printf '%s\\n' \"$@\" > '{}'; echo '[]'", out.display()),
+        );
+
+        let listed = list_workspace_pull_requests(&gh, &std::env::temp_dir())
+            .expect("run")
+            .expect("on GitHub");
+
+        let args = std::fs::read_to_string(&out).expect("read args");
+        let _ = std::fs::remove_file(&out);
+        assert_eq!(
+            args.lines().collect::<Vec<_>>(),
+            [
+                "pr",
+                "list",
+                "--state",
+                "all",
+                "--limit",
+                "100",
+                "--json",
+                "number,title,url,state,isDraft,headRefName,statusCheckRollup",
+            ]
+        );
+        assert!(listed.pull_requests.is_empty());
+    }
+
+    #[test]
+    fn files_each_listed_pull_request_under_its_head_branch() {
+        let listed = r#"[
+            {"number":250,"title":"Session row","url":"https://github.com/o/r/pull/250","state":"OPEN","isDraft":false,
+             "headRefName":"feat/row","statusCheckRollup":[{"status":"COMPLETED","conclusion":"FAILURE"},{"state":"SUCCESS"}]},
+            {"number":248,"title":"Release","url":"https://github.com/o/r/pull/248","state":"MERGED","isDraft":false,"headRefName":"release/0.13.1"},
+            {"number":7,"title":"No head","url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false}]"#;
+
+        let list = parse_workspace_pull_requests(listed).expect("parse");
+
+        assert_eq!(
+            list.len(),
+            2,
+            "a pull request without a head branch cannot be matched"
+        );
+        assert_eq!(list[0].branch, "feat/row");
+        assert_eq!(list[0].number, 250);
+        assert_eq!(
+            list[0].checks,
+            CheckCounts {
+                passing: 1,
+                failing: 1,
+                pending: 0
+            }
+        );
+        assert_eq!(list[1].branch, "release/0.13.1");
+        assert_eq!(list[1].state, "merged");
+        assert!(parse_workspace_pull_requests("{}").is_err());
     }
 
     #[test]

@@ -46,6 +46,8 @@ import type { ReviewSlot } from "./hooks/useReviewMessage";
 import { useSecretGuard } from "./hooks/useSecretGuard";
 import { useTurnsEnded } from "./hooks/useTurnsEnded";
 import { usePullRequest } from "./hooks/usePullRequest";
+import { useWorkspacePullRequests } from "./hooks/useWorkspacePullRequests";
+import { pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
 import { currentPlan } from "./lib/plan";
 import { useRepoPullRequests } from "./hooks/useRepoPullRequests";
 import { useAgentSignIn } from "./hooks/useAgentSignIn";
@@ -67,6 +69,7 @@ import {
 import { isAwaitingUser } from "./lib/acp-elicitation";
 import {
   folderNameOf,
+  isArchived,
   isListed,
   isAutoName,
   workspacePathOf,
@@ -812,11 +815,29 @@ export default function App() {
   const [chatJump, setChatJump] = useState<{ messageId: string; nonce: number } | null>(null);
   // The diff view shows beside the chat, or in its place once expanded.
   const isDiffOpen = inspector.isDiffOpen && Boolean(filesFolder) && isRepository;
-  const pullRequest = usePullRequest(
-    isRepository ? shownFolderPath : undefined,
+  // Every session folder's pull requests, one gh call per folder, for the sidebar and the top bar.
+  const listedFolders = useMemo(
+    () => [...new Set(sessions.filter((session) => !isArchived(session)).map(workspacePathOf))],
+    [sessions],
+  );
+  const busyFolders = sessions.filter((session) => isSessionBusy(session.id)).map(workspacePathOf);
+  const folderPullRequests = useWorkspacePullRequests(listedFolders, github.status?.state === "signed-in", busyFolders);
+  const pullRequestOf = useCallback(
+    (session: Session) => {
+      const folder = folderPullRequests.get(workspacePathOf(session));
+      return folder ? pullRequestOnBranch(folder, sessionBranchOf(session, folder, sessions)) : null;
+    },
+    [folderPullRequests, sessions],
+  );
+  // The top bar reads the same list; its own call is only for a branch outside the 100 newest.
+  const shownFolder = activeSession ? folderPullRequests.get(workspacePathOf(activeSession)) : undefined;
+  const listedPullRequest = shownFolder ? pullRequestOnBranch(shownFolder, workspaceDetails?.branch ?? null) : null;
+  const ownPullRequest = usePullRequest(
+    isRepository && !listedPullRequest ? shownFolderPath : undefined,
     workspaceDetails?.branch ?? undefined,
     turnsEnded,
   );
+  const pullRequest = listedPullRequest ?? ownPullRequest;
   // Read only while the Changes panel shows them.
   const repoPullRequests = useRepoPullRequests(
     inspectorTab === "changes" ? filesFolder?.path : undefined,
@@ -1682,6 +1703,7 @@ export default function App() {
           onNewSessionIn={openNewSession}
           defaultAgentId={defaultAgentId ?? undefined}
           isSessionBusy={isSessionBusy}
+          pullRequestOf={pullRequestOf}
           isSessionWaiting={isSessionWaiting}
           onStopSession={handleInterrupt}
           onDeleteSession={sessionActions.deleteSession}
