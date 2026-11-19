@@ -14,6 +14,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ### Fixed
 
+- **OpenCode's connection is no longer listed as a background task.** Its internal stdio server and Zorvo's MCP bridge are part of the session connection. Commands the agent starts under them still appear as tasks.
 - **A link no longer opens inside Zorvo.** A right-click on a link showed the Mac's menu, whose Open Link loaded the page in Zorvo's own window with no way back. A right-click on a link now shows **Open in browser** and **Copy link**, and any page that still tries to load in Zorvo's window opens in your browser instead.
 - **An agent that does not stop can be ended.** Stop asks the agent to end its turn, and one waiting on a stuck tool never did. Ten seconds after Stop, the chat now offers **End agent**, which ends the agent's process, and with it any session forked from this one, since a fork shares it; you can continue them afterwards. A permission request that Stop answered no longer stays open in the chat.
 - **Ending an agent ends what it started.** Stopping or deleting a session ended only the program Zorvo started, so an agent that runs its real process under it (Qwen Code does) could keep running, with what it had started, until you killed it yourself.
