@@ -299,11 +299,19 @@ function launchForms(command: string): string[] {
   return [...new Set(each(forms, scriptOf).map(normalized).filter((form) => form !== ''))];
 }
 
+/** Each line without its comment: a word that starts with `#` and the rest of the line; a `#` inside a word stays. */
+function withoutComments(command: string): string {
+  return command
+    .split('\n')
+    .map((line) => line.replace(/(^|\s)#.*$/, ''))
+    .join('\n');
+}
+
 /** Whether a launch ran `command`, the scan's text for a process. */
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
   // Lines stay apart until the forms are made: a line break separates commands as `;` does.
-  const given = (tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+  const given = withoutComments((tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')).trim();
   return launchForms(given).some(
     (launched) => sameCommand(launched, command) || isExecOf(command, launched),
   );

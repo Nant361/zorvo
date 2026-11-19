@@ -269,6 +269,9 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("exec", "exec sleep 300", NOW - 60_000)))?.id).toBe("exec");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("both", "cd /tmp && exec sleep 300", NOW - 60_000)))?.id).toBe("both");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("or", "test -d /nope || sleep 300", NOW - 60_000)))?.id).toBe("or");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("c", "exec sleep 300 # keep alive", NOW - 60_000)))?.id).toBe("c");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("cl", "# start it\ncd /tmp # here\nsleep 300", NOW - 60_000)))?.id).toBe("cl");
+    expect(shellToolFor(process("curl http://x/#top", NOW - 59_000), one(launch("h", "curl http://x/#top", NOW - 60_000)))?.id).toBe("h");
   });
 
   it("matches a launch that redirects its output or runs in the background", () => {
