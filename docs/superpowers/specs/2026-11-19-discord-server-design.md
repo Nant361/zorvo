@@ -46,6 +46,11 @@ COMMUNITY
   #general        the existing #general, moved here
   Lounge          voice, renamed from General
 
+LEARN           the team shares; members can only react
+  #coding-agents      Claude Code, Codex, Qwen Code, prompting and AI
+  #web3-hackathons    web3 and lessons from hackathon projects
+  #articles-videos    articles and videos worth reading or watching
+
 ECOSYSTEM       Zorvolabs projects other than Zorvo; members reply, only Team starts a post
   #ecosystem      forum, one post per project
 
@@ -109,6 +114,7 @@ Per-category overwrites:
 |---|---|---|
 | START HERE | Deny Send Messages, Create Public Threads, Use Application Commands (so no bot posts there at a member's request) | Allow Send Messages |
 | COMMUNITY | Inherit | Inherit |
+| LEARN | Deny Send Messages, Create Public Threads, Send Messages in Threads and Use Application Commands, so members can only react | Allow Send Messages, Create Public Threads, Send Messages in Threads |
 | ECOSYSTEM | Deny Send Messages, so members cannot start a post but still reply in one (Send Messages in Threads) | Allow Send Messages |
 | SUPPORT | Inherit (can create posts and reply) | Inherit; Manage Threads applies moderated tags |
 | TEAM | Deny View Channel | Allow View Channel |
@@ -130,7 +136,7 @@ Community settings:
 | Description | Zorvo is a free, open-source Mac app that runs coding agents such as Claude Code, Codex and Qwen Code in one chat. |
 
 Onboarding:
-- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#ecosystem`, `#help`, `#bugs`, `#ideas`. Members cannot start a post in `#ecosystem`, so it does not count toward the 5 below. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
+- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#coding-agents`, `#web3-hackathons`, `#articles-videos`, `#ecosystem`, `#help`, `#bugs`, `#ideas`. Members cannot post in the LEARN channels or start a post in `#ecosystem`, so none of them count toward the 5 below. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
 - One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out", "I want to contribute" and "Just looking around", so someone who only wants to join has an honest answer too. Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
 - Rules screening on, with the rules below. A member cannot post until they accept.
 
@@ -248,3 +254,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - Ecosystem section added on request: an ECOSYSTEM category with the `#ecosystem` forum (one post per Zorvolabs project, started by Team), product tags in the three support forums (none yet), a line in `#welcome` and `#ecosystem` among Onboarding's default channels.
 - Roles made by hand are left alone: the scripts keep any category overwrite for a role the spec does not know and reorder roles only when the spec's own roles are out of order. Member is shown apart, as the maintainer set it.
 - Product tags dropped before any were added: 20 projects do not fit Discord's 20-tag limit per forum. Project questions go in the project's own `#ecosystem` post. `#ecosystem` holds 20 posts, oldest first, sorted by creation date, each tagged Hackathon.
+- LEARN category added on request, below COMMUNITY: three ordinary text channels (`#coding-agents`, `#web3-hackathons`, `#articles-videos`) where the team shares and members can only react, with no messages and no threads. All three are among Onboarding's default channels.
