@@ -4,6 +4,8 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-19
+
 ### Changed
 
 - **Agents can show a page without being asked.** When an answer is better seen than read, such as a report, a comparison, a chart or a diagram, the agent is now told it can show it as a page beside the chat. Whether it does is still the agent's choice: Qwen Code now shows a diagram as a page on its own.
@@ -403,7 +405,8 @@ Tagged but never published; its fix shipped in 0.11.2.
 
 - Approval safety, terminal handling, the stream parser and working folders. ([#1])
 
-[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.1...v0.11.2
