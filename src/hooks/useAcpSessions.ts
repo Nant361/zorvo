@@ -458,6 +458,9 @@ export function useAcpSessions(handlers: AcpHandlers) {
     [patch],
   );
 
+  /** Ends the agent process the session runs on; each session on it then gets `exit`. */
+  const endAgent = useCallback((sessionId: string) => invoke<void>('acp_end_agent', { sessionId }), []);
+
   const stop = useCallback((sessionId: string) => {
     knownRef.current.delete(sessionId);
     earlyCommandsRef.current.delete(sessionId);
@@ -489,6 +492,7 @@ export function useAcpSessions(handlers: AcpHandlers) {
     setModel,
     setConfigOption,
     stop,
+    endAgent,
     isBusy,
     busySinceOf,
     canFork,

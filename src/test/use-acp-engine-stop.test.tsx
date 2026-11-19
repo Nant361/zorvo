@@ -54,7 +54,7 @@ function renderEngine() {
       onAuthRequired: () => {},
     }),
   );
-  return { ...hook, session: () => sessions[0] };
+  return { ...hook, session: () => sessions[0], messages: () => messages };
 }
 
 async function startTurn(engine: ReturnType<typeof renderEngine>) {
@@ -91,7 +91,7 @@ describe("useAcpEngine when Stop is pressed", () => {
     expect(engine.result.current.stopAskedAt("s-1")).toBe(1_000);
   });
 
-  it("ends the agent's process and the session for a Stop the agent ignored", async () => {
+  it("ends the agent's process, and the exit it causes ends the session", async () => {
     const spy = vi.spyOn(tauriInternals(), "invoke");
     const engine = renderEngine();
     await startTurn(engine);
@@ -101,11 +101,32 @@ describe("useAcpEngine when Stop is pressed", () => {
     await act(async () => {
       ended = await engine.result.current.endAgent("s-1");
     });
-
     expect(ended).toBe(true);
-    expect(spy.mock.calls.filter(([cmd]) => cmd === "acp_stop_session").map(([, args]) => args)).toEqual([{ sessionId: "s-1" }]);
+    // The whole process goes, not this session's route: a native fork shares it.
+    expect(spy.mock.calls.filter(([cmd]) => cmd === "acp_end_agent").map(([, args]) => args)).toEqual([{ sessionId: "s-1" }]);
+    expect(spy.mock.calls.some(([cmd]) => cmd === "acp_stop_session")).toBe(false);
+
+    await emit({ kind: "exit", code: null });
     expect(engine.session().status).toBe("terminated");
-    expect(engine.result.current.isBusy("s-1")).toBe(false);
     expect(engine.result.current.stopAskedAt("s-1")).toBeUndefined();
+  });
+
+  it("settles a permission card once Stop has answered it, so End agent can show", async () => {
+    const engine = renderEngine();
+    await startTurn(engine);
+    await emit({
+      kind: "permission",
+      requestId: 7,
+      toolCall: { title: "Delete build" },
+      options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+    });
+    const pending = () => engine.messages().filter((m) => m.actionCard?.status === "pending");
+    expect(pending()).toHaveLength(1);
+
+    await act(async () => {
+      engine.result.current.interrupt("s-1", engine.messages());
+    });
+
+    await waitFor(() => expect(pending()).toHaveLength(0));
   });
 });

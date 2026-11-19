@@ -622,6 +622,7 @@ pub fn run() {
             acp::commands::acp_cancel_terminal_sign_in,
             acp::commands::acp_prompt,
             acp::commands::acp_cancel,
+            acp::commands::acp_end_agent,
             acp::commands::acp_respond_permission,
             acp::commands::acp_respond_elicitation,
             acp::commands::acp_reopen_elicitation_url,

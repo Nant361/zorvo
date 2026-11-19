@@ -10,6 +10,7 @@ import {
   reopenPermissionCard,
   resolvePermissionCard,
   settlePermissionCards,
+  cancelPermissionCard,
   type PermissionRequestPayload,
 } from '../../lib/acp-events';
 import { changesToApply, NO_CHOICES, type AcpChange, type AcpChoices, type AgentOptions } from '../../lib/acp-draft';
@@ -795,11 +796,15 @@ export function useAcpEngine({
     setStopAsked((prev) => (sessionId in prev ? prev : { ...prev, [sessionId]: Date.now() }));
     for (const card of pendingCardsInTurn(messages ?? [])) {
       if (card.requestId === undefined) continue;
-      acp.respondPermission(sessionId, card.requestId, null).catch((error: unknown) => {
-        // An agent that is gone waits on nothing: the card is settled, and the backend's wording (with the session id) stays out of the notice.
-        if (isSessionGoneError(error)) updateNow(sessionId, settlePermissionCards);
-        else reportFailure('Could not answer the agent')(error);
-      });
+      acp.respondPermission(sessionId, card.requestId, null).then(
+        // Answered: the agent no longer waits on it, so the chat stops waiting on the user too.
+        () => updateNow(sessionId, (prev) => cancelPermissionCard(prev, card.id)),
+        (error: unknown) => {
+          // An agent that is gone waits on nothing: the card is settled, and the backend's wording (with the session id) stays out of the notice.
+          if (isSessionGoneError(error)) updateNow(sessionId, settlePermissionCards);
+          else reportFailure('Could not answer the agent')(error);
+        },
+      );
     }
     // The backend answers the open elicitations as cancelled and names them; one that comes after stays open.
     elicitations.forget(sessionId);
@@ -811,16 +816,19 @@ export function useAcpEngine({
 
   /**
    * Ends the agent's process for a Stop it did not act on (it waits on a stuck
-   * tool before it ends the turn). The session reads ended, like one whose agent
-   * exited, and is continued the same way. Resolves with whether it ended.
+   * tool before it ends the turn). The process goes whatever other session
+   * shares it (a native fork lives in its source's), and each session on it
+   * gets the agent's `exit`, so it reads ended and is continued the usual way.
+   * Resolves with whether the process was ended.
    */
-  const endAgent = async (sessionId: string): Promise<boolean> => {
-    if (!(await stop(sessionId))) return false;
-    updateNow(sessionId, closeTurn);
-    saveSoon?.(sessionId);
-    patchSession(sessionId, { status: 'terminated', endedAt: Date.now() });
-    return true;
-  };
+  const endAgent = (sessionId: string): Promise<boolean> =>
+    acp.endAgent(sessionId).then(
+      () => true,
+      (error: unknown) => {
+        reportFailure('Could not end the agent')(error);
+        return false;
+      },
+    );
 
   const setMode = (sessionId: string, modeId: string) => {
     // Read now, not once the change lands: a request asked meanwhile is in the new mode.

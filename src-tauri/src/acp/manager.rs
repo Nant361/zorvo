@@ -676,6 +676,17 @@ impl AcpManager {
         self.detach(app_session_id).end();
     }
 
+    /// Ends the agent process `app_session_id` runs on, whatever other
+    /// session shares it (a native fork lives in its source's process), and
+    /// everything that process started. For an agent that does not act on
+    /// `session/cancel`. Every session on it then gets `Exited`, as when an
+    /// agent dies, so each reads ended and is continued the usual way.
+    pub fn end_agent(&self, app_session_id: &str) -> Result<(), String> {
+        let (connection, _) = self.connection_for(app_session_id)?;
+        connection.kill();
+        Ok(())
+    }
+
     /// The first half of `stop`: takes the session off the routes at once, so
     /// a session started under the same id from now on is a new one, and
     /// returns what is left to end it. The orphan sweep detaches the sessions

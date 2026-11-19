@@ -736,6 +736,13 @@ pub fn acp_cancel(
     manager.cancel(&session_id)
 }
 
+/// Ends the agent process a session runs on, for a Stop it does not act on;
+/// every session on that process gets the usual `exit` event.
+#[tauri::command(async)]
+pub fn acp_end_agent(manager: State<'_, AcpManager>, session_id: String) -> Result<(), String> {
+    manager.end_agent(&session_id)
+}
+
 /// Answers a permission request with one of the agent's options (`None` cancels it).
 /// `answers` is only for Qwen Code's `ask_user_question`: question number to answer,
 /// checked in `permission_response` and never logged.

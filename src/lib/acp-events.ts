@@ -482,6 +482,15 @@ export function settlePermissionCards(messages: ChatMessage[]): ChatMessage[] {
   });
 }
 
+/** Settles one card whose request was answered as cancelled (Stop): it reads unanswered. */
+export function cancelPermissionCard(messages: ChatMessage[], cardId: string): ChatMessage[] {
+  return messages.map((message) => {
+    const card = message.actionCard;
+    if (card?.id !== cardId || card.status !== 'pending') return message;
+    return { ...message, actionCard: { ...card, status: 'rejected' as const, chosenOptionId: undefined } };
+  });
+}
+
 /** Records the option the user picked on a permission card. */
 export function resolvePermissionCard(
   messages: ChatMessage[],
