@@ -5,7 +5,7 @@ import type { AuthMethod } from '../lib/acp-auth';
 import { createId } from '../lib/ids';
 import { NO_CHOICES, withPreferred, type AgentOptions } from '../lib/acp-draft';
 import { attachmentsFor, createSessionWorktree } from '../lib/session-worktree';
-import { titleFor, type SessionSpec, type StartSessionOptions } from '../lib/session-start';
+import { namingFor, type SessionSpec, type StartSessionOptions } from '../lib/session-start';
 import {
   compareRuns,
   isRunSettled,
@@ -160,7 +160,8 @@ export function useCompareRun(deps: CompareRunDeps) {
     const notices: string[] = [];
     let hasStartedSession = false;
     try {
-      const name = titleFor(first);
+      const naming = namingFor(first);
+      const { name } = naming;
       const { made, failures } = await makeWorktrees(agents, deps, name);
       notices.push(...failures);
       const ready: Array<Prepared & { message: FirstMessage }> = [];
@@ -186,7 +187,7 @@ export function useCompareRun(deps: CompareRunDeps) {
       const startedAt = Date.now();
       for (const [index, { agent, worktree, cwd, message }] of ready.entries()) {
         deps.startSession(
-          { agent, cwd, name, worktree, createdAt: startedAt + index, ...(runId ? { compareRunId: runId } : {}) },
+          { agent, cwd, ...naming, worktree, createdAt: startedAt + index, ...(runId ? { compareRunId: runId } : {}) },
           message,
           {
             choices: withPreferred(NO_CHOICES, deps.agentOptions?.[agent.id]),

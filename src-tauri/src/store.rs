@@ -246,6 +246,13 @@ pub struct SessionRecord {
         skip_serializing_if = "Option::is_none"
     )]
     pub private_usage: Option<PrivateUsageRecord>,
+    /// The whole line Zorvo cut the session's name from, shown when the pointer rests on the
+    /// name; kept only when the name shortened it.
+    #[serde(
+        deserialize_with = "lenient_string",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub title_source: Option<String>,
 }
 
 /// What a saved Zorvo Private session remembers about its privacy mode.
@@ -1088,6 +1095,24 @@ mod tests {
 
         let mode = record.private_mode.expect("still private");
         assert_eq!(mode.session_cap, None);
+    }
+
+    #[test]
+    fn a_title_source_round_trips_and_a_malformed_one_is_dropped() {
+        let line = "Read the file \"/Users/mac/Library/Application Support/x/state.json\" please";
+        let record: SessionRecord =
+            serde_json::from_value(session_json(serde_json::json!({ "titleSource": line })))
+                .expect("deserialize");
+        assert_eq!(record.title_source.as_deref(), Some(line));
+        let saved = serde_json::to_value(&record).expect("serialize");
+        assert_eq!(saved["titleSource"], line);
+
+        let malformed: SessionRecord =
+            serde_json::from_value(session_json(serde_json::json!({ "titleSource": 42 })))
+                .expect("a bad field never drops the session");
+        assert_eq!(malformed.title_source, None);
+        let saved = serde_json::to_value(&malformed).expect("serialize");
+        assert!(saved.get("titleSource").is_none());
     }
 
     #[test]

@@ -59,7 +59,7 @@ import { sweepOrphans } from "./lib/orphan-sweep";
 import {
   isWaitingForAnswer,
   newSessionRecord,
-  titleFor,
+  namingFor,
   type SessionSpec,
   type StartSessionOptions,
 } from "./lib/session-start";
@@ -922,7 +922,10 @@ export default function App() {
     const sessionPrivateMode = privateMode
       ? { ...privateMode, ...(state.settings.paymentSource === "ownKey" ? { ownKey: true } : {}) }
       : undefined;
-    const name = first ? titleFor(first) : nextSessionName(sessions);
+    const naming = first
+      ? namingFor(first, { agentName: newSessionAgent.name, folderName: activeWorkspace.name })
+      : { name: nextSessionName(sessions) };
+    const { name } = naming;
     let worktree: SessionWorktree | null = null;
     let cwd = activeWorkspace.path;
     let message = first;
@@ -954,7 +957,7 @@ export default function App() {
     }
     setPickedAgentId(null);
     compare.reset();
-    startSession({ agent: newSessionAgent, cwd, name, worktree, privateMode: sessionPrivateMode }, message);
+    startSession({ agent: newSessionAgent, cwd, ...naming, worktree, privateMode: sessionPrivateMode }, message);
     // The base was this session's: the next draft starts from the folder's own branch.
     if (worktree) branchPicker.reset();
   };
@@ -1223,7 +1226,9 @@ export default function App() {
     const isFirstMessage = !(transcripts[sessionId]?.some((m) => m.role === "user") ?? false);
     const sent = await acp.send(sessionId, message.text, message.attachments);
     if (sent && session && isFirstMessage && isAutoName(session.name) && !session.namedByUser) {
-      patchSession(sessionId, { name: titleFor(message) });
+      const agentName = agents.find((agent) => agent.id === session.profileId)?.name;
+      const place = agentName ? { agentName, folderName: folderNameOf(workspacePathOf(session)) } : undefined;
+      patchSession(sessionId, { titleSource: undefined, ...namingFor(message, place) });
     }
     return sent;
   };

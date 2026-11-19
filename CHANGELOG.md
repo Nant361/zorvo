@@ -7,6 +7,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 ### Changed
 
 - **A calmer chat.** A reply no longer lights up under the pointer, and the chat is wider (720px) with more room between messages and lines. Your messages sit in a soft fill without an edge, a permission request is a plain card with a thin amber edge and its files listed without a box, and the message box lost its shadow; its chips fill only when you point at them.
+- **Shorter, clearer session names.** A name made from your first message turns a GitHub link into `owner/repo`, any other link into its site and a long file path into its last two parts, and is cut near 60 characters instead of 48. A first message that is only a command, like `/init`, names the session after its agent and folder until the agent sends a title. Resting the pointer on a shortened name shows the whole line. Names you gave stay as they are.
 - **Smooth motion.** Menus and popovers open with a short fade from their button, the inspector fades in, and a new message or permission request fades in once. Hover and colour changes take 120ms everywhere. With Reduce motion on in macOS, nothing moves.
 
 ### Fixed

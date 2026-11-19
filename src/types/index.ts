@@ -160,6 +160,8 @@ export interface Session {
   hasUnread?: boolean;
   /** The session was imported where the agent kept it, so its earlier messages are not shown here. */
   historyElsewhere?: boolean;
+  /** The whole line Zorvo cut `name` from, shown on hover; set only when the name shortened it. */
+  titleSource?: string;
   /** The compare run this session belongs to, when it was started from one. */
   compareRunId?: string | null;
   /** The session this one was delegated from; absent when the user started it themselves. */

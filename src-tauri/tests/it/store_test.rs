@@ -79,6 +79,7 @@ fn session(id: &str, status: &str) -> SessionRecord {
         artifact_comments: Vec::new(),
         private_mode: None,
         private_usage: None,
+        title_source: None,
     }
 }
 

@@ -155,6 +155,14 @@ describe("normalizePersistedState", () => {
     expect(state.sessions[0].worktree).not.toHaveProperty("startCommit");
   });
 
+  it("keeps the line a name was cut from, and drops one that is not a string", () => {
+    const kept = normalizePersistedState({ sessions: [{ ...base, titleSource: "the whole first line" }] });
+    expect(kept.sessions[0].titleSource).toBe("the whole first line");
+    const dropped = normalizePersistedState({ sessions: [{ ...base, titleSource: 7 }] });
+    expect(dropped.sessions).toHaveLength(1);
+    expect(dropped.sessions[0]).not.toHaveProperty("titleSource");
+  });
+
   it("keeps a true historyElsewhere flag", () => {
     const state = normalizePersistedState({ sessions: [{ ...base, historyElsewhere: true }] });
 

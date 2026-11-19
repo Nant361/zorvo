@@ -18,7 +18,7 @@ export function nextSessionName(sessions: readonly Pick<Session, 'name'>[]): str
   return `Session #${highest + 1}`;
 }
 
-const MAX_TITLE_LENGTH = 48;
+const MAX_TITLE_LENGTH = 60;
 const AUTO_NAME = /^Session #\d+$/;
 
 /** True for a numbered placeholder name, which the first message replaces. */
@@ -26,14 +26,66 @@ export function isAutoName(name: string): boolean {
   return AUTO_NAME.test(name);
 }
 
-/** A session title from the user's prompt: its first line, cut at a word boundary. */
+/** The rest of a link after the part a title keeps, without the punctuation that ends a sentence. */
+const LINK_REST = String.raw`(?:[^\s"'<>]*[^\s"'<>.,;:!?)])?`;
+/**
+ * `github.com/<owner>/<repo>`, with or without a scheme, but not inside another host (`api.github.com`);
+ * a repository's dots sit between word characters.
+ */
+const GITHUB_LINK = new RegExp(
+  String.raw`(?<![\w.-])(?:https?:\/\/)?(?:www\.)?github\.com\/([\w-]+(?:\.[\w-]+)*)\/([\w-]+(?:\.[\w-]+)*)` + LINK_REST,
+  'gi',
+);
+/** Any other web link: its host, without `www.` or a port. */
+const WEB_LINK = new RegExp(String.raw`\bhttps?:\/\/(?:www\.)?([^\s\/?#:"'<>]+)(?::\d+)?` + LINK_REST, 'gi');
+/** A Mac path in quotes, which may hold spaces ("Application Support"). */
+const QUOTED_PATH = /(["'])((?:~\/|\/)[^"'\n]+)\1/g;
+/** A Mac path as one word, from the start of the line or after a space. */
+const BARE_PATH = /(^|\s)((?:~\/|\/)[^\s"']+?)(?=[.,;:!?)]*(?:\s|$))/g;
+
+/** A path's last two parts when it has more than two, else the path as written. */
+function lastTwoParts(path: string): string {
+  const parts = path.split('/').filter((part) => part !== '' && part !== '~');
+  return parts.length > 2 ? parts.slice(-2).join('/') : path;
+}
+
+/** Links and long paths shortened to the part a reader knows them by. */
+function tidied(line: string): string {
+  return line
+    .replace(GITHUB_LINK, (_, owner: string, repo: string) => `${owner}/${repo.replace(/\.git$/i, '')}`)
+    .replace(WEB_LINK, (_, host: string) => host)
+    .replace(QUOTED_PATH, (whole, _quote: string, path: string) => {
+      const short = lastTwoParts(path);
+      return short === path ? whole : short;
+    })
+    .replace(BARE_PATH, (_, before: string, path: string) => `${before}${lastTwoParts(path)}`);
+}
+
+/** True when a message is only a slash command (`/init`, `/review src`), which says nothing a title could use. */
+export function isCommandOnly(text: string): boolean {
+  return /^\/[\w:-]+(?:[ \t][^\n]*)?$/.test(text.trim());
+}
+
+/**
+ * A session title from the user's prompt: its first line, with a GitHub link as `owner/repo`, any other
+ * link as its site and a long path as its last two parts, cut at a word boundary.
+ */
 export function titleFromPrompt(prompt: string): string {
-  const firstLine = prompt.trim().split('\n')[0].replace(/\s+/g, ' ').trim();
+  const firstLine = tidied(prompt.trim().split('\n')[0].replace(/\s+/g, ' ').trim());
   if (!firstLine) return 'New session';
   if (firstLine.length <= MAX_TITLE_LENGTH) return firstLine;
   const cut = firstLine.slice(0, MAX_TITLE_LENGTH + 1);
   const lastSpace = cut.lastIndexOf(' ');
   return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : firstLine.slice(0, MAX_TITLE_LENGTH)).trimEnd()}…`;
+}
+
+/** A title's whole line can be long; the hover keeps this much of it. */
+const MAX_TITLE_SOURCE = 500;
+
+/** The whole first line a title was made from, for its hover, when the title shortened it. */
+export function titleSourceFor(text: string, title: string): string | undefined {
+  const line = text.trim().split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_SOURCE);
+  return line !== '' && line !== title ? line : undefined;
 }
 
 export function patchSessionIn(

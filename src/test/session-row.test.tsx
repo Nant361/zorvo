@@ -52,6 +52,18 @@ const openMenu = (name: string) => fireEvent.click(screen.getByRole("button", { 
 afterEach(() => vi.useRealTimers());
 
 describe("SessionRow", () => {
+  it("shows the whole line a shortened name was cut from on hover, but a name you gave as you gave it", () => {
+    const line = 'Read the file "/Users/mac/Library/Application Support/x/state.json" and tell me why it is so big';
+    const cut = session({ id: "s-cut", name: "Read the file x/state.json and tell me why it is so big", titleSource: line });
+    const { row, unmount } = renderRow(cut);
+    expect(within(row).getByText(cut.name).closest("button")?.title.startsWith(`${line} · `)).toBe(true);
+    unmount();
+
+    const renamed = session({ id: "s-named", name: "State size", titleSource: line, namedByUser: true });
+    const named = renderRow(renamed);
+    expect(within(named.row).getByText("State size").closest("button")?.title.startsWith("State size · ")).toBe(true);
+  });
+
   it("shows the agent and the status in words on its second line", () => {
     const busy = session({ id: "s-busy" });
     const { row } = renderRow(busy, { isSessionBusy: () => true, onStopSession: vi.fn() });

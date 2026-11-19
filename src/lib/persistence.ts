@@ -128,7 +128,7 @@ function withValidStartCommit(worktree: SessionWorktree): SessionWorktree {
 
 /** A session keeps everything else when one of its optional fields is malformed. */
 function withValidFields(session: Session): Session {
-  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
+  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, titleSource, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
   const comments = validReviewComments(reviewComments);
   const pageComments = validArtifactComments(artifactComments);
   const usage = toPrivateUsage(privateUsage);
@@ -141,6 +141,7 @@ function withValidFields(session: Session): Session {
     ...(typeof namedByUser === 'boolean' ? { namedByUser } : {}),
     ...(typeof hasUnread === 'boolean' ? { hasUnread } : {}),
     ...(typeof historyElsewhere === 'boolean' ? { historyElsewhere } : {}),
+    ...(typeof titleSource === 'string' && titleSource !== '' ? { titleSource } : {}),
     ...(compareRunId == null || typeof compareRunId === 'string' ? { compareRunId } : {}),
     ...(delegatedFrom === null || isDelegationLink(delegatedFrom) ? { delegatedFrom } : {}),
     ...(isOpenedByLink(openedBy) ? { openedBy: withValidHandle(openedBy) } : {}),
