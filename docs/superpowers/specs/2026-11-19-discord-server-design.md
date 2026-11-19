@@ -31,6 +31,7 @@ Success: a new member lands in a clear `#welcome`, can ask for help, report a bu
 | Jockie Music | Stays, keeps Administrator | The maintainer's choice. Accepted risk: Administrator ignores channel denies, so Jockie can read the TEAM category |
 | Team role holders | Only the maintainer (`933427452439564330`) for now | Chosen in chat |
 | Founder role | A label for the maintainer only, no permissions | Shows new members who is behind Zorvo; permissions stay with Team |
+| Member role | Given to every community member through one required Onboarding question; no permissions | Chosen in chat; members get an identity, and the answers show who the community is |
 | Role colours | From the Tailwind palette (as shown on shadcn's colors page) | Chosen in chat; the brand itself has no accent colour |
 
 ## Channels
@@ -77,15 +78,16 @@ Discord forums have no form templates; the post guidelines text is what a poster
 
 ## Roles and permissions
 
-Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Contributor, `@everyone`.
+Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Contributor, Member, `@everyone`.
 
 | Role | Holders | Colour | Shown apart | Permissions |
 |---|---|---|---|---|
 | Founder | The maintainer only | amber-600 `#D97706` | Yes | None. The server owner already has every permission, and moderation comes from Team. A label, not a permission set. |
 | Team | Granted by hand; the maintainer too | blue-500 `#3B82F6` | Yes | View the TEAM category; Manage Messages, Manage Threads, Timeout Members, Kick Members, View Audit Log, Mention @everyone. No Administrator. |
 | Contributor | Granted by hand to people with a merged pull request | green-600 `#16A34A` | Yes | None. Colour and a member list group, as recognition. |
+| Member | Everyone who answers the Onboarding question; given by the bot to members who joined before it | cyan-600 `#0891B2` | No, so Founder and Team stay the groups that stand out | None. What members can do stays with `@everyone` and rules screening. |
 
-Role names are drawn on Discord's dark (`#313338`) and light (`#FFFFFF`) themes alike, so each colour is picked for at least 3:1 on both, measured: amber-600 3.97 and 3.19, blue-500 3.44 and 3.68, green-600 3.84 and 3.30. No single colour reaches 4.5:1 on both backgrounds (it would need a relative luminance at once below 0.18 and above 0.32), so 3:1 on both is the ceiling. The name next to the colour still reads at full contrast in the member list and on messages, since Discord draws the message text itself in the theme's text colour. A role icon needs boost level 2 and is out of scope.
+Role names are drawn on Discord's dark (`#313338`) and light (`#FFFFFF`) themes alike, so each colour is picked for at least 3:1 on both, measured: amber-600 3.97 and 3.19, blue-500 3.44 and 3.68, green-600 3.84 and 3.30, cyan-600 3.43 and 3.68. No single colour reaches 4.5:1 on both backgrounds (it would need a relative luminance at once below 0.18 and above 0.32), so 3:1 on both is the ceiling. The name next to the colour still reads at full contrast in the member list and on messages, since Discord draws the message text itself in the theme's text colour. A role icon needs boost level 2 and is out of scope.
 
 Server-wide `@everyone`: View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Embed Links, Attach Files, Add Reactions, Read Message History, Connect, Speak, Use Voice Activity. Off: Mention @everyone/@here/all roles, Manage Channels, Manage Roles, Manage Webhooks, Create Private Threads.
 
@@ -116,7 +118,7 @@ Community settings:
 
 Onboarding:
 - Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#help`, `#bugs`, `#ideas`. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
-- No customisation questions yet. There are no optional channels or roles to choose between.
+- One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out" and "I want to contribute". Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
 - Rules screening on, with the rules below. A member cannot post until they accept.
 
 Rules (shown in screening and in `#welcome`):
@@ -227,3 +229,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 
 - The two OpenAI and Anthropic key patterns start with `\b`. Without it they matched hyphenated words such as `fix/task-tabs-for-background-subagents`, so AutoMod blocked ordinary messages about branches and files.
 - START HERE also denies `@everyone` Use Application Commands, so a member cannot make a bot (Jockie has Administrator) answer a slash command in a read-only channel.
+- Member role added on request: cyan-600, no permissions, not shown apart, lowest human role, given through the Onboarding question above. The one human member who joined before it got it from the bot.
