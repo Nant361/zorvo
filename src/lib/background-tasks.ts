@@ -1,4 +1,4 @@
-import { openReplyIndex } from './acp-events';
+import { runningTurnReplyIndexes } from './acp-events';
 import type { ChatMessage, Session, ToolExecution } from '../types';
 
 /** What a background row stands for. */
@@ -56,10 +56,10 @@ function toolKind(tool: ToolExecution): 'shell' | 'subagent' | undefined {
 }
 
 /**
- * The running tool calls in each session's open reply. A finished reply keeps a
- * running tool in the transcript (`closeTurn` leaves it alone), so scanning
- * older messages would keep a row after its turn ended. A command that outlives
- * its turn shows through its process instead.
+ * The running tool calls in each session's running turn. Every reply of the turn counts: an
+ * answered permission request closes its reply, and a subagent it holds keeps working there. A
+ * finished turn keeps a running tool in the transcript (`closeTurn` leaves it alone), so older
+ * turns are not scanned. A command that outlives its turn shows through its process instead.
  */
 export function runningToolTasks(
   transcripts: Readonly<Record<string, readonly ChatMessage[]>>,
@@ -67,24 +67,25 @@ export function runningToolTasks(
 ): BackgroundTask[] {
   return sessions.flatMap((session) => {
     const messages = transcripts[session.id] ?? [];
-    const index = openReplyIndex(messages);
-    if (index < 0) return [];
-    const message = messages[index];
-    return (message.tools ?? []).flatMap((tool): BackgroundTask[] => {
-      const kind = toolKind(tool);
-      if (tool.status !== 'running' || !kind) return [];
-      return [
-        {
-          id: `tool:${session.id}:${tool.id}`,
-          kind,
-          name: tool.name,
-          detail: session.name,
-          status: 'Running',
-          startedAt: tool.startedAt ?? message.timestamp,
-          sessionId: session.id,
-        },
-      ];
-    });
+    return runningTurnReplyIndexes(messages).reverse().flatMap((index) => toolTasksOf(session, messages[index]));
+  });
+}
+
+function toolTasksOf(session: Session, message: ChatMessage): BackgroundTask[] {
+  return (message.tools ?? []).flatMap((tool): BackgroundTask[] => {
+    const kind = toolKind(tool);
+    if (tool.status !== 'running' || !kind) return [];
+    return [
+      {
+        id: `tool:${session.id}:${tool.id}`,
+        kind,
+        name: tool.name,
+        detail: session.name,
+        status: 'Running',
+        startedAt: tool.startedAt ?? message.timestamp,
+        sessionId: session.id,
+      },
+    ];
   });
 }
 
@@ -171,6 +172,57 @@ export function backgroundTasksOf(input: BackgroundTasksInput): BackgroundTask[]
   const toolTasks = dedupeToolTasks(runningToolTasks(transcripts, sessions), processTasks);
 
   return [...sessionTasks, ...processTasks, ...toolTasks].sort((a, b) => a.startedAt - b.startedAt);
+}
+
+const TOOL_TASK_PREFIX = 'tool:';
+
+/** The tool call a tool row stands for, from its id (`tool:<session>:<tool>`). */
+function toolIdOf(task: BackgroundTask): string | undefined {
+  const prefix = `${TOOL_TASK_PREFIX}${task.sessionId}:`;
+  return task.id.startsWith(prefix) ? task.id.slice(prefix.length) : undefined;
+}
+
+/**
+ * The tool call a shell task's output comes from: a tool row's own, or for a process the newest
+ * command of its session that names the same work. A process nothing matches has none.
+ */
+export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessage[]): ToolExecution | undefined {
+  const tools = messages.flatMap((message) => message.tools ?? []);
+  const ownId = toolIdOf(task);
+  if (ownId !== undefined) return tools.find((tool) => tool.id === ownId);
+  const command = normalized(task.name);
+  // An empty command is contained in every title, so it names no work.
+  if (command === '') return undefined;
+  return [...tools].reverse().find((tool) => {
+    if (tool.kind !== 'execute') return false;
+    const title = normalized(tool.command ?? tool.name);
+    return title !== '' && (title.includes(command) || command.includes(title));
+  });
+}
+
+/**
+ * The shell task a tab was opened for. A command first shows as its running tool call and then as
+ * its process, under another id, so a tab opened on the tool row follows it to the process.
+ */
+export function findShellTask(
+  tasks: readonly BackgroundTask[],
+  taskId: string,
+  transcripts: Readonly<Record<string, readonly ChatMessage[]>>,
+): BackgroundTask | undefined {
+  const shells = tasks.filter((task) => task.kind === 'shell');
+  const exact = shells.find((task) => task.id === taskId);
+  if (exact || !taskId.startsWith(TOOL_TASK_PREFIX)) return exact;
+  return shells.find((task) => {
+    const tool = task.pid === undefined ? undefined : shellToolFor(task, transcripts[task.sessionId] ?? []);
+    return tool !== undefined && `${TOOL_TASK_PREFIX}${task.sessionId}:${tool.id}` === taskId;
+  });
+}
+
+const PORT_PART = /^localhost:\d+$/;
+
+/** The `localhost:PORT` parts of a shell task's detail, which `backgroundTasksOf` writes. */
+export function portsOf(task: BackgroundTask): string[] {
+  return (task.detail ?? '').split(' · ').filter((part) => PORT_PART.test(part));
 }
 
 /** "45s", "2m 13s" or "1h 04m". */

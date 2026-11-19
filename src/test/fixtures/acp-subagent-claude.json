@@ -1,0 +1,100 @@
+{
+  "_note": "hand-written from the adapter source; replace with a recording",
+  "parentId": "toolu_parent",
+  "updates": [
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "toolu_parent",
+      "title": "Agent: read the notes",
+      "kind": "other",
+      "status": "pending",
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Agent"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "content": {
+        "type": "text",
+        "text": "Initial hypothesis: locate the files"
+      },
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "c1",
+      "title": "ReadFile: notes.txt",
+      "kind": "read",
+      "status": "pending",
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent",
+          "toolName": "Read"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "c1",
+      "status": "completed",
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent",
+          "toolName": "Read"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "c2",
+      "title": "ReadFile: list.txt",
+      "kind": "read",
+      "status": "pending",
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent",
+          "toolName": "Read"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "c2",
+      "status": "completed",
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent",
+          "toolName": "Read"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "content": {
+        "type": "text",
+        "text": "notes.txt starts with alpha line."
+      },
+      "_meta": {
+        "claudeCode": {
+          "parentToolUseId": "toolu_parent"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "toolu_parent",
+      "status": "completed",
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Agent"
+        }
+      }
+    }
+  ]
+}
