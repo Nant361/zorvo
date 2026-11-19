@@ -36,6 +36,9 @@ import {
 } from '../lib/agent-tools';
 import type { MentionAgentStatus } from '../lib/delegation';
 import { createId } from '../lib/ids';
+import { ARTIFACT_GUIDE, ARTIFACT_REFUSALS, parseShown, shownResultText, type ShownArtifact } from '../lib/artifacts';
+import { withArtifactCard } from '../lib/artifact-card';
+import { escapeVisible } from '../lib/visible-text';
 import type { AgentProfile, ChatMessage, Session } from '../types';
 import type { GiveTaskResult } from './useDelegation';
 import type { OpenRequest, OpenResult } from './useOpenedSessions';
@@ -66,6 +69,8 @@ export interface AgentToolsDeps {
   stopTurn: (sessionId: string) => void;
   /** Tells the user what an agent is not told: why Zorvo itself failed. */
   onNotice?: (message: string) => void;
+  /** An agent showed a page: the window decides whether anything opens. */
+  onArtifactShown: (sessionId: string, shown: ShownArtifact) => void;
 }
 
 /** A `delegate` or `start_session` call that waits for the user's answer on a card. */
@@ -348,6 +353,52 @@ export function useAgentTools(deps: AgentToolsDeps): {
     [latest, enqueue, bump],
   );
 
+  /**
+   * `show_artifact`: the backend reads the agent's file under its path rules and keeps a version;
+   * no card to answer and no grant, since the page only reaches the user who is already here.
+   */
+  const handleShowArtifact = useCallback(
+    async (session: Session, call: AgentToolCall) => {
+      const args = (typeof call.args === 'object' && call.args !== null ? call.args : {}) as Record<string, unknown>;
+      if (typeof args.path !== 'string' || args.path.trim() === '') {
+        respond(call.callId, false, 'path is required.');
+        return;
+      }
+      // A title is shown in Zorvo's own interface, so its control and bidi characters are spelled out.
+      const title = typeof args.title === 'string' ? escapeVisible(args.title).trim() : '';
+      try {
+        const answer = await invoke('artifact_show', {
+          sessionId: session.id,
+          cwd: session.cwd,
+          path: args.path,
+          ...(title === '' ? {} : { title }),
+        });
+        const shown = parseShown(answer);
+        if (shown === null) {
+          respond(call.callId, false, FAILED);
+          return;
+        }
+        if (shown.isNewVersion) {
+          latest.current.updateMessages(session.id, (prev) =>
+            withArtifactCard(prev, shown, { sessionId: session.id, now: Date.now(), createId }),
+          );
+        }
+        latest.current.onArtifactShown(session.id, shown);
+        respond(call.callId, true, shownResultText(shown));
+      } catch (error) {
+        const text = typeof error === 'string' ? error : '';
+        if (ARTIFACT_REFUSALS.has(text)) {
+          respond(call.callId, false, text);
+          return;
+        }
+        // Never the error itself: it can name a folder the agent was not told about.
+        respond(call.callId, false, FAILED);
+        latest.current.onNotice?.('Zorvo could not show the page an agent made.');
+      }
+    },
+    [latest],
+  );
+
   /** `read_session` and `stop_session`: only the caller's own sessions, by handle; no card and no grant. */
   const handleOwned = useCallback(
     (session: Session, call: AgentToolCall) => {
@@ -434,12 +485,20 @@ export function useAgentTools(deps: AgentToolsDeps): {
           handleOwned(session, call);
           return;
         }
+        if (call.tool === 'artifact_guide') {
+          respond(call.callId, true, ARTIFACT_GUIDE);
+          return;
+        }
+        if (call.tool === 'show_artifact') {
+          void handleShowArtifact(session, call);
+          return;
+        }
         respond(call.callId, false, FAILED);
       } catch {
         respond(call.callId, false, FAILED);
       }
     },
-    [latest, handleDelegate, handleStartSession, handleOwned],
+    [latest, handleDelegate, handleStartSession, handleOwned, handleShowArtifact],
   );
 
   /** A call ended without our answer (timeout, cancel, session stop): it no longer waits. */

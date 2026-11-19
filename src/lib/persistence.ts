@@ -19,6 +19,7 @@ import { diffDetail } from './diff-rows';
 import { normalizeAppearance } from './appearance';
 import type { AgentOptions } from './acp-draft';
 import { validReviewComments } from './review-comments';
+import { parseArtifactCard } from './artifacts';
 import { toCommands, toConfigOptions, toModels, toModes } from '../hooks/useAcpSessions';
 
 export const STATE_VERSION = 2;
@@ -381,6 +382,14 @@ function withValidAgentMark(message: ChatMessage, key: 'delegationReport' | 'del
     : ({ ...rest, [key]: { agentName } } as ChatMessage);
 }
 
+/** An artifact card keeps its three fields when they fit, else the message goes on without it. */
+function withValidArtifactCard(message: ChatMessage): ChatMessage {
+  if (!('artifactCard' in message)) return message;
+  const { artifactCard, ...rest } = message;
+  const card = parseArtifactCard(artifactCard);
+  return card === null ? (rest as ChatMessage) : { ...rest, artifactCard: card };
+}
+
 function withValidDelegationReport(message: ChatMessage): ChatMessage {
   return withValidAgentMark(withValidAgentMark(message, 'delegationReport'), 'delegationTask');
 }
@@ -493,8 +502,8 @@ export function normalizeTranscript(raw: unknown): ChatMessage[] {
   return raw.flatMap((entry): ChatMessage[] => {
     if (!isMessage(entry)) return [];
     const raw = withOnlyTools(entry);
-    const message = withValidSubagentFields(
-      withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw)))),
+    const message = withValidArtifactCard(
+      withValidSubagentFields(withValidVerification(withValidDelegationReport(withReadableDiffs(withValidEndTime(raw))))),
     );
     if (!('parts' in message)) return [message];
     const { parts, ...rest } = message;

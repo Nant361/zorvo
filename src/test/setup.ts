@@ -120,6 +120,18 @@ function handleStoreCommand(cmd: string, args: StoreArgs | undefined): Promise<u
     case "list_directory":
     case "background_processes":
       return Promise.resolve([]);
+    case "artifact_list":
+      // No session has an artifact unless a test spies on `invoke` and says so.
+      return Promise.resolve(((args as { sessionIds?: string[] } | undefined)?.sessionIds ?? []).map((sessionId) => ({ sessionId, artifacts: [] })));
+    case "artifact_delete":
+    case "artifact_delete_session":
+    case "artifact_view_show":
+    case "artifact_view_bounds":
+    case "artifact_view_hide":
+    case "artifact_view_close":
+      return Promise.resolve(undefined);
+    case "artifact_export":
+      return Promise.resolve(false);
     case "agent_tool_respond":
     case "open_path":
     case "remember_workspace":

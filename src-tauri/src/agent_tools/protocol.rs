@@ -214,9 +214,9 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_the_five_tools() {
+    fn tools_list_returns_the_seven_tools() {
         let got = reply(r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#);
-        assert_eq!(got["result"]["tools"].as_array().unwrap().len(), 5);
+        assert_eq!(got["result"]["tools"].as_array().unwrap().len(), 7);
         assert_eq!(
             reply(r#"{"jsonrpc":"2.0","id":4,"method":"ping"}"#)["result"],
             json!({})
@@ -237,6 +237,22 @@ mod tests {
         let no_args =
             r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_agents"}}"#;
         assert!(matches!(handle_line(no_args), Step::Call { .. }));
+    }
+
+    #[test]
+    fn a_show_artifact_call_is_parked_with_its_cleaned_arguments() {
+        let line = r#"{"jsonrpc":"2.0","id":"a1","method":"tools/call","params":{"name":"show_artifact","arguments":{"path":" p.html ","title":" T "}}}"#;
+        assert_eq!(
+            handle_line(line),
+            Step::Call {
+                id: json!("a1"),
+                tool: "show_artifact".to_string(),
+                args: json!({"path": "p.html", "title": "T"}),
+            }
+        );
+        let guide =
+            r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"artifact_guide"}}"#;
+        assert!(matches!(handle_line(guide), Step::Call { .. }));
     }
 
     #[test]

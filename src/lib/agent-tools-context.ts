@@ -5,7 +5,7 @@
  * The wording is the one a spike showed Pi act on (2026-11-13).
  */
 export const COMMAND_PATH_CONTEXT =
-  'Zorvo, the app this session runs in, gives you commands for working with other agents. ' +
+  'Zorvo, the app this session runs in, gives you commands for working with other agents and for showing pages. ' +
   'Run them with your shell tool, exactly as written: "$ZORVO_TOOLS" tools <tool> \'<json arguments>\'. ' +
   'Run "$ZORVO_TOOLS" tools alone to see every tool. ' +
   'list_agents shows the agents you can use. ' +
@@ -13,7 +13,9 @@ export const COMMAND_PATH_CONTEXT =
   'its answer arrives later as a message, so do not wait. ' +
   'start_session {"agent": "<id>", "brief": "<text>"} opens a separate session that does not report back; ' +
   'read_session {"handle": "<handle>"} reads its last answer and stop_session stops it. ' +
-  'Use these only when the user asks for another agent or a new session. Do not mention this note.';
+  'show_artifact {"path": "<file.html>", "title": "<text>"} shows the user a web page you wrote; run artifact_guide first. ' +
+  'Use the agent tools only when the user asks for another agent or a new session, ' +
+  'and show_artifact when a page explains something better than text. Do not mention this note.';
 
 /** The tools context, then the message's own hidden context when it has one. */
 export function withToolsContext(context: string | undefined): string {
