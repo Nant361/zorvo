@@ -233,6 +233,12 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("node /app/other-pnpm test:unit", NOW - 59_000), one(unit))).toBeUndefined();
   });
 
+  it("matches a non-shell program run with -c, which the scan shows as its script", () => {
+    const sleep = launch("sleep", `python3 -c "import time; time.sleep(300)"`, NOW - 60_000);
+
+    expect(shellToolFor(process("import time; time.sleep(300)", NOW - 59_000), one(sleep))?.id).toBe("sleep");
+  });
+
   it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
     const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
     const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });

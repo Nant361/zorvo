@@ -184,7 +184,6 @@ function toolIdOf(task: BackgroundTask): string | undefined {
 
 /** The scan cuts a long command and ends it with this, and so does a tool's recorded command. */
 const CUT_MARK = '…';
-const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'fish']);
 
 /** True for `-c` and for combined flags that include it, like `-lc`. */
 function runsScript(flag: string): boolean {
@@ -198,13 +197,13 @@ function unquoted(text: string): string {
 }
 
 /**
- * The script of a shell invocation (`bash -lc "pnpm dev"` runs `pnpm dev`), as the process scan
- * shows a shell's command; any other command as it is.
+ * The script of an invocation with `-c` (`bash -lc "pnpm dev"` runs `pnpm dev`), exactly as the
+ * process scan shows it (`display_command` in `background_processes.rs`): it takes the text after
+ * the first flag that holds `c` whatever the program, so `python3 -c "…"` shows as its script too.
+ * A command with no such flag stays as it is.
  */
 function scriptOf(command: string): string {
   const words = command.split(' ');
-  const program = words[0].split('/').pop() ?? '';
-  if (!SHELLS.has(program)) return command;
   let index = 1;
   while (index < words.length && !runsScript(words[index])) index++;
   index++;
