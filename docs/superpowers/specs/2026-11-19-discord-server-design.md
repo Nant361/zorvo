@@ -118,7 +118,7 @@ Community settings:
 
 Onboarding:
 - Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#help`, `#bugs`, `#ideas`. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
-- One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out" and "I want to contribute". Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
+- One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out", "I want to contribute" and "Just looking around", so someone who only wants to join has an honest answer too. Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
 - Rules screening on, with the rules below. A member cannot post until they accept.
 
 Rules (shown in screening and in `#welcome`):
