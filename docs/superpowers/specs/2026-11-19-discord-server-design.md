@@ -46,6 +46,9 @@ COMMUNITY
   #general        the existing #general, moved here
   Lounge          voice, renamed from General
 
+ECOSYSTEM       Zorvolabs projects other than Zorvo; members reply, only Team starts a post
+  #ecosystem      forum, one post per project
+
 SUPPORT         forums, one thread per topic
   #help
   #bugs
@@ -74,18 +77,25 @@ The existing `#general` and voice `General` are moved and renamed, never deleted
 - Post guidelines: "One idea per post. Describe the problem you want solved, not only the feature."
 - Tags, Team only: Under review, Planned, Not planned, Shipped.
 
+`#ecosystem`
+- Post guidelines: "One post per Zorvolabs project, started by the team: what it is, its links and its status. Ask about a project in its post."
+- Tags, Team only: Official, Hackathon, In progress, Live, Archived.
+- A project's post is its home: what it is, its links (repository, demo, hackathon page), its status tag, and updates as replies. A finished project is tagged Archived, never deleted.
+
+Product tags: each Zorvolabs project other than Zorvo is also a tag in `#help`, `#bugs` and `#ideas`, free for anyone, so a report about it does not mix with Zorvo's. Adding a project is one line in the setup data (`PRODUCTS`), which adds the tag to all three forums; the team then starts its post in `#ecosystem`. There are none yet; hackathon projects are expected to be the first.
+
 Discord forums have no form templates; the post guidelines text is what a poster sees.
 
 ## Roles and permissions
 
-Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Contributor, Member, `@everyone`.
+Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Contributor, Member, `@everyone`. Roles the maintainer makes by hand are not part of this spec: the setup scripts never change them, their position or their access to a category.
 
 | Role | Holders | Colour | Shown apart | Permissions |
 |---|---|---|---|---|
 | Founder | The maintainer only | amber-600 `#D97706` | Yes | None. The server owner already has every permission, and moderation comes from Team. A label, not a permission set. |
 | Team | Granted by hand; the maintainer too | blue-500 `#3B82F6` | Yes | View the TEAM category; Manage Messages, Manage Threads, Timeout Members, Kick Members, View Audit Log, Mention @everyone. No Administrator. |
 | Contributor | Granted by hand to people with a merged pull request | green-600 `#16A34A` | Yes | None. Colour and a member list group, as recognition. |
-| Member | Everyone who answers the Onboarding question; given by the bot to members who joined before it | cyan-600 `#0891B2` | No, so Founder and Team stay the groups that stand out | None. What members can do stays with `@everyone` and rules screening. |
+| Member | Everyone who answers the Onboarding question; given by the bot to members who joined before it | cyan-600 `#0891B2` | Yes (the maintainer turned it on in Discord) | None. What members can do stays with `@everyone` and rules screening. |
 
 Role names are drawn on Discord's dark (`#313338`) and light (`#FFFFFF`) themes alike, so each colour is picked for at least 3:1 on both, measured: amber-600 3.97 and 3.19, blue-500 3.44 and 3.68, green-600 3.84 and 3.30, cyan-600 3.43 and 3.68. No single colour reaches 4.5:1 on both backgrounds (it would need a relative luminance at once below 0.18 and above 0.32), so 3:1 on both is the ceiling. The name next to the colour still reads at full contrast in the member list and on messages, since Discord draws the message text itself in the theme's text colour. A role icon needs boost level 2 and is out of scope.
 
@@ -97,10 +107,11 @@ Per-category overwrites:
 |---|---|---|
 | START HERE | Deny Send Messages, Create Public Threads, Use Application Commands (so no bot posts there at a member's request) | Allow Send Messages |
 | COMMUNITY | Inherit | Inherit |
+| ECOSYSTEM | Deny Send Messages, so members cannot start a post but still reply in one (Send Messages in Threads) | Allow Send Messages |
 | SUPPORT | Inherit (can create posts and reply) | Inherit; Manage Threads applies moderated tags |
 | TEAM | Deny View Channel | Allow View Channel |
 
-Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model.
+Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model for `@everyone` and Team. An overwrite for a role made by hand is kept as it is.
 
 ## Community and onboarding
 
@@ -117,7 +128,7 @@ Community settings:
 | Description | Zorvo is a free, open-source Mac app that runs coding agents such as Claude Code, Codex and Qwen Code in one chat. |
 
 Onboarding:
-- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#help`, `#bugs`, `#ideas`. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
+- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#ecosystem`, `#help`, `#bugs`, `#ideas`. Members cannot start a post in `#ecosystem`, so it does not count toward the 5 below. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
 - One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out", "I want to contribute" and "Just looking around", so someone who only wants to join has an honest answer too. Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
 - Rules screening on, with the rules below. A member cannot post until they accept.
 
@@ -146,6 +157,7 @@ Posted by the bot during setup, then edited by the team when needed:
 > #bugs when Zorvo does something wrong
 > #ideas when you want Zorvo to do something new
 > #activity for releases and what is happening in the repository
+> #ecosystem for the other Zorvolabs projects built around Zorvo
 >
 > **Rules**
 > (the six rules above)
@@ -231,3 +243,5 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - START HERE also denies `@everyone` Use Application Commands, so a member cannot make a bot (Jockie has Administrator) answer a slash command in a read-only channel.
 - Member role added on request: cyan-600, no permissions, not shown apart, lowest human role, given through the Onboarding question above. The one human member who joined before it got it from the bot.
 - From the PR review: the release workflow listens to `released` instead of `published`, so a prerelease later marked as a release is posted; it cuts long notes at a line break, leaves the description out when the notes are empty (Discord refuses an empty one), and lets curl retry a 429 or 5xx three times.
+- Ecosystem section added on request: an ECOSYSTEM category with the `#ecosystem` forum (one post per Zorvolabs project, started by Team), product tags in the three support forums (none yet), a line in `#welcome` and `#ecosystem` among Onboarding's default channels.
+- Roles made by hand are left alone: the scripts keep any category overwrite for a role the spec does not know and reorder roles only when the spec's own roles are out of order. Member is shown apart, as the maintainer set it.
