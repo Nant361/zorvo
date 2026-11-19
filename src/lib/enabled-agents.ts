@@ -37,7 +37,8 @@ export function removedAgentNameFor(
 }
 
 /**
- * Enables registry agents found installed (unless the user removed them) and records the
+ * Enables registry agents found installed (unless the user removed them; never an npm-package
+ * agent, which Zorvo runs only from its own install, so a global package says nothing) and records the
  * version of each one in use, so it only changes when the user updates it. Returns the same
  * object when there is nothing to add, so callers can apply it on every change.
  */
@@ -45,7 +46,7 @@ export function withAutoEnabled(settings: Settings, agents: readonly AgentProfil
   const removed = settings.removedAgents ?? [];
   const enabled = enabledAgentIds(settings);
   const installed = agents
-    .filter((a) => a.installed_on_system)
+    .filter((a) => a.installed_on_system && a.distribution !== 'npx')
     .map((a) => a.id)
     .filter((id) => !enabled.includes(id) && !removed.includes(id));
   const nextEnabled = installed.length > 0 ? [...new Set([...enabled, ...installed])] : enabled;

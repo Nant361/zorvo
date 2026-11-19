@@ -93,6 +93,16 @@ fn find<'a>(profiles: &'a [AgentProfile], id: &str) -> &'a AgentProfile {
         .unwrap_or_else(|| panic!("profile '{id}' must exist in {profiles:?}"))
 }
 
+/// The version of the agent's own package in its install plan: what an install would run.
+fn planned_agent_version(profile: &AgentProfile) -> Option<&str> {
+    profile
+        .install_plan
+        .as_ref()?
+        .iter()
+        .find(|step| step.kind == "agent")
+        .map(|step| step.version.as_str())
+}
+
 #[test]
 fn falls_back_to_the_bundle_without_a_cache() {
     let dir = TempDir::new("bundle");
@@ -224,11 +234,7 @@ fn launches_the_recorded_version_not_the_newer_offered_one() {
 
     let gemini = find(&recorded, "gemini");
     assert_eq!(gemini.version.as_deref(), Some("1.0.0"));
-    assert!(
-        gemini.acp_args.contains(&"gemini-pkg@1.0.0".to_string()),
-        "{:?}",
-        gemini.acp_args
-    );
+    assert_eq!(planned_agent_version(gemini), Some("1.0.0"));
     assert_eq!(find(&offered, "gemini").version.as_deref(), Some("2.0.0"));
 }
 
@@ -549,11 +555,7 @@ fn a_recorded_version_the_registry_withdrew_is_not_launched() {
 
     let gemini = find(&profiles, "gemini");
     assert_eq!(gemini.version.as_deref(), Some("1.0.0"));
-    assert!(
-        gemini.acp_args.contains(&"gemini-pkg@1.0.0".to_string()),
-        "{:?}",
-        gemini.acp_args
-    );
+    assert_eq!(planned_agent_version(gemini), Some("1.0.0"));
 }
 
 #[test]
@@ -641,11 +643,7 @@ fn a_withdrawn_recorded_version_stays_withdrawn_after_a_newer_release() {
     let profiles = no_tools_profiles(&catalog, &recorded, settled);
     let gemini = find(&profiles, "gemini");
     assert_eq!(gemini.version.as_deref(), Some("0.31.0"));
-    assert!(
-        gemini.acp_args.contains(&"gemini-pkg@0.31.0".to_string()),
-        "{:?}",
-        gemini.acp_args
-    );
+    assert_eq!(planned_agent_version(gemini), Some("0.31.0"));
     let offered = no_tools_profiles(&catalog, &BTreeMap::new(), second);
     assert_eq!(
         find(&offered, "gemini").version.as_deref(),

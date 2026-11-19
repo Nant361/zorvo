@@ -163,7 +163,8 @@ pub fn private_launch(
     })
 }
 
-/// The node next to the npx the agent is launched with, else `node` from its PATH.
+/// A `node` next to the agent's program, else `node` from the agent's PATH. An agent
+/// installed from npm has none beside it, and its PATH starts with the Node it runs on.
 fn node_beside(program: &str) -> String {
     let sibling = Path::new(program).parent().map(|dir| dir.join("node"));
     match sibling {

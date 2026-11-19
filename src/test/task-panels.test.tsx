@@ -182,6 +182,176 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor({ ...shellTask, id: "tool:s1:sh", pid: undefined }, transcripts.s1)?.id).toBe("sh");
   });
 
+  const NOW = 1_000_000;
+  const launch = (id: string, command: string, startedAt: number, extra: Partial<ToolExecution> = {}) =>
+    tool(id, { name: `Run ${command}`, kind: "execute", command, startedAt, ...extra });
+  const process = (command: string, startedAt: number): BackgroundTask => ({ ...shellTask, name: command, startedAt });
+  const one = (...tools: ToolExecution[]): ChatMessage[] => [{ id: "m", role: "agent", content: "", timestamp: 1, tools }];
+
+  it("keeps a process with its own launch when the same command runs again", () => {
+    const first = launch("first", "pnpm dev", NOW - 60_000, { status: "running", details: [{ kind: "text", text: "ready" }] });
+    const again = launch("again", "pnpm dev", NOW - 5_000, { status: "failed", details: [{ kind: "text", text: "port in use" }] });
+
+    expect(shellToolFor(process("pnpm dev", NOW - 59_500), one(first, again))?.id).toBe("first");
+  });
+
+  it("never matches a launch that started after the process", () => {
+    const later = launch("later", "pnpm dev", NOW);
+
+    expect(shellToolFor(process("pnpm dev", NOW - 60_000), one(later))).toBeUndefined();
+  });
+
+  it("does not match a short command inside a longer one when two launches hold it", () => {
+    const watch = launch("watch", "node scripts/watch.mjs", NOW - 60_000);
+    const build = launch("build", "node scripts/build.mjs", NOW - 61_000);
+
+    expect(shellToolFor(process("node", NOW - 59_000), one(watch, build))).toBeUndefined();
+    expect(shellToolFor(process("sleep 30", NOW - 59_000), one(launch("x", "cd /tmp && sleep 300", NOW - 60_000)))).toBeUndefined();
+  });
+
+  it("falls back to the one launch whose words hold the process's, or the other way round", () => {
+    const watch = launch("watch", "node scripts/watch.mjs", NOW - 60_000);
+    const buffered = launch("buffered", "stdbuf -oL sleep 300", NOW - 60_000);
+
+    expect(shellToolFor(process("node scripts/watch.mjs --poll", NOW - 59_000), one(watch))?.id).toBe("watch");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(buffered))?.id).toBe("buffered");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(buffered, launch("again", "stdbuf -oL sleep 300", NOW - 59_500)))).toBeUndefined();
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("later", "stdbuf -oL sleep 300", NOW)))).toBeUndefined();
+  });
+
+  it("prefers a launch that matches whole to the fallback", () => {
+    const whole = launch("whole", "sleep 300", NOW - 60_000);
+    const holder = launch("holder", "stdbuf -oL sleep 300", NOW - 59_500);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(whole, holder))?.id).toBe("whole");
+  });
+
+  it("matches a command the scan cut short", () => {
+    const long = launch("long", `pnpm vitest run ${"a".repeat(400)}`, NOW - 60_000);
+
+    expect(shellToolFor(process(`pnpm vitest run ${"a".repeat(283)}…`, NOW - 59_000), one(long))?.id).toBe("long");
+  });
+
+  it("matches a launch given as a shell invocation, as the scan shows only its script", () => {
+    const wrapped = launch("wrapped", `bash -lc "pnpm dev"`, NOW - 60_000);
+    const zsh = launch("zsh", "/bin/zsh -l -c 'cargo watch -x test'", NOW - 60_000);
+
+    expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(wrapped))?.id).toBe("wrapped");
+    expect(shellToolFor(process("cargo watch -x test", NOW - 59_000), one(zsh))?.id).toBe("zsh");
+    // The fallback takes one launch whose words hold the process's; two leave nothing to choose.
+    expect(shellToolFor(process("bash -lc", NOW - 59_000), one(wrapped, launch("other", `bash -lc "pnpm test"`, NOW - 60_000)))).toBeUndefined();
+  });
+
+  it("matches a launch whose program replaced its shell under its interpreter", () => {
+    const unit = launch("unit", "pnpm test:unit", NOW - 60_000);
+    const py = launch("py", "./serve.py --port 8000", NOW - 60_000);
+
+    expect(shellToolFor(process("node /app/pnpm test:unit", NOW - 59_000), one(unit))?.id).toBe("unit");
+    expect(shellToolFor(process("/usr/bin/python3 /work/serve.py --port 8000", NOW - 59_000), one(py))?.id).toBe("py");
+    expect(shellToolFor(process("node /app/pnpm test:e2e", NOW - 59_000), one(unit))).toBeUndefined();
+    expect(shellToolFor(process("node /app/other-pnpm test:unit", NOW - 59_000), one(unit))).toBeUndefined();
+  });
+
+  it("matches a non-shell program run with -c, which the scan shows as its script", () => {
+    const sleep = launch("sleep", `python3 -c "import time; time.sleep(300)"`, NOW - 60_000);
+
+    expect(shellToolFor(process("import time; time.sleep(300)", NOW - 59_000), one(sleep))?.id).toBe("sleep");
+  });
+
+  it("matches a -c command the scan shows whole, as it does inside an agent's eval wrapper", () => {
+    const sleep = launch("sleep", `python3 -c "import time; time.sleep(300)"`, NOW - 60_000);
+
+    expect(shellToolFor(process(`python3 -c "import time; time.sleep(300)"`, NOW - 59_000), one(sleep))?.id).toBe("sleep");
+  });
+
+  it("matches a launch that sets variables before its command", () => {
+    const tagged = launch("tagged", "TAG=demo PORT=3001 sleep 300", NOW - 60_000);
+    const served = launch("served", "PORT=3001 pnpm dev", NOW - 60_000);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
+    expect(shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(served))?.id).toBe("served");
+    expect(shellToolFor(process("TAG=demo PORT=3001 sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
+  });
+
+  it("matches a command of a list, which the shell replaced itself with", () => {
+    const moved = launch("moved", "cd /tmp && sleep 300", NOW - 60_000);
+    const listed = launch("listed", "export PORT=3001; pnpm dev", NOW - 60_000);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(moved))?.id).toBe("moved");
+    expect(shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(listed))?.id).toBe("listed");
+    expect(shellToolFor(process("sleep 30", NOW - 59_000), one(moved))).toBeUndefined();
+    expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(launch("wrapped", `bash -lc "cd web && pnpm dev"`, NOW - 60_000)))?.id).toBe("wrapped");
+  });
+
+  it("matches a list that ends with its terminator, and a command run with exec", () => {
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("ended", "cd /tmp && sleep 300;", NOW - 60_000)))?.id).toBe("ended");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("exec", "exec sleep 300", NOW - 60_000)))?.id).toBe("exec");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("both", "cd /tmp && exec sleep 300", NOW - 60_000)))?.id).toBe("both");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("or", "test -d /nope || sleep 300", NOW - 60_000)))?.id).toBe("or");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("c", "exec sleep 300 # keep alive", NOW - 60_000)))?.id).toBe("c");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("cl", "# start it\ncd /tmp # here\nsleep 300", NOW - 60_000)))?.id).toBe("cl");
+    expect(shellToolFor(process("curl http://x/#top", NOW - 59_000), one(launch("h", "curl http://x/#top", NOW - 60_000)))?.id).toBe("h");
+    const quoted = `python3 -c 'import time; print("hello # world"); time.sleep(300)'`;
+    expect(shellToolFor(process(quoted, NOW - 59_000), one(launch("q", quoted, NOW - 60_000)))?.id).toBe("q");
+    expect(shellToolFor(process(`import time; print("hello # world"); time.sleep(300)`, NOW - 59_000), one(launch("q", quoted, NOW - 60_000)))?.id).toBe("q");
+    expect(shellToolFor(process(`echo "a # b"`, NOW - 59_000), one(launch("d", `echo "a # b" # note`, NOW - 60_000)))?.id).toBe("d");
+    expect(shellToolFor(process("sleep 300 # keep alive", NOW - 59_000), one(launch("w", "sleep 300 # keep alive", NOW - 60_000)))?.id).toBe("w");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("v", `TAG="hello world" sleep 300`, NOW - 60_000)))?.id).toBe("v");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("env", "env TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("env");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envp", "/usr/bin/env -i TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("envp");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envu", "env -u TAG -C /tmp --unset OTHER sleep 300", NOW - 60_000)))?.id).toBe("envu");
+    for (const wrapped of ["nohup sleep 300", "nice -n 10 nohup sleep 300", "exec nohup env TAG=1 sleep 300", "setsid nice sleep 300", "cd /tmp && nohup sleep 300 > out.log 2>&1 &", "command sleep 300", "command -p sleep 300", "if true; then exec sleep 300; fi", "while true; do sleep 300; done", "{ sleep 300; }", "(cd /tmp && sleep 300)"]) {
+      expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("w", wrapped, NOW - 60_000)))?.id).toBe("w");
+    }
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("r", `exec sleep 300 > "/tmp/my log"`, NOW - 60_000)))?.id).toBe("r");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("e", "sleep 300 2>/tmp/my\\ log", NOW - 60_000)))?.id).toBe("e");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(tool("n", { name: "sleep 300", kind: "execute", startedAt: NOW - 60_000 })))?.id).toBe("n");
+  });
+
+  it("matches a launch that redirects its output or runs in the background", () => {
+    const at = (command: string) => shellToolFor(process("sleep 300", NOW - 59_000), one(launch("x", command, NOW - 60_000)))?.id;
+
+    expect(at("exec sleep 300 > /dev/null 2>&1")).toBe("x");
+    expect(at("sleep 300 >>out.log 2>/dev/null < /dev/null")).toBe("x");
+    expect(at("cd /tmp && sleep 300 &> log.txt &")).toBe("x");
+    expect(at("sleep 3000 > /dev/null")).toBeUndefined();
+    expect(at("cd /tmp\nsleep 300")).toBe("x");
+    expect(shellToolFor(process("tail -f /dev/null", NOW - 59_000), one(launch("t", "exec tail -f /dev/null>/dev/null 2>&1", NOW - 60_000)))?.id).toBe("t");
+    expect(at("cd /tmp\r\n  sleep   300\n")).toBe("x");
+  });
+
+  it("keeps two scripts of one name apart when the launch names its path", () => {
+    const a = launch("a", "/workspace/a/serve.py --port 8000", NOW - 60_000);
+    const rel = launch("rel", "scripts/serve.py --port 8000", NOW - 60_000);
+
+    expect(shellToolFor(process("python3 /workspace/b/serve.py --port 8000", NOW - 59_000), one(a))).toBeUndefined();
+    expect(shellToolFor(process("python3 /workspace/a/serve.py --port 8000", NOW - 59_000), one(a))?.id).toBe("a");
+    expect(shellToolFor(process("python3 /work/scripts/serve.py --port 8000", NOW - 59_000), one(rel))?.id).toBe("rel");
+    expect(shellToolFor(process("python3 /work/other/serve.py --port 8000", NOW - 59_000), one(rel))).toBeUndefined();
+  });
+
+  it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
+    const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
+    const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });
+
+    expect(shellToolFor(process("pnpm dev", 101_600), one(first, retry))?.id).toBe("first");
+  });
+
+  it("matches no launch the scan says started later than the process", () => {
+    const late = launch("late", "pnpm dev", NOW + 1);
+
+    expect(shellToolFor(process("pnpm dev", NOW), one(late))).toBeUndefined();
+  });
+
+  it("follows a tab from the first launch's row to its process after a second launch", () => {
+    const first = launch("first", "pnpm dev", NOW - 60_000);
+    const again = launch("again", "pnpm dev", NOW - 5_000, { status: "failed" });
+    const server = process("pnpm dev", NOW - 59_500);
+
+    expect(findShellTask([server], "tool:s1:first", { s1: one(first, again) })).toBe(server);
+    expect(findShellTask([server], "tool:s1:again", { s1: one(first, again) })).toBeUndefined();
+  });
+
   it("follows a task from its tool row to the process that took its place", () => {
     expect(findShellTask([shellTask], "tool:s1:sh", transcripts)).toBe(shellTask);
     expect(findShellTask([shellTask], "process:77", transcripts)).toBe(shellTask);

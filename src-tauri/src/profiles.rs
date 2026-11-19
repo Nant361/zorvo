@@ -23,7 +23,8 @@ pub struct AgentProfile {
     /// Where `command` was found, even when it cannot run the agent (an `npx`
     /// whose Node is too old).
     pub detected_path: Option<String>,
-    /// Program that speaks ACP for this agent (the CLI itself, or `npx` for an adapter).
+    /// The kind of program that speaks ACP for this agent: the CLI's own name, or `npx` or
+    /// `uvx` for a package. What actually runs is `acp_program_path`.
     pub acp_program: Option<String>,
     pub acp_args: Vec<String>,
     /// `acp_args` without the registry entry's own arguments (`--acp` and the like): what runs the
