@@ -260,10 +260,14 @@ function withoutAssignments(command: string): string {
   return words.slice(index).join(' ');
 }
 
-/** The last command of a list (`cd /tmp && sleep 300`), which a shell may replace itself with. */
+/**
+ * The last command of a list (`cd /tmp && sleep 300`, a `;` after it too), which a shell may replace
+ * itself with, without an `exec` in front of it, which does the same.
+ */
 function lastCommand(command: string): string {
-  const parts = command.split(/\s*(?:&&|;)\s*/);
-  return parts[parts.length - 1] ?? command;
+  const parts = command.split(/\s*(?:&&|;)\s*/).filter((part) => part !== '');
+  const last = parts[parts.length - 1] ?? command;
+  return last.startsWith('exec ') ? last.slice('exec '.length).trimStart() : last;
 }
 
 /**

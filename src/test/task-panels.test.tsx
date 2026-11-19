@@ -264,6 +264,12 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(launch("wrapped", `bash -lc "cd web && pnpm dev"`, NOW - 60_000)))?.id).toBe("wrapped");
   });
 
+  it("matches a list that ends with its terminator, and a command run with exec", () => {
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("ended", "cd /tmp && sleep 300;", NOW - 60_000)))?.id).toBe("ended");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("exec", "exec sleep 300", NOW - 60_000)))?.id).toBe("exec");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("both", "cd /tmp && exec sleep 300", NOW - 60_000)))?.id).toBe("both");
+  });
+
   it("keeps two scripts of one name apart when the launch names its path", () => {
     const a = launch("a", "/workspace/a/serve.py --port 8000", NOW - 60_000);
     const rel = launch("rel", "scripts/serve.py --port 8000", NOW - 60_000);
