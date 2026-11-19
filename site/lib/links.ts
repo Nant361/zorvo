@@ -13,6 +13,7 @@ export const LINKS = {
   download: `${REPOSITORY}/releases/latest/download/Zorvo-mac.dmg`,
   docs: "/docs",
   installGuide: "/docs/install",
+  firstOpen: "/docs/install#download",
   quickstart: "/docs/quickstart",
   compareGuide: "/docs/compare",
   reviewGuide: "/docs/review",
@@ -20,5 +21,7 @@ export const LINKS = {
   signingIn: "/docs/signing-in",
   agentsGuide: "/docs/agents",
   troubleshooting: "/docs/troubleshooting",
+  privacyGuide: "/docs/privacy",
+  credits: "/docs/credits",
   changelog: `${REPOSITORY}/blob/main/CHANGELOG.md`,
 } as const;
