@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::State;
 
 use super::path::{path_for, ToolsPath};
+use super::socket::Capabilities;
 use super::AgentTools;
 use crate::acp::manager::AcpLaunch;
 use crate::store::AppStore;
@@ -20,8 +21,22 @@ pub fn servers_for_session(
     session_id: &str,
     agent_tools: bool,
 ) -> Result<Value, String> {
-    let enabled = agent_tools && store.load_state()?.settings.agent_tools;
-    Ok(tools.servers_for(session_id, enabled))
+    if !agent_tools {
+        return Ok(Value::Array(Vec::new()));
+    }
+    let capabilities = capabilities_of(store, ToolsPath::Mcp)?;
+    Ok(tools.servers_with(session_id, capabilities))
+}
+
+/// What the saved settings give a session on `path`: Zorvo's agent tools,
+/// computer use (macOS only), or neither.
+fn capabilities_of(store: &AppStore, path: ToolsPath) -> Result<Capabilities, String> {
+    let settings = store.load_state()?.settings;
+    Ok(Capabilities {
+        agent_tools: settings.agent_tools,
+        computer_use: settings.computer_use && cfg!(target_os = "macos"),
+        path,
+    })
 }
 
 /// What a session that is about to open gets of Zorvo's tools.
@@ -52,12 +67,17 @@ pub fn tools_for_session(
         env: Vec::new(),
         path: None,
     };
-    if !agent_tools || !store.load_state()?.settings.agent_tools {
+    if !agent_tools {
         return Ok(none);
     }
-    Ok(match path_for(profile_id) {
+    let path = path_for(profile_id);
+    let capabilities = capabilities_of(store, path)?;
+    if !capabilities.any() {
+        return Ok(none);
+    }
+    Ok(match path {
         ToolsPath::Mcp => {
-            let servers = tools.servers_for(session_id, true);
+            let servers = tools.servers_with(session_id, capabilities);
             let path = has_entries(&servers).then_some(ToolsPath::Mcp);
             SessionTools {
                 servers,
@@ -66,7 +86,7 @@ pub fn tools_for_session(
             }
         }
         ToolsPath::Command => {
-            let env = tools.launch_env_for(session_id, true);
+            let env = tools.launch_env_with(session_id, capabilities);
             let path = (!env.is_empty()).then_some(ToolsPath::Command);
             SessionTools { env, path, ..none }
         }

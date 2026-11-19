@@ -223,6 +223,8 @@ export interface Settings {
   paymentSource?: 'credits' | 'ownKey';
   /** Whether sessions are told about Zorvo's own tools. Off unless true; kept so a save does not drop it. */
   agentTools?: boolean;
+  /** Whether agents may use apps on this Mac (computer use). Off unless `true`. */
+  computerUse?: boolean;
 }
 
 export interface RecentFolder {

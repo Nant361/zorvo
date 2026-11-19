@@ -56,7 +56,7 @@ fn rig(tag: &str) -> Rig {
         move |id| end_tx.lock().unwrap().send(id).unwrap(),
     )
     .unwrap();
-    let socket = env_value(&tools.servers_for("probe", true), "ZORVO_MCP_SOCKET");
+    let socket = env_value(&bound(&tools, "probe"), "ZORVO_MCP_SOCKET");
     Rig {
         tools,
         calls,
@@ -67,7 +67,7 @@ fn rig(tag: &str) -> Rig {
 
 impl Rig {
     fn token(&self, session: &str) -> String {
-        env_value(&self.tools.servers_for(session, true), "ZORVO_MCP_TOKEN")
+        env_value(&bound(&self.tools, session), "ZORVO_MCP_TOKEN")
     }
 
     /// Starts `zorvo tools <args>` as `session`'s shell would.
@@ -391,4 +391,15 @@ fn it_runs_from_a_path_with_a_space_the_way_the_context_writes_it() {
     assert_eq!(call.tool, "list_agents");
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     assert_eq!(text(&output.stdout), "[]\n");
+}
+
+/// Issues a session's entry and binds the session to this test process, which
+/// (or whose children) then connects as the session's agent would.
+fn bound(tools: &AgentTools, session: &str) -> serde_json::Value {
+    let entry = tools.servers_for(session, true);
+    tools.bind_process(
+        session,
+        zorvo_lib::agent_tools::peer::ProcessId::of(std::process::id() as i32).unwrap(),
+    );
+    entry
 }

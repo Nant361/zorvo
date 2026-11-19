@@ -12,6 +12,7 @@
 
 use serde_json::{json, Value};
 
+use super::socket::Caller;
 use super::tools::{tool_list, validate, TOOL_NAMES};
 
 /// Newest first. 2025-11-25 and 2025-06-18 are what the tested agents send.
@@ -39,7 +40,8 @@ pub enum Step {
     Cancel { request_id: Value },
 }
 
-pub fn handle_line(line: &str) -> Step {
+/// One line from `caller`, who sees only the tools its capabilities give it.
+pub fn handle_line(line: &str, caller: &Caller) -> Step {
     if line.len() > MAX_LINE_BYTES {
         return error_step(Value::Null, INVALID_REQUEST, "The message is too large.");
     }
@@ -72,8 +74,8 @@ pub fn handle_line(line: &str) -> Step {
     match method {
         "initialize" => Step::Reply(result_reply(&id, initialize_result(params))),
         "ping" => Step::Reply(result_reply(&id, json!({}))),
-        "tools/list" => Step::Reply(result_reply(&id, json!({ "tools": tool_list() }))),
-        "tools/call" => tools_call(id, params),
+        "tools/list" => Step::Reply(result_reply(&id, json!({ "tools": tools_for(caller) }))),
+        "tools/call" => tools_call(id, params, caller),
         _ => error_step(id, METHOD_NOT_FOUND, "Method not found."),
     }
 }
@@ -102,11 +104,20 @@ fn initialize_result(params: &Value) -> Value {
     })
 }
 
-fn tools_call(id: Value, params: &Value) -> Step {
+/// The tools `caller` may see and call.
+fn tools_for(caller: &Caller) -> Value {
+    if caller.capabilities.agent_tools {
+        tool_list()
+    } else {
+        json!([])
+    }
+}
+
+fn tools_call(id: Value, params: &Value, caller: &Caller) -> Step {
     let Some(name) = params.get("name").and_then(Value::as_str) else {
         return error_step(id, INVALID_PARAMS, "A tool name is required.");
     };
-    if !TOOL_NAMES.contains(&name) {
+    if !caller.capabilities.agent_tools || !TOOL_NAMES.contains(&name) {
         return error_step(id, INVALID_PARAMS, "Unknown tool.");
     }
     let args = match params.get("arguments") {
@@ -146,6 +157,56 @@ fn error_step(id: Value, code: i64, message: &str) -> Step {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::agent_tools::path::ToolsPath;
+    use crate::agent_tools::socket::{Caller, Capabilities};
+
+    fn caller(agent_tools: bool, computer_use: bool) -> Caller {
+        Caller {
+            session: "s-1".to_string(),
+            capabilities: Capabilities {
+                agent_tools,
+                computer_use,
+                path: ToolsPath::Mcp,
+            },
+        }
+    }
+
+    /// The caller most tests use: a session with Zorvo's agent tools.
+    fn handle_line(line: &str) -> Step {
+        super::handle_line(line, &caller(true, false))
+    }
+
+    fn tool_names(caller: &Caller) -> Vec<String> {
+        let line = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        let Step::Reply(value) = super::handle_line(line, caller) else {
+            panic!("tools/list must reply");
+        };
+        value["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn tools_list_follows_the_callers_capabilities() {
+        assert_eq!(tool_names(&caller(true, false)), TOOL_NAMES);
+        assert!(tool_names(&caller(false, true)).is_empty());
+        assert!(tool_names(&caller(false, false)).is_empty());
+    }
+
+    #[test]
+    fn call_to_a_tool_the_session_lacks_is_unknown() {
+        let line =
+            r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_agents"}}"#;
+        let Step::Reply(value) = super::handle_line(line, &caller(false, true)) else {
+            panic!("expected an error reply");
+        };
+        assert_eq!(value["error"]["code"], INVALID_PARAMS);
+        assert_eq!(value["error"]["message"], "Unknown tool.");
+    }
 
     fn reply(line: &str) -> Value {
         match handle_line(line) {

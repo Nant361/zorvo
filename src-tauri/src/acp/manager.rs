@@ -230,7 +230,13 @@ pub struct AcpManager {
     sign_ins: SignInAttempts,
     /// Opens the link of an accepted URL elicitation.
     url_opener: UrlOpener,
+    /// Told which agent process each session runs in, right after the
+    /// process starts and before the session opens (agent tools' peer check).
+    process_listener: Mutex<Option<ProcessListener>>,
 }
+
+/// Called with an app session id and the pid of the agent process it runs in.
+pub type ProcessListener = Arc<dyn Fn(&str, u32) + Send + Sync>;
 
 impl AcpManager {
     pub fn new(sink: AcpEventSink) -> Self {
@@ -245,6 +251,25 @@ impl AcpManager {
             next_connection_key: AtomicU64::new(1),
             sign_ins: SignInAttempts::default(),
             url_opener: opener,
+            process_listener: Mutex::new(None),
+        }
+    }
+
+    /// Who to tell which agent process each session runs in.
+    pub fn set_process_listener(&self, listener: ProcessListener) {
+        if let Ok(mut slot) = self.process_listener.lock() {
+            *slot = Some(listener);
+        }
+    }
+
+    fn tell_process(&self, app_session_id: &str, pid: Option<u32>) {
+        let listener = self
+            .process_listener
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone());
+        if let (Some(listener), Some(pid)) = (listener, pid) {
+            listener(app_session_id, pid);
         }
     }
 
@@ -295,6 +320,7 @@ impl AcpManager {
             |connection| self.connection_sink(connection_key, connection),
         )?;
         self.set_opening(connection_key, Some(app_session_id));
+        self.tell_process(app_session_id, connection.pid());
 
         let opened = initialize(&connection)
             .map_err(OpenError::Transport)
@@ -396,6 +422,8 @@ impl AcpManager {
         if !capabilities["sessionCapabilities"]["fork"].is_object() {
             return Err("This agent cannot fork sessions".to_string());
         }
+        // A native fork lives in its source's process.
+        self.tell_process(new_app_id, connection.pid());
         let private = traits.private;
         let response = connection
             .request_raw_with(

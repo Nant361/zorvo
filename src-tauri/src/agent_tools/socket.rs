@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::path::ToolsPath;
+use super::peer::{descends_from, peer_process, ProcessId, SystemProcessTable};
+
 /// macOS allows 104 bytes in a socket path, the terminating NUL included.
 const MAX_SOCKET_PATH_BYTES: usize = 100;
 const TOKEN_BYTES: usize = 32;
@@ -34,10 +37,45 @@ fn current_uid() -> u32 {
     unsafe { getuid() }
 }
 
-/// Which token speaks for which app session.
+/// What a session's token lets it use: Zorvo's agent tools, computer use,
+/// and the path it reaches them by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Capabilities {
+    pub agent_tools: bool,
+    pub computer_use: bool,
+    pub path: ToolsPath,
+}
+
+impl Capabilities {
+    /// Agent tools as `enabled` says, no computer use.
+    pub fn agent_tools_only(enabled: bool, path: ToolsPath) -> Self {
+        Self {
+            agent_tools: enabled,
+            computer_use: false,
+            path,
+        }
+    }
+
+    /// Whether the session gets any of Zorvo's tools.
+    pub fn any(&self) -> bool {
+        self.agent_tools || self.computer_use
+    }
+}
+
+/// The session a connection speaks for, and what it may use.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Caller {
+    pub session: String,
+    pub capabilities: Capabilities,
+}
+
+/// Which token speaks for which app session, with what it may use.
 #[derive(Default)]
 pub struct Tokens {
-    by_session: Mutex<HashMap<String, String>>,
+    by_session: Mutex<HashMap<String, (String, Capabilities)>>,
+    /// The agent process each session runs in: only it and its descendants
+    /// may connect with the session's token.
+    processes: Mutex<HashMap<String, ProcessId>>,
 }
 
 impl Tokens {
@@ -46,12 +84,12 @@ impl Tokens {
     }
 
     /// A fresh token for a session; a second call replaces the first.
-    pub fn issue(&self, app_session_id: &str) -> String {
+    pub fn issue(&self, app_session_id: &str, capabilities: Capabilities) -> String {
         let token = random_token();
         self.by_session
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(app_session_id.to_string(), token.clone());
+            .insert(app_session_id.to_string(), (token.clone(), capabilities));
         token
     }
 
@@ -67,16 +105,39 @@ impl Tokens {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(app_session_id);
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(app_session_id);
     }
 
-    /// The session a token belongs to. Every stored token is compared, and
+    /// The agent process the session runs in; a second call replaces the first.
+    pub fn bind_process(&self, app_session_id: &str, process: ProcessId) {
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(app_session_id.to_string(), process);
+    }
+
+    fn process_of(&self, app_session_id: &str) -> Option<ProcessId> {
+        self.processes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(app_session_id)
+            .copied()
+    }
+
+    /// The caller a token belongs to. Every stored token is compared, and
     /// each comparison looks at every byte, so timing says nothing.
-    pub fn session_of(&self, token: &str) -> Option<String> {
+    pub fn caller_of(&self, token: &str) -> Option<Caller> {
         let map = self.by_session.lock().unwrap_or_else(|e| e.into_inner());
         let mut found = None;
-        for (session, stored) in map.iter() {
+        for (session, (stored, capabilities)) in map.iter() {
             if constant_time_eq(stored.as_bytes(), token.as_bytes()) {
-                found = Some(session.clone());
+                found = Some(Caller {
+                    session: session.clone(),
+                    capabilities: *capabilities,
+                });
             }
         }
         found
@@ -157,7 +218,7 @@ impl Listener {
     pub fn accept_loop(
         self,
         tokens: Arc<Tokens>,
-        on_connection: impl Fn(String, UnixStream) + Send + Sync + 'static,
+        on_connection: impl Fn(Caller, UnixStream) + Send + Sync + 'static,
     ) {
         let on_connection = Arc::new(on_connection);
         loop {
@@ -215,7 +276,7 @@ fn prepare_dir(dir: &Path) -> Result<(), String> {
 
 /// Reads the first line, at most 2 seconds and 4096 bytes, one byte at a time
 /// so nothing past the newline is consumed.
-fn authenticate(mut stream: UnixStream, tokens: &Tokens) -> Option<(String, UnixStream)> {
+fn authenticate(mut stream: UnixStream, tokens: &Tokens) -> Option<(Caller, UnixStream)> {
     let deadline = Instant::now() + FIRST_LINE_TIMEOUT;
     let mut line = Vec::new();
     let mut byte = [0u8; 1];
@@ -237,7 +298,13 @@ fn authenticate(mut stream: UnixStream, tokens: &Tokens) -> Option<(String, Unix
         line.push(byte[0]);
     }
     let value: Value = serde_json::from_slice(&line).ok()?;
-    let session = tokens.session_of(value.get("token")?.as_str()?)?;
+    let caller = tokens.caller_of(value.get("token")?.as_str()?)?;
+    // The token must come from the session's own agent process or below it.
+    let agent = tokens.process_of(&caller.session)?;
+    let peer = peer_process(&stream)?;
+    if !descends_from(&SystemProcessTable, peer, agent) {
+        return None;
+    }
     stream.set_read_timeout(None).ok()?;
-    Some((session, stream))
+    Some((caller, stream))
 }

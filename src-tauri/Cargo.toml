@@ -21,7 +21,6 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.8.1"
 # The artifact page's own webview is made with wry directly, so Tauri gives it no IPC.
 # Keep this at the version Tauri uses: one wry in Cargo.lock (a test checks).
-libc = "0.2"
 wry = { version = "=0.57.0", default-features = false }
 tauri-plugin-notification = "=2.7.0"
 # Not the default features: `zip` only serves Windows .zip bundles and Linux AppImage, and it pins

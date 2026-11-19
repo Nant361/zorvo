@@ -94,6 +94,7 @@ pub fn read_source(
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // the tests make FIFOs with mkfifo directly
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};

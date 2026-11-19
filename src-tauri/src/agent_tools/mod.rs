@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod cli;
 pub mod commands;
 pub mod path;
+pub mod peer;
 pub mod protocol;
 pub mod service;
 pub mod socket;

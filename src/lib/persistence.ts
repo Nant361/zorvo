@@ -269,6 +269,8 @@ export function normalizePersistedState(raw: unknown): PersistedState {
       paymentSource: settings.paymentSource === 'ownKey' ? 'ownKey' : 'credits',
       // On unless the user turned it off: a state written before the setting existed has it on.
       agentTools: settings.agentTools !== false,
+      // Off unless the user turned it on: any other value reads as off.
+      computerUse: settings.computerUse === true,
     },
     recentFolders: Array.isArray(raw.recentFolders)
       ? raw.recentFolders.filter(
