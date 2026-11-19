@@ -504,6 +504,61 @@ fn stopping_a_session_forgets_it() {
 }
 
 #[test]
+fn stopping_a_session_ends_what_its_agent_started_even_when_it_ignores_term() {
+    // Qwen Code's launcher runs the real Qwen as a child: killing only the
+    // launcher left a stuck Qwen, and whatever it had started, running for good.
+    let pid_file = std::env::temp_dir().join(format!("zorvo-acp-child-{}.pid", std::process::id()));
+    let _ = std::fs::remove_file(&pid_file);
+    let (manager, _rx) = manager();
+    let launch = with_env(
+        fake_agent(),
+        "FAKE_ACP_CHILD_PID_FILE",
+        pid_file.to_str().unwrap(),
+    );
+    manager.start("s-1", &cwd(), &launch, json!([])).unwrap();
+    let child: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert!(is_alive(child));
+
+    manager.stop("s-1");
+
+    let ended = eventually(Duration::from_secs(30), || !is_alive(child));
+    let _ = std::fs::remove_file(&pid_file);
+    if !ended {
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-KILL", &child.to_string()])
+            .status();
+    }
+    assert!(ended, "the agent's child {child} outlived the stop");
+}
+
+/// Answers whether `pid` is a process this user can signal.
+fn is_alive(pid: u32) -> bool {
+    std::process::Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// Polls `condition` every 50 ms until it holds or `limit` passes.
+fn eventually(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        if condition() {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
 fn loads_an_earlier_session_without_replaying_its_history_to_the_app() {
     let (manager, rx) = manager();
 

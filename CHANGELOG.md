@@ -4,6 +4,12 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Fixed
+
+- **An agent that does not stop can be ended.** Stop asks the agent to end its turn, and one waiting on a stuck tool never did. Ten seconds after Stop, the chat now offers **End agent**, which ends the agent's process; you can continue the session afterwards.
+- **Ending an agent ends what it started.** Stopping or deleting a session ended only the program Zorvo started, so an agent that runs its real process under it (Qwen Code does) could keep running, with what it had started, until you killed it yourself.
+- **A tool that runs for long is pointed out.** The chat said nothing while a tool ran, however long. After five minutes without news, it now names the tool and offers Stop.
+
 ## [0.13.1] - 2026-11-19
 
 ### Changed

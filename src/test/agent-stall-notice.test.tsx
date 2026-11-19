@@ -52,12 +52,17 @@ describe("AgentStallNotice", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("stays quiet while a tool runs, however long it takes", () => {
+  it("gives a running tool five minutes, then names it", () => {
     const building = reply({ tools: [{ id: "t", name: "pnpm build", kind: "execute", status: "running" }] });
     render(<AgentStallNotice agentName="Claude Code" messages={[question, building]} />);
 
-    act(() => void vi.advanceTimersByTime(10 * 60_000));
+    act(() => void vi.advanceTimersByTime(5 * 60_000 - 1_000));
     expect(screen.queryByRole("status")).toBeNull();
+
+    act(() => void vi.advanceTimersByTime(2_000));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Claude Code has been running one tool for 5 minutes. pnpm build. It may be stuck.",
+    );
   });
 
   it("shows the agent's failed requests at once, with the error it reported", () => {
@@ -81,5 +86,34 @@ describe("AgentStallNotice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
     expect(onStop).toHaveBeenCalledOnce();
+  });
+
+  it("offers End agent once a Stop has gone ten seconds without the turn ending", () => {
+    const onEndAgent = vi.fn();
+    const globbing = reply({ tools: [{ id: "t", name: "Glob: '**/a.png'", kind: "search", status: "running" }] });
+    render(
+      <AgentStallNotice
+        agentName="Qwen Code"
+        messages={[question, globbing]}
+        stopAskedAt={Date.now()}
+        onStop={vi.fn()}
+        onEndAgent={onEndAgent}
+      />,
+    );
+
+    act(() => void vi.advanceTimersByTime(9_000));
+    expect(screen.queryByRole("status")).toBeNull();
+
+    act(() => void vi.advanceTimersByTime(2_000));
+    expect(screen.getByRole("status")).toHaveTextContent("Qwen Code hasn't stopped.");
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "End agent" }));
+    expect(onEndAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the usual notice when nothing can end the agent", () => {
+    render(<AgentStallNotice agentName="Qwen Code" messages={[question]} stopAskedAt={Date.now()} />);
+    act(() => void vi.advanceTimersByTime(61_000));
+    expect(screen.getByRole("status")).toHaveTextContent("Qwen Code hasn't sent anything for 1 minute.");
   });
 });

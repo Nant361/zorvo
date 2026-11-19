@@ -1911,6 +1911,8 @@ export default function App() {
                       isWorking={isSessionBusy(activeSessionId) && !isAwaitingUser(currentMessages)}
                       failures={acp.failuresOf(activeSessionId)}
                       onStop={() => handleInterrupt(activeSessionId)}
+                      stopAskedAt={acp.stopAskedAt(activeSessionId)}
+                      onEndAgent={() => void acp.endAgent(activeSessionId)}
                     />
                   ) : draftWorkspace ? (
                     // The draft's heading, then its chips and card (the composer, below), then its sessions.

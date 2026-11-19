@@ -1,10 +1,17 @@
 import type { ChatMessage } from '../types';
 import { asSentence } from './sentence';
+import { escapeVisible } from './visible-text';
 
 /** One failed request is routine (the agent retries); this many in a row is worth saying. */
 export const STALL_MIN_FAILURES = 2;
 /** How long an agent may send nothing before the chat says so. */
 export const STALL_SILENCE_MS = 60_000;
+/** How long a running tool may go without news: a build or a test suite takes minutes. */
+export const STALL_TOOL_SILENCE_MS = 5 * 60_000;
+/** How long after Stop the turn may go on before End agent is offered: an agent may finish a step first. */
+export const STOP_IGNORED_MS = 10_000;
+/** A tool's name past this many characters is cut, as the notice is one line of it. */
+const MAX_TOOL_NAME_CHARS = 80;
 
 const MS_PER_MINUTE = 60_000;
 
@@ -67,6 +74,8 @@ export function nextFailures(prev: AgentFailures | undefined, report: FailureRep
 
 export interface StallState {
   failures?: AgentFailures;
+  /** The running tool's name as shown, while one runs (`runningToolOf`). */
+  runningTool?: string;
   silentForMs: number;
 }
 
@@ -77,7 +86,12 @@ export interface StallNoticeParts {
   body?: string;
 }
 
-export function stallNoticeParts(agentName: string, { failures, silentForMs }: StallState): StallNoticeParts | null {
+function minutesText(ms: number): string {
+  const minutes = Math.floor(ms / MS_PER_MINUTE);
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+export function stallNoticeParts(agentName: string, { failures, runningTool, silentForMs }: StallState): StallNoticeParts | null {
   if (failures && failures.count >= STALL_MIN_FAILURES) {
     const target = failures.model ? ` to ${failures.model}` : '';
     return {
@@ -85,11 +99,25 @@ export function stallNoticeParts(agentName: string, { failures, silentForMs }: S
       body: failures.detail ? `Last error: ${asSentence(failures.detail)}` : undefined,
     };
   }
+  if (runningTool !== undefined) {
+    if (silentForMs < STALL_TOOL_SILENCE_MS) return null;
+    return {
+      title: `${agentName} has been running one tool for ${minutesText(silentForMs)}.`,
+      body: `${runningTool}. It may be stuck.`,
+    };
+  }
   if (silentForMs < STALL_SILENCE_MS) return null;
-  const minutes = Math.floor(silentForMs / MS_PER_MINUTE);
   return {
-    title: `${agentName} hasn't sent anything for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`,
+    title: `${agentName} hasn't sent anything for ${minutesText(silentForMs)}.`,
     body: 'It may be stuck.',
+  };
+}
+
+/** The notice for a Stop the agent has not acted on: only ending its process stops it then. */
+export function stopIgnoredParts(agentName: string): StallNoticeParts {
+  return {
+    title: `${agentName} hasn't stopped.`,
+    body: 'End agent stops its process now. You can continue this session afterwards.',
   };
 }
 
@@ -107,9 +135,16 @@ function lastAgentMessage(messages: readonly ChatMessage[]): ChatMessage | undef
   return undefined;
 }
 
-/** True while the turn's last reply has a tool that has not finished: a long tool is not a stall. */
-export function hasRunningTool(messages: readonly ChatMessage[]): boolean {
-  return lastAgentMessage(messages)?.tools?.some((tool) => tool.status === 'running') ?? false;
+/**
+ * The name of the first tool of the turn's last reply that has not finished, as
+ * the notice shows it (control and bidi characters spelled out, cut to one line),
+ * or undefined while none runs. A running tool gets longer before the notice.
+ */
+export function runningToolOf(messages: readonly ChatMessage[]): string | undefined {
+  const tool = lastAgentMessage(messages)?.tools?.find((entry) => entry.status === 'running');
+  if (!tool) return undefined;
+  const name = escapeVisible(tool.name.replace(/\s+/g, ' ').trim()) || 'A tool';
+  return name.length > MAX_TOOL_NAME_CHARS ? `${name.slice(0, MAX_TOOL_NAME_CHARS)}…` : name;
 }
 
 /** Changes whenever the agent writes, thinks, updates a plan or a tool; equal while nothing arrives. */
