@@ -429,7 +429,8 @@ function latest(tools: readonly ToolExecution[]): ToolExecution | undefined {
  * (it counts the process's age in whole seconds back from when the answer arrived), so a launch is
  * never announced after it; a launch that failed is taken only when no other is left, so a retry
  * that failed because the first still holds its port never takes the running process's output.
- * A command never matches one it is only part of. A process nothing matches has none.
+ * When no form matches whole, the one launch whose words hold the process's (or the other way
+ * round) is taken; two such launches, or none, give no match.
  */
 export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessage[]): ToolExecution | undefined {
   const tools = messages.flatMap((message) => message.tools ?? []);
@@ -437,10 +438,24 @@ export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessag
   if (ownId !== undefined) return tools.find((tool) => tool.id === ownId);
   const command = normalized(task.name);
   if (command === '') return undefined;
-  const launches = tools.filter(
-    (tool) => launchedCommand(tool, command) && (tool.startedAt ?? 0) <= task.startedAt,
-  );
-  return latest(launches.filter((tool) => tool.status !== 'failed')) ?? latest(launches);
+  const before = tools.filter((tool) => tool.kind === 'execute' && (tool.startedAt ?? 0) <= task.startedAt);
+  const launches = before.filter((tool) => launchedCommand(tool, command));
+  const found = latest(launches.filter((tool) => tool.status !== 'failed')) ?? latest(launches);
+  if (found) return found;
+  // No form matched whole: a shape the forms do not know. The one launch whose words hold the
+  // process's (or the other way round) is taken; with two, nothing can tell them apart.
+  const holders = before.filter((tool) => holdsWords(normalized(tool.command ?? tool.name), command));
+  return holders.length === 1 ? holders[0] : undefined;
+}
+
+/** Whether either command's words hold the other's as a run of whole words. */
+function holdsWords(a: string, b: string): boolean {
+  const run = (outer: string[], inner: string[]) =>
+    inner.length > 0 &&
+    outer.some((_, start) => inner.every((word, offset) => outer[start + offset] === word));
+  const wordsA = a.split(' ').filter((word) => word !== '');
+  const wordsB = b.split(' ').filter((word) => word !== '');
+  return run(wordsA, wordsB) || run(wordsB, wordsA);
 }
 
 /**

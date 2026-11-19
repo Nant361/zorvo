@@ -201,11 +201,29 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("pnpm dev", NOW - 60_000), one(later))).toBeUndefined();
   });
 
-  it("does not match a short command inside a longer one", () => {
+  it("does not match a short command inside a longer one when two launches hold it", () => {
     const watch = launch("watch", "node scripts/watch.mjs", NOW - 60_000);
+    const build = launch("build", "node scripts/build.mjs", NOW - 61_000);
 
-    expect(shellToolFor(process("node", NOW - 59_000), one(watch))).toBeUndefined();
-    expect(shellToolFor(process("node scripts/watch.mjs --poll", NOW - 59_000), one(watch))).toBeUndefined();
+    expect(shellToolFor(process("node", NOW - 59_000), one(watch, build))).toBeUndefined();
+    expect(shellToolFor(process("sleep 30", NOW - 59_000), one(launch("x", "cd /tmp && sleep 300", NOW - 60_000)))).toBeUndefined();
+  });
+
+  it("falls back to the one launch whose words hold the process's, or the other way round", () => {
+    const watch = launch("watch", "node scripts/watch.mjs", NOW - 60_000);
+    const buffered = launch("buffered", "stdbuf -oL sleep 300", NOW - 60_000);
+
+    expect(shellToolFor(process("node scripts/watch.mjs --poll", NOW - 59_000), one(watch))?.id).toBe("watch");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(buffered))?.id).toBe("buffered");
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(buffered, launch("again", "stdbuf -oL sleep 300", NOW - 59_500)))).toBeUndefined();
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("later", "stdbuf -oL sleep 300", NOW)))).toBeUndefined();
+  });
+
+  it("prefers a launch that matches whole to the fallback", () => {
+    const whole = launch("whole", "sleep 300", NOW - 60_000);
+    const holder = launch("holder", "stdbuf -oL sleep 300", NOW - 59_500);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(whole, holder))?.id).toBe("whole");
   });
 
   it("matches a command the scan cut short", () => {
@@ -220,7 +238,8 @@ describe("finding a shell task and its tool call", () => {
 
     expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(wrapped))?.id).toBe("wrapped");
     expect(shellToolFor(process("cargo watch -x test", NOW - 59_000), one(zsh))?.id).toBe("zsh");
-    expect(shellToolFor(process("bash -lc", NOW - 59_000), one(wrapped))).toBeUndefined();
+    // The fallback takes one launch whose words hold the process's; two leave nothing to choose.
+    expect(shellToolFor(process("bash -lc", NOW - 59_000), one(wrapped, launch("other", `bash -lc "pnpm test"`, NOW - 60_000)))).toBeUndefined();
   });
 
   it("matches a launch whose program replaced its shell under its interpreter", () => {
