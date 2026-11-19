@@ -53,22 +53,31 @@ export interface FolderPullRequests {
   pullRequests: readonly PullRequestStatus[];
 }
 
+/** The newest unarchived session in each folder of its own (not a worktree), by id; worked out once per session list. */
+export function newestSessionInFolder(sessions: readonly Session[]): ReadonlyMap<string, string> {
+  const newest = new Map<string, Session>();
+  for (const session of sessions) {
+    if (session.worktree || isArchived(session)) continue;
+    const path = workspacePathOf(session);
+    const current = newest.get(path);
+    if (!current || session.createdAt > current.createdAt) newest.set(path, session);
+  }
+  return new Map([...newest].map(([path, session]) => [path, session.id]));
+}
+
 /**
  * The branch whose pull request a session's row shows: a worktree session's own branch, else the
- * folder's checked-out branch, but only for the newest session in that folder. Sessions do not record
- * the branch they ran on, so an older session there would show whatever branch is checked out now.
+ * folder's checked-out branch, but only for the newest session in that folder (`newestSessionInFolder`).
+ * Sessions do not record the branch they ran on, so an older session there would show whatever branch
+ * is checked out now.
  */
 export function sessionBranchOf(
   session: Session,
   folder: FolderPullRequests,
-  sessions: readonly Session[],
+  newestInFolder: ReadonlyMap<string, string>,
 ): string | null {
   if (session.worktree) return session.worktree.branch;
-  const path = workspacePathOf(session);
-  const newest = sessions
-    .filter((other) => !other.worktree && !isArchived(other) && workspacePathOf(other) === path)
-    .reduce<Session | null>((latest, other) => (latest === null || other.createdAt > latest.createdAt ? other : latest), null);
-  return newest?.id === session.id ? folder.branch : null;
+  return newestInFolder.get(workspacePathOf(session)) === session.id ? folder.branch : null;
 }
 
 /** The pull request whose head is `branch`, the newest first, as gh lists them. */

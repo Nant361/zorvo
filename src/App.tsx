@@ -47,7 +47,7 @@ import { useSecretGuard } from "./hooks/useSecretGuard";
 import { useTurnsEnded } from "./hooks/useTurnsEnded";
 import { usePullRequest } from "./hooks/usePullRequest";
 import { useWorkspacePullRequests } from "./hooks/useWorkspacePullRequests";
-import { pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
+import { newestSessionInFolder, pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
 import { currentPlan } from "./lib/plan";
 import { useRepoPullRequests } from "./hooks/useRepoPullRequests";
 import { useAgentSignIn } from "./hooks/useAgentSignIn";
@@ -821,13 +821,16 @@ export default function App() {
     [sessions],
   );
   const busyFolders = sessions.filter((session) => isSessionBusy(session.id)).map(workspacePathOf);
-  const folderPullRequests = useWorkspacePullRequests(listedFolders, github.status?.state === "signed-in", busyFolders);
+  const folderPullRequests = useWorkspacePullRequests(listedFolders, github.status?.state === "signed-in", busyFolders, {
+    liveFolder: activeSession ? workspacePathOf(activeSession) : undefined,
+  });
+  const newestInFolder = useMemo(() => newestSessionInFolder(sessions), [sessions]);
   const pullRequestOf = useCallback(
     (session: Session) => {
       const folder = folderPullRequests.get(workspacePathOf(session));
-      return folder ? pullRequestOnBranch(folder, sessionBranchOf(session, folder, sessions)) : null;
+      return folder ? pullRequestOnBranch(folder, sessionBranchOf(session, folder, newestInFolder)) : null;
     },
-    [folderPullRequests, sessions],
+    [folderPullRequests, newestInFolder],
   );
   // The top bar reads the same list; its own call is only for a branch outside the 100 newest.
   const shownFolder = activeSession ? folderPullRequests.get(workspacePathOf(activeSession)) : undefined;

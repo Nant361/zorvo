@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PullRequestStatus } from "../hooks/usePullRequest";
 import {
   LOOK_STYLE,
+  newestSessionInFolder,
   pullRequestLabel,
   pullRequestLine,
   pullRequestLook,
@@ -77,16 +78,17 @@ describe("which pull request a session shows", () => {
 
   it("matches a worktree session by its own branch", () => {
     const inWorktree = session("w", { worktree: { repoPath: "/w/zorvo", path: "/data/wt/row", branch: "feat/row" } });
-    expect(pullRequestOnBranch(folder, sessionBranchOf(inWorktree, folder, [inWorktree]))?.number).toBe(250);
+    expect(pullRequestOnBranch(folder, sessionBranchOf(inWorktree, folder, newestSessionInFolder([inWorktree])))?.number).toBe(250);
   });
 
   it("gives the folder's checked-out branch only to the newest session there", () => {
     const older = session("old", { createdAt: 1 });
     const newer = session("new", { createdAt: 2 });
-    const all = [older, newer];
-    expect(sessionBranchOf(newer, folder, all)).toBe("fix/main-checkout");
-    expect(sessionBranchOf(older, folder, all)).toBeNull();
-    expect(pullRequestOnBranch(folder, sessionBranchOf(older, folder, all))).toBeNull();
+    const archivedNewest = session("archived", { createdAt: 3, archivedAt: 4 });
+    const newest = newestSessionInFolder([older, newer, archivedNewest]);
+    expect(sessionBranchOf(newer, folder, newest)).toBe("fix/main-checkout");
+    expect(sessionBranchOf(older, folder, newest)).toBeNull();
+    expect(pullRequestOnBranch(folder, sessionBranchOf(older, folder, newest))).toBeNull();
   });
 
   it("has no pull request for a branch gh did not list", () => {

@@ -7,6 +7,8 @@ import { MAX_FAILED_READS, type PullRequestStatus } from './usePullRequest';
 export const FOCUS_REFRESH_MS = 2 * 60_000;
 /** A turn end reads a folder again once its last read is this old: an agent may have pushed or opened one. */
 export const TURN_REFRESH_MS = 60_000;
+/** The folder of the session on screen is read this often, as the top bar's own read was: its checks may be running. */
+export const LIVE_REFRESH_MS = 60_000;
 
 interface Answer {
   branch: string | null;
@@ -24,8 +26,9 @@ function countsOf(folders: readonly string[]): Map<string, number> {
 
 /**
  * The pull requests of each session folder, one `gh pr list` per folder, kept in memory: read when a
- * folder first appears, on window focus at most every 2 minutes, and when a session there ends its turn
- * (it leaves `busyFolders`, the folder of every session at work) at most once a minute. Nothing is read while `isEnabled` is false (gh missing or signed out),
+ * folder first appears, on window focus at most every 2 minutes, when a session there ends its turn
+ * (it leaves `busyFolders`, the folder of every session at work) at most once a minute, and every minute
+ * for `liveFolder` (the session on screen) while the window is in front. Nothing is read while `isEnabled` is false (gh missing or signed out),
  * and the backend runs nothing for a folder without a github.com remote. Reads go one at a time.
  *
  * A failed read is quiet and keeps what was shown; after `MAX_FAILED_READS` failures in a row the
@@ -35,6 +38,7 @@ export function useWorkspacePullRequests(
   paths: readonly string[],
   isEnabled: boolean,
   busyFolders: readonly string[],
+  { liveFolder }: { liveFolder?: string } = {},
 ): ReadonlyMap<string, FolderPullRequests> {
   const [folders, setFolders] = useState<ReadonlyMap<string, FolderPullRequests>>(NONE);
   const readAt = useRef(new Map<string, number>());
@@ -96,10 +100,23 @@ export function useWorkspacePullRequests(
     [pathsKey, readIfOlder],
   );
 
-  // A folder that appears is read at once; one already read waits for its next refresh.
+  // A folder that appears is read at once; one already read waits for its next refresh. After gh was
+  // signed out (or missing) every folder is read again, since what was kept may have changed meanwhile.
+  const wasEnabled = useRef(isEnabled);
   useEffect(() => {
+    if (isEnabled && !wasEnabled.current) readAt.current.clear();
+    wasEnabled.current = isEnabled;
     if (isEnabled) readOlderThan(Number.POSITIVE_INFINITY);
   }, [isEnabled, readOlderThan]);
+
+  // The session on screen keeps its checks current, every minute while the window is in front.
+  useEffect(() => {
+    if (!isEnabled || !liveFolder) return;
+    const timer = setInterval(() => {
+      if (document.hasFocus()) readIfOlder([liveFolder], LIVE_REFRESH_MS);
+    }, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [isEnabled, liveFolder, readIfOlder]);
 
   useEffect(() => {
     if (!isEnabled) return;

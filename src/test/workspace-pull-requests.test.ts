@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { FOCUS_REFRESH_MS, TURN_REFRESH_MS, useWorkspacePullRequests } from "../hooks/useWorkspacePullRequests";
+import { FOCUS_REFRESH_MS, LIVE_REFRESH_MS, TURN_REFRESH_MS, useWorkspacePullRequests } from "../hooks/useWorkspacePullRequests";
 
 type Invoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 const internals = () => (window as unknown as { __TAURI_INTERNALS__: { invoke: Invoke } }).__TAURI_INTERNALS__;
@@ -97,6 +97,37 @@ describe("useWorkspacePullRequests", () => {
     rerender({ busy: [] });
     await settle();
     expect(asked.filter((path) => path === "/w/a")).toHaveLength(2);
+  });
+
+  it("reads the folder of the session on screen every minute while the window is in front", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(1_000_000);
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const asked = fakeBackend(async () => answer(250));
+    renderHook(() => useWorkspacePullRequests(["/w/a", "/w/b"], true, [], { liveFolder: "/w/a" }));
+    await settle();
+    expect(asked.sort()).toEqual(["/w/a", "/w/b"]);
+
+    vi.setSystemTime(1_000_000 + LIVE_REFRESH_MS);
+    act(() => {
+      vi.advanceTimersByTime(LIVE_REFRESH_MS);
+    });
+    await settle();
+    expect(asked.filter((path) => path === "/w/a")).toHaveLength(2);
+    expect(asked.filter((path) => path === "/w/b")).toHaveLength(1);
+  });
+
+  it("reads every folder again when gh is signed in after being signed out", async () => {
+    const asked = fakeBackend(async () => answer(250));
+    const { rerender } = renderHook(({ isEnabled }) => useWorkspacePullRequests(["/w/a"], isEnabled, []), {
+      initialProps: { isEnabled: true },
+    });
+    await settle();
+    rerender({ isEnabled: false });
+    rerender({ isEnabled: true });
+    await settle();
+
+    expect(asked).toEqual(["/w/a", "/w/a"]);
   });
 
   it("keeps the last answer through a failure and drops it after three in a row", async () => {
