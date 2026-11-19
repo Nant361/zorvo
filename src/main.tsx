@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { LinkMenuLayer } from "./components/LinkMenuLayer";
 import { PopoutApp } from "./components/PopoutApp";
 import { installContextMenuGuard } from "./lib/context-menu";
 import { loadAppFonts } from "./lib/fonts";
@@ -22,6 +23,7 @@ if (rootElement) {
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
         {mode.kind === "popout" ? <PopoutApp sessionId={mode.sessionId} /> : <App />}
+        <LinkMenuLayer />
       </React.StrictMode>
     );
   });

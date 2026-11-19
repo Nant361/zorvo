@@ -37,6 +37,22 @@ describe("keepsNativeMenu", () => {
     expect(keepsNativeMenu(reply, window.getSelection())).toBe(true);
   });
 
+  it("never keeps it on a link, even when the right-click selected its text", () => {
+    // WebKit's menu on a link has "Open Link", which loads the page inside Zorvo's own window.
+    const reply = document.createElement("p");
+    const link = document.createElement("a");
+    link.href = "https://github.com/zakyirsyaad/zorvo";
+    link.textContent = "the repository";
+    reply.append(link);
+    document.body.append(reply);
+    const range = document.createRange();
+    range.selectNodeContents(link);
+    window.getSelection()?.addRange(range);
+
+    expect(keepsNativeMenu(link.firstChild, window.getSelection())).toBe(false);
+    expect(keepsNativeMenu(link, window.getSelection())).toBe(false);
+  });
+
   it("keeps it nowhere else", () => {
     expect(keepsNativeMenu(document.createElement("div"), window.getSelection())).toBe(false);
     expect(keepsNativeMenu(document.createElement("div"), null)).toBe(false);

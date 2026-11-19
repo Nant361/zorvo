@@ -1,0 +1,143 @@
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { Copy, ExternalLink } from "lucide-react";
+import { linkAt, menuPlacement, openableLinkAt, shownAddress, type OpenableLink, type Point } from "../lib/link-menu";
+import { POPOVER_PANEL_STYLE, PopoverOption } from "./ui/Popover";
+
+interface OpenMenu {
+  link: OpenableLink;
+  point: Point;
+}
+
+/**
+ * Zorvo's own menu for a right-click on a link, in place of WebKit's, whose "Open Link" would load
+ * the page inside Zorvo's window. Mounted once per window; it watches every link, so links outside
+ * an agent's reply (Settings, the Changes panel) get it too. A link Zorvo cannot open keeps no menu.
+ */
+export function LinkMenuLayer() {
+  const [menu, setMenu] = useState<OpenMenu | null>(null);
+
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      if (!linkAt(event.target)) return;
+      event.preventDefault();
+      const link = openableLinkAt(event.target);
+      if (!link) return;
+      setMenu({ link, point: pointFor(event, link.anchor) });
+    };
+    document.addEventListener("contextmenu", onContextMenu);
+    return () => document.removeEventListener("contextmenu", onContextMenu);
+  }, []);
+
+  if (!menu) return null;
+  return createPortal(
+    <LinkMenu key={`${menu.point.x},${menu.point.y},${menu.link.href}`} menu={menu} onClose={() => setMenu(null)} />,
+    document.body,
+  );
+}
+
+/** Puts text on the clipboard, as the code block's Copy does; WKWebView has the clipboard API. */
+function copyText(text: string): void {
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+/** At the pointer; from the keyboard (the menu key, Shift+F10) there is no pointer, so below the link. */
+function pointFor(event: MouseEvent, anchor: HTMLAnchorElement): Point {
+  if (event.clientX !== 0 || event.clientY !== 0) return { x: event.clientX, y: event.clientY };
+  const box = anchor.getBoundingClientRect();
+  return { x: box.left, y: box.bottom };
+}
+
+function LinkMenu({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState({ left: menu.point.x, top: menu.point.y });
+  const { anchor, href } = menu.link;
+
+  // Before paint, so the menu never shows past the window's edge.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const size = { width: panel.offsetWidth, height: panel.offsetHeight };
+    setPlace(menuPlacement(menu.point, size, { width: window.innerWidth, height: window.innerHeight }));
+    panel.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [menu.point]);
+
+  // A click outside, leaving the window or resizing it closes it. A scroll does not: the chat scrolls
+  // by itself while an agent writes, and the menu would vanish under the pointer.
+  useEffect(() => {
+    const onMouseDown = (event: MouseEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("blur", onClose);
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("blur", onClose);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
+  const closeToLink = () => {
+    onClose();
+    anchor.focus();
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const step: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeToLink();
+    } else if (event.key === "Tab") {
+      onClose();
+    } else if (event.key in step && items.length > 0) {
+      event.preventDefault();
+      items[(at + step[event.key] + items.length) % items.length].focus();
+    } else if ((event.key === "Home" || event.key === "End") && items.length > 0) {
+      event.preventDefault();
+      items[event.key === "Home" ? 0 : items.length - 1].focus();
+    }
+  };
+
+  const open = () => {
+    // The backend opens only http, https and mailto, which OPENABLE_URL already checked.
+    invoke("open_external_url", { url: href }).catch(() => {});
+    onClose();
+  };
+
+  const copy = () => {
+    copyText(href);
+    onClose();
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      role="menu"
+      aria-label="Link"
+      onKeyDown={onKeyDown}
+      style={{ left: place.left, top: place.top }}
+      className={`fixed z-50 flex w-60 flex-col ${POPOVER_PANEL_STYLE}`}
+    >
+      <PopoverOption onSelect={open}>
+        <span className="inline-flex items-center gap-2">
+          <ExternalLink aria-hidden="true" className="size-3.5 text-fg-muted" />
+          Open in browser
+        </span>
+      </PopoverOption>
+      <PopoverOption onSelect={copy}>
+        <span className="inline-flex items-center gap-2">
+          <Copy aria-hidden="true" className="size-3.5 text-fg-muted" />
+          Copy link
+        </span>
+      </PopoverOption>
+      <div aria-hidden="true" className="mx-1.5 my-1 h-px bg-border" />
+      <p title={href} className="truncate px-2 pb-1 font-mono text-caption text-fg-subtle">
+        {shownAddress(href)}
+      </p>
+    </div>
+  );
+}

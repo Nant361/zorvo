@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { invoke } from "@tauri-apps/api/core";
 import { Copy, Check } from "lucide-react";
+import { OPENABLE_URL } from "../lib/link-menu";
 
 const COPIED_FEEDBACK_MS = 2000;
 const LANGUAGE_CLASS = /language-([\w-]+)/;
@@ -53,8 +54,6 @@ function textOf(children: ReactNode): string {
   return "";
 }
 
-/** What the app can open for a link: web pages and mail, in the user's apps. */
-const OPENABLE_URL = /^(https?:|mailto:)/i;
 
 /**
  * Links open in the user's browser; a click must never navigate the app's
