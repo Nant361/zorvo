@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::process::{Child, Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use crate::common::{eventually, is_alive};
 use zorvo_lib::background_processes::{
     display_command, parse_etime, parse_lsof_ports, parse_ps, scan, select_tasks, stop, subtree_of,
     subtrees_of, terminate, ProcessRow, TaskProcess,
@@ -309,34 +309,11 @@ fn refuses_to_stop_a_process_that_is_not_a_task() {
     assert!(error.contains("is no longer running"), "{error}");
 }
 
-/// Answers whether `pid` is a process this user can signal.
-fn is_alive(pid: u32) -> bool {
-    Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
 /// How long a test waits for a real process to start, show up or end. A
 /// passing test returns at once, so the cap only matters on a loaded runner,
 /// where hundreds of tests share the machine. A process the test expects to be
 /// killed sleeps for longer than this, so ending on its own cannot pass for a kill.
 const PROCESS_WAIT: Duration = Duration::from_secs(30);
-
-/// Polls `condition` every 50 ms until it holds or `limit` passes.
-fn eventually(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
-    let deadline = Instant::now() + limit;
-    loop {
-        if condition() {
-            return true;
-        }
-        if Instant::now() >= deadline {
-            return false;
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-}
 
 /// A spawned process tree that is killed, descendants first, however the
 /// test ends.

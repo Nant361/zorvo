@@ -80,6 +80,17 @@ describe("useAcpEngine when Stop is pressed", () => {
     expect(engine.result.current.stopAskedAt("s-1")).toBeUndefined();
   });
 
+  it("keeps the first Stop's time when Stop is pressed again", async () => {
+    const engine = renderEngine();
+    await startTurn(engine);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    act(() => engine.result.current.interrupt("s-1", []));
+    now.mockReturnValue(9_000);
+    act(() => engine.result.current.interrupt("s-1", []));
+
+    expect(engine.result.current.stopAskedAt("s-1")).toBe(1_000);
+  });
+
   it("ends the agent's process and the session for a Stop the agent ignored", async () => {
     const spy = vi.spyOn(tauriInternals(), "invoke");
     const engine = renderEngine();

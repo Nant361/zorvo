@@ -11,7 +11,7 @@ use zorvo_lib::acp::manager::{
 };
 use zorvo_lib::acp::terminal_auth::SignInAttempts;
 
-use crate::common::{agent_text, cwd, fake_agent, manager, wait_for, WAIT};
+use crate::common::{agent_text, cwd, eventually, fake_agent, is_alive, manager, wait_for, WAIT};
 
 #[test]
 fn starts_a_session_and_reports_its_modes() {
@@ -533,29 +533,6 @@ fn stopping_a_session_ends_what_its_agent_started_even_when_it_ignores_term() {
             .status();
     }
     assert!(ended, "the agent's child {child} outlived the stop");
-}
-
-/// Answers whether `pid` is a process this user can signal.
-fn is_alive(pid: u32) -> bool {
-    std::process::Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-/// Polls `condition` every 50 ms until it holds or `limit` passes.
-fn eventually(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
-    let deadline = std::time::Instant::now() + limit;
-    loop {
-        if condition() {
-            return true;
-        }
-        if std::time::Instant::now() >= deadline {
-            return false;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
 }
 
 #[test]
