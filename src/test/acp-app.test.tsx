@@ -504,6 +504,32 @@ describe("ACP sessions in the app", () => {
     expect(callsTo(spy, "acp_cancel")).toHaveLength(1);
   });
 
+  it("shows the agent as working after Stop even while a card still waits, so End agent can show", async () => {
+    const spy = await renderWithQwen();
+    const sessionId = await startQwenSession(spy);
+    await send("clean up");
+    await acpEvent({
+      sessionId,
+      kind: "permission",
+      requestId: 14,
+      toolCall: { title: "Delete build" },
+      options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+    });
+    // The cancel cannot be delivered, so the card stays: the chat waits on the user.
+    const original = realInvoke;
+    spy.mockImplementation((cmd, args) =>
+      cmd === "acp_respond_permission" ? Promise.reject("request expired") : original(cmd, args)
+    );
+    expect(screen.queryByTestId("agent-working")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Stop agent" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Allow" })).toBeDefined();
+    expect(screen.getByTestId("agent-working")).toBeDefined();
+  });
+
   it("keeps the card open when answering the agent fails", async () => {
     const spy = await renderWithQwen();
     const sessionId = await startQwenSession(spy);

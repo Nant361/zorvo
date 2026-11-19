@@ -471,22 +471,16 @@ export function isAwaitingPermission(messages: readonly ChatMessage[]): boolean 
 /**
  * Marks every permission request still waiting as unanswered, in any turn:
  * its agent is gone (the app restarted, or the agent ended), so no answer can
- * reach it. Returns the same list when none waits.
+ * reach it. With `cardId`, only that card: Stop answered it as cancelled.
+ * Returns the same list when none waits.
  */
-export function settlePermissionCards(messages: ChatMessage[]): ChatMessage[] {
-  if (!messages.some((message) => message.actionCard?.status === 'pending')) return messages;
+export function settlePermissionCards(messages: ChatMessage[], cardId?: string): ChatMessage[] {
+  const isSettled = (card: ChatMessage['actionCard']) =>
+    card?.status === 'pending' && (cardId === undefined || card.id === cardId);
+  if (!messages.some((message) => isSettled(message.actionCard))) return messages;
   return messages.map((message) => {
     const card = message.actionCard;
-    if (card?.status !== 'pending') return message;
-    return { ...message, actionCard: { ...card, status: 'rejected' as const, chosenOptionId: undefined } };
-  });
-}
-
-/** Settles one card whose request was answered as cancelled (Stop): it reads unanswered. */
-export function cancelPermissionCard(messages: ChatMessage[], cardId: string): ChatMessage[] {
-  return messages.map((message) => {
-    const card = message.actionCard;
-    if (card?.id !== cardId || card.status !== 'pending') return message;
+    if (!card || !isSettled(card)) return message;
     return { ...message, actionCard: { ...card, status: 'rejected' as const, chosenOptionId: undefined } };
   });
 }

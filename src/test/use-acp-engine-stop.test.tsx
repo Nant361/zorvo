@@ -36,7 +36,7 @@ const emit = (payload: Record<string, unknown>) =>
     listeners.get("acp-event")?.({ payload: { sessionId: "s-1", ...payload } });
   });
 
-function renderEngine() {
+function renderEngine({ reportError = vi.fn() }: { reportError?: (message: string) => void } = {}) {
   let sessions: Session[] = [SESSION];
   let messages: ChatMessage[] = [];
   const hook = renderHook(() =>
@@ -49,7 +49,7 @@ function renderEngine() {
       patchSession: (_id, patch) => {
         sessions = sessions.map((s) => ({ ...s, ...patch }));
       },
-      reportError: vi.fn(),
+      reportError,
       rememberOptions: () => {},
       onAuthRequired: () => {},
     }),
@@ -128,5 +128,33 @@ describe("useAcpEngine when Stop is pressed", () => {
     });
 
     await waitFor(() => expect(pending()).toHaveLength(0));
+  });
+
+  it("records no Stop for a session whose turn already ended", async () => {
+    const engine = renderEngine();
+    await startTurn(engine);
+    await emit({ kind: "turn-end", stopReason: "end_turn" });
+
+    act(() => engine.result.current.interrupt("s-1", []));
+
+    expect(engine.result.current.stopAskedAt("s-1")).toBeUndefined();
+  });
+
+  it("treats an agent already gone as ended, with no notice", async () => {
+    const reportError = vi.fn();
+    const engine = renderEngine({ reportError });
+    await startTurn(engine);
+    const real = tauriInternals().invoke.bind(tauriInternals());
+    vi.spyOn(tauriInternals(), "invoke").mockImplementation((cmd, args) =>
+      cmd === "acp_end_agent" ? Promise.reject("Session 's-1' not found") : real(cmd, args),
+    );
+
+    let ended = false;
+    await act(async () => {
+      ended = await engine.result.current.endAgent("s-1");
+    });
+
+    expect(ended).toBe(true);
+    expect(reportError).not.toHaveBeenCalled();
   });
 });

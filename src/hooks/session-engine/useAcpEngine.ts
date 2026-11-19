@@ -10,7 +10,6 @@ import {
   reopenPermissionCard,
   resolvePermissionCard,
   settlePermissionCards,
-  cancelPermissionCard,
   type PermissionRequestPayload,
 } from '../../lib/acp-events';
 import { changesToApply, NO_CHOICES, type AcpChange, type AcpChoices, type AgentOptions } from '../../lib/acp-draft';
@@ -792,13 +791,15 @@ export function useAcpEngine({
       return;
     }
     agentFailures.clear(sessionId);
-    // A second Stop keeps the first one's time: the wait for End agent does not start over.
-    setStopAsked((prev) => (sessionId in prev ? prev : { ...prev, [sessionId]: Date.now() }));
+    // Only a turn that runs can ignore Stop: a click that lands after the turn ended (a stale
+    // background-tasks row) would otherwise offer End agent in the next one. A second Stop
+    // keeps the first one's time, so the wait for End agent does not start over.
+    if (acp.isBusy(sessionId)) setStopAsked((prev) => (sessionId in prev ? prev : { ...prev, [sessionId]: Date.now() }));
     for (const card of pendingCardsInTurn(messages ?? [])) {
       if (card.requestId === undefined) continue;
       acp.respondPermission(sessionId, card.requestId, null).then(
         // Answered: the agent no longer waits on it, so the chat stops waiting on the user too.
-        () => updateNow(sessionId, (prev) => cancelPermissionCard(prev, card.id)),
+        () => updateNow(sessionId, (prev) => settlePermissionCards(prev, card.id)),
         (error: unknown) => {
           // An agent that is gone waits on nothing: the card is settled, and the backend's wording (with the session id) stays out of the notice.
           if (isSessionGoneError(error)) updateNow(sessionId, settlePermissionCards);
@@ -825,6 +826,8 @@ export function useAcpEngine({
     acp.endAgent(sessionId).then(
       () => true,
       (error: unknown) => {
+        // Already gone (a second click, or it died meanwhile): what End agent was for is done.
+        if (isSessionGoneError(error)) return true;
         reportFailure('Could not end the agent')(error);
         return false;
       },
