@@ -114,3 +114,41 @@ fn acp_agent_is_disclaimed() {
     connection.kill();
     assert_eq!(responsible, Some(pid as i32));
 }
+
+fn spawn_agent(program: &str) -> Result<(), String> {
+    use std::sync::Arc;
+    use zorvo_lib::acp::connection::{AcpConnection, EventSink};
+    AcpConnection::spawn(program, &[], &common::cwd(), &[], |_| -> EventSink {
+        Arc::new(|_| {})
+    })
+    .map(|connection| connection.kill())
+}
+
+#[test]
+fn missing_agent_path_fails_at_spawn() {
+    use_trampoline();
+    let error = spawn_agent("/nonexistent/agent/for/sure").unwrap_err();
+    assert!(error.contains("No such file or directory"), "{error}");
+}
+
+#[test]
+fn agent_name_not_on_path_fails_at_spawn() {
+    use_trampoline();
+    let error = spawn_agent("zorvo-no-such-program-for-sure").unwrap_err();
+    assert!(error.contains("No such file or directory"), "{error}");
+}
+
+#[test]
+fn missing_pty_command_fails_at_spawn() {
+    use zorvo_lib::pty_session::PtySessionManager;
+    use_trampoline();
+    let manager = PtySessionManager::new(Box::new(|_| {}));
+    let result = manager.start_session(
+        "missing",
+        &common::cwd(),
+        "/nonexistent/binary/for/sure",
+        &[],
+        &[],
+    );
+    assert!(result.is_err(), "a missing command must fail at spawn");
+}

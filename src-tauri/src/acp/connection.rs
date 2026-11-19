@@ -65,6 +65,13 @@ impl AcpConnection {
         env: &[(String, String)],
         make_sink: impl FnOnce(Weak<Self>) -> EventSink,
     ) -> Result<Arc<Self>, String> {
+        let child_path = env
+            .iter()
+            .rev()
+            .find(|(key, _)| key == "PATH")
+            .map(|(_, value)| std::ffi::OsStr::new(value.as_str()));
+        crate::spawn::find_program(program, child_path)
+            .map_err(|e| format!("Failed to start agent '{}': {}", program, e))?;
         let mut child = crate::spawn::command(program)
             .args(args)
             .current_dir(cwd)

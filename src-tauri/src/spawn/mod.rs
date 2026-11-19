@@ -14,7 +14,9 @@ mod disclaim;
 pub mod trampoline;
 
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::io;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -67,6 +69,46 @@ pub fn pty_command(program: impl AsRef<OsStr>) -> portable_pty::CommandBuilder {
 #[allow(clippy::disallowed_methods)] // the driver is the one exception
 pub fn driver_command(program: impl AsRef<OsStr>) -> Command {
     Command::new(program)
+}
+
+/// Checks that `program` can be started, looking it up in `path` (the child's
+/// own `PATH`; this process's when `None`) the way `posix_spawnp` will. Through
+/// the trampoline a missing program would otherwise start fine and then exit
+/// with the trampoline's status, so callers check first to keep the error at
+/// spawn time, worded as a direct spawn's (`No such file or directory`).
+/// A relative path with a slash is left to the spawn itself, since it names a
+/// file under the child's working directory.
+pub fn find_program(program: &str, path: Option<&OsStr>) -> io::Result<()> {
+    let not_found = || io::Error::from(io::ErrorKind::NotFound);
+    if program.is_empty() {
+        return Err(not_found());
+    }
+    if program.contains('/') {
+        let candidate = Path::new(program);
+        return if candidate.is_relative() || is_executable(candidate) {
+            Ok(())
+        } else {
+            Err(io::Error::from_raw_os_error(libc::ENOENT))
+        };
+    }
+    let path = path
+        .map(OsStr::to_os_string)
+        .or_else(|| std::env::var_os("PATH"))
+        .unwrap_or_default();
+    let found = std::env::split_paths(&path)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .any(|dir| is_executable(&dir.join(program)));
+    if found {
+        Ok(())
+    } else {
+        Err(io::Error::from_raw_os_error(libc::ENOENT))
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    path.metadata()
+        .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
 }
 
 /// The pid macOS holds responsible for `pid`, or `None` when it cannot tell.

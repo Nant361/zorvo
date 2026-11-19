@@ -129,6 +129,9 @@ impl PtySessionManager {
         // Set TERM if not already specified
         cmd.env("TERM", "xterm-256color");
 
+        crate::spawn::find_program(command, cmd.get_env("PATH"))
+            .map_err(|e| format!("Failed to spawn command '{}': {}", command, e))?;
+
         let child = pair
             .slave
             .spawn_command(cmd)
