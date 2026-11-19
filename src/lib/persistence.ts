@@ -355,11 +355,18 @@ function isVerification(value: unknown): value is MessageVerification {
   );
 }
 
-/** A verification that does not match the shape is dropped; the reply itself stays. */
+/**
+ * A verification that does not match the shape is dropped; the reply itself stays. One saved while
+ * still `checking` reads as not signed: the proxy's records are gone after a restart, so nothing
+ * would ever finish the check and the badge would spin for good.
+ */
 function withValidVerification(message: ChatMessage): ChatMessage {
-  if (!('verification' in message) || isVerification(message.verification)) return message;
-  const { verification: _dropped, ...rest } = message;
-  return rest;
+  if (!('verification' in message)) return message;
+  const { verification, ...rest } = message;
+  if (!isVerification(verification)) return rest;
+  return verification.state === 'checking'
+    ? { ...rest, verification: { ...verification, state: 'not_signed' } }
+    : message;
 }
 
 /** A report or task mark keeps a non-empty agent name and, when it is a string, the agent's id. */

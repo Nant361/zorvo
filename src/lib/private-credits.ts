@@ -192,7 +192,8 @@ export function lowBalanceNote(credits: number, model?: ModelPrice | null): stri
 export function modelLabel(id: string): string {
   return (id.split('/').pop() || id)
     .replaceAll('-', ' ')
-    .replace(/(?<=[A-Za-z])(?=\d+\.)/g, ' ');
+    // No lookbehind: the build targets Safari 13, which cannot parse one.
+    .replace(/([A-Za-z])(?=\d+\.)/g, '$1 ');
 }
 
 /** The rounded number alone: "1,240", "1"; anything not a positive number reads as 0. */
@@ -297,19 +298,21 @@ export function privateErrorText(code: string): string {
   return Object.hasOwn(ERROR_TEXT, code) ? ERROR_TEXT[code as PrivateErrorCode] : GENERIC_ERROR;
 }
 
-export type PrivateAction = 'models' | 'stock' | 'cancel' | 'redeem' | 'forget' | 'recover' | 'mark';
+export type PrivateAction = 'models' | 'stock' | 'cancel' | 'redeem' | 'forget' | 'recover' | 'mark' | 'raise' | 'open';
 
 const MODELS_FAILED = "Couldn't load the private models. Try again.";
 const STOCK_FAILED = "Couldn't load the packages. Try again.";
 const CANCEL_FAILED = "Couldn't cancel the checkout. Try again.";
 const REDEEM_FAILED = "Couldn't redeem the code. Try again.";
 const MARK_FAILED = "Couldn't save your answer. Try again.";
+const RAISE_FAILED = "Couldn't raise the limit. Try again.";
+const OPEN_FAILED = "Couldn't start the private session. Try again.";
 
 /**
  * Plain words for a command error in the context of one action. `privateErrorText`'s `upstream`
  * says nothing was held or charged, which is right when a checkout fails to open and wrong for
- * loading prices, cancelling a hold, redeeming a code, restoring or answering the recovery-code
- * dialog, so those say what failed instead.
+ * loading prices, cancelling a hold, redeeming a code, restoring, answering the recovery-code
+ * dialog, raising a session's limit or opening a private session, so those say what failed instead.
  */
 export function actionError(action: PrivateAction, code: string): string {
   if (code === 'unauthorized') return privateErrorText(code);
@@ -329,5 +332,9 @@ export function actionError(action: PrivateAction, code: string): string {
     case 'forget':
     case 'recover':
       return code === 'upstream' ? GENERIC_ERROR : privateErrorText(code);
+    case 'raise':
+      return code === 'upstream' ? RAISE_FAILED : privateErrorText(code);
+    case 'open':
+      return code === 'upstream' ? OPEN_FAILED : privateErrorText(code);
   }
 }

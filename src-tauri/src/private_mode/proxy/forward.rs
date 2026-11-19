@@ -189,6 +189,10 @@ fn stream_response(
                 }
                 Err(_) => {
                     complete = false;
+                    // An error frame makes hyper drop the connection, so the agent sees a
+                    // failed answer and not a short one that looks complete.
+                    let cut = io::Error::new(io::ErrorKind::UnexpectedEof, "upstream cut off");
+                    let _ = sender.send(Err(cut)).await;
                     break;
                 }
             }
