@@ -182,6 +182,47 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor({ ...shellTask, id: "tool:s1:sh", pid: undefined }, transcripts.s1)?.id).toBe("sh");
   });
 
+  const NOW = 1_000_000;
+  const launch = (id: string, command: string, startedAt: number, extra: Partial<ToolExecution> = {}) =>
+    tool(id, { name: `Run ${command}`, kind: "execute", command, startedAt, ...extra });
+  const process = (command: string, startedAt: number): BackgroundTask => ({ ...shellTask, name: command, startedAt });
+  const one = (...tools: ToolExecution[]): ChatMessage[] => [{ id: "m", role: "agent", content: "", timestamp: 1, tools }];
+
+  it("keeps a process with its own launch when the same command runs again", () => {
+    const first = launch("first", "pnpm dev", NOW - 60_000, { status: "running", details: [{ kind: "text", text: "ready" }] });
+    const again = launch("again", "pnpm dev", NOW - 5_000, { status: "failed", details: [{ kind: "text", text: "port in use" }] });
+
+    expect(shellToolFor(process("pnpm dev", NOW - 59_500), one(first, again))?.id).toBe("first");
+  });
+
+  it("never matches a launch that started after the process", () => {
+    const later = launch("later", "pnpm dev", NOW);
+
+    expect(shellToolFor(process("pnpm dev", NOW - 60_000), one(later))).toBeUndefined();
+  });
+
+  it("does not match a short command inside a longer one", () => {
+    const watch = launch("watch", "node scripts/watch.mjs", NOW - 60_000);
+
+    expect(shellToolFor(process("node", NOW - 59_000), one(watch))).toBeUndefined();
+    expect(shellToolFor(process("node scripts/watch.mjs --poll", NOW - 59_000), one(watch))).toBeUndefined();
+  });
+
+  it("matches a command the scan cut short", () => {
+    const long = launch("long", `pnpm vitest run ${"a".repeat(400)}`, NOW - 60_000);
+
+    expect(shellToolFor(process(`pnpm vitest run ${"a".repeat(283)}…`, NOW - 59_000), one(long))?.id).toBe("long");
+  });
+
+  it("follows a tab from the first launch's row to its process after a second launch", () => {
+    const first = launch("first", "pnpm dev", NOW - 60_000);
+    const again = launch("again", "pnpm dev", NOW - 5_000, { status: "failed" });
+    const server = process("pnpm dev", NOW - 59_500);
+
+    expect(findShellTask([server], "tool:s1:first", { s1: one(first, again) })).toBe(server);
+    expect(findShellTask([server], "tool:s1:again", { s1: one(first, again) })).toBeUndefined();
+  });
+
   it("follows a task from its tool row to the process that took its place", () => {
     expect(findShellTask([shellTask], "tool:s1:sh", transcripts)).toBe(shellTask);
     expect(findShellTask([shellTask], "process:77", transcripts)).toBe(shellTask);

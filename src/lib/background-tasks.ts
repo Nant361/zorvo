@@ -182,22 +182,44 @@ function toolIdOf(task: BackgroundTask): string | undefined {
   return task.id.startsWith(prefix) ? task.id.slice(prefix.length) : undefined;
 }
 
+/** The scan cuts a long command and ends it with this. */
+const CUT_MARK = '…';
 /**
- * The tool call a shell task's output comes from: a tool row's own, or for a process the newest
- * command of its session that names the same work. A process nothing matches has none.
+ * How much earlier than the tool call a process may seem to start: the scan reads its age in whole
+ * seconds, while a tool call's start is kept to the millisecond.
+ */
+const START_SLACK_MS = 2000;
+
+/** Whether a launch ran `command`: the same text, or for a command the scan cut, the same start. */
+function launchedCommand(tool: ToolExecution, command: string): boolean {
+  if (tool.kind !== 'execute') return false;
+  const launched = normalized(tool.command ?? '');
+  if (launched === '') return false;
+  if (!command.endsWith(CUT_MARK)) return launched === command;
+  const kept = command.slice(0, -CUT_MARK.length).trimEnd();
+  return kept !== '' && launched.startsWith(kept);
+}
+
+/**
+ * The tool call a shell task's output comes from: a tool row's own, or for a process the launch of
+ * the same command that started last before it did. A later launch of the same command (one that
+ * failed because the first still holds its port, say) never takes the running process's output,
+ * and a command never matches one it is only part of. A process nothing matches has none.
  */
 export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessage[]): ToolExecution | undefined {
   const tools = messages.flatMap((message) => message.tools ?? []);
   const ownId = toolIdOf(task);
   if (ownId !== undefined) return tools.find((tool) => tool.id === ownId);
   const command = normalized(task.name);
-  // An empty command is contained in every title, so it names no work.
   if (command === '') return undefined;
-  return [...tools].reverse().find((tool) => {
-    if (tool.kind !== 'execute') return false;
-    const title = normalized(tool.command ?? tool.name);
-    return title !== '' && (title.includes(command) || command.includes(title));
-  });
+  const launches = tools.filter(
+    (tool) => launchedCommand(tool, command) && (tool.startedAt ?? 0) <= task.startedAt + START_SLACK_MS,
+  );
+  // The newest launch that started before the process; one with no start time counts as earliest.
+  return launches.reduce<ToolExecution | undefined>(
+    (best, tool) => (best === undefined || (tool.startedAt ?? 0) >= (best.startedAt ?? 0) ? tool : best),
+    undefined,
+  );
 }
 
 /**
