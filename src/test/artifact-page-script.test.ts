@@ -209,6 +209,24 @@ describe('the artifact page script', () => {
   }
   const badgeLeft = () => (document.querySelector('[data-zorvo-badge]') as HTMLElement).style.left;
 
+  it('moves its marks when a panel inside the page scrolls, not only the window', () => {
+    load('<div id="panel"><p>Plans</p><button id="export">Export CSV</button></div>');
+    placeByText({ 'Export CSV': 100 });
+    page.__zorvoCommentMode!(true);
+    click(document.querySelector('#export')!);
+    const pick = posted[0];
+    page.__zorvoCommentMode!(false);
+    page.__zorvoMarks!([{ n: 1, anchor: { kind: 'element', tag: pick.tag, classes: pick.classes, text: pick.text, path: pick.path } }]);
+    expect(badgeLeft()).toBe('91px');
+
+    // The panel scrolls its content sideways: the button is now 200 points further right.
+    placeByText({ 'Export CSV': 300 });
+    document.querySelector('#panel')!.dispatchEvent(new Event('scroll'));
+
+    expect(badgeLeft()).toBe('291px');
+    vi.restoreAllMocks();
+  });
+
   it('marks the element the path names from the body, not a nested one with the same tail', () => {
     load('<div class="wrap"><section><div class="card"><p>Inner</p></div></section><p id="target">Outer</p></div>');
     placeByText({ Inner: 300, Outer: 100 });

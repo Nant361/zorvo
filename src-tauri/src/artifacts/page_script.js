@@ -324,10 +324,16 @@
     true,
   );
 
-  window.addEventListener("resize", function () {
+  function followLayout() {
     if (shownMarks.length > 0) drawMarks();
     hideOutline();
-  });
+  }
+
+  window.addEventListener("resize", followLayout);
+  // Marks are drawn where their targets were. A panel that scrolls moves its content and not the
+  // overlay, and the window scrolling moves the overlay and not a fixed element: draw them again.
+  // A scroll does not bubble, so this listens in the capture phase to hear every scrolling element.
+  window.addEventListener("scroll", followLayout, true);
 
   function setCommentMode(on) {
     commenting = on === true;
