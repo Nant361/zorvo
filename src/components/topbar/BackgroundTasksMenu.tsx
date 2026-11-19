@@ -108,7 +108,6 @@ export function BackgroundTasksMenu({ tasks, isOpen, onOpenChange, onOpenTask, o
         {tasks.map((task) => {
           const Icon = KIND_ICONS[task.kind];
           const isStopping = stoppingIds.has(task.id);
-          const canOpen = task.kind === "agent" || task.kind === "subagent";
           return (
             <li key={task.id} className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-surface-hover">
               <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-hover">
@@ -131,20 +130,18 @@ export function BackgroundTasksMenu({ tasks, isOpen, onOpenChange, onOpenTask, o
                 <span className={STATUS_CLASSES[task.status]}>{task.status}</span>
                 <span className="font-mono tabular-nums">{formatElapsed(now - task.startedAt)}</span>
               </p>
-              {canOpen && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label={`Open ${task.name}`}
-                  className="shrink-0"
-                  onClick={() => {
-                    onOpenTask(task);
-                    onOpenChange(false);
-                  }}
-                >
-                  Open
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Open ${task.name}`}
+                className="shrink-0"
+                onClick={() => {
+                  onOpenTask(task);
+                  onOpenChange(false);
+                }}
+              >
+                Open
+              </Button>
               {(task.kind === "agent" || task.pid !== undefined) && (
                 <Button
                   variant="outline"
@@ -162,7 +159,7 @@ export function BackgroundTasksMenu({ tasks, isOpen, onOpenChange, onOpenTask, o
         })}
       </ul>
       <p className="border-t border-border px-2 pt-1.5 text-caption text-fg-muted">
-        Tasks keep running when you switch sessions. Stop ends the process.
+        Tasks keep running when you switch sessions. Open shows a task beside its chat. Stop ends the process.
       </p>
     </Popover>
   );
