@@ -239,6 +239,21 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("import time; time.sleep(300)", NOW - 59_000), one(sleep))?.id).toBe("sleep");
   });
 
+  it("matches a -c command the scan shows whole, as it does inside an agent's eval wrapper", () => {
+    const sleep = launch("sleep", `python3 -c "import time; time.sleep(300)"`, NOW - 60_000);
+
+    expect(shellToolFor(process(`python3 -c "import time; time.sleep(300)"`, NOW - 59_000), one(sleep))?.id).toBe("sleep");
+  });
+
+  it("matches a launch that sets variables before its command", () => {
+    const tagged = launch("tagged", "TAG=demo PORT=3001 sleep 300", NOW - 60_000);
+    const served = launch("served", "PORT=3001 pnpm dev", NOW - 60_000);
+
+    expect(shellToolFor(process("sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
+    expect(shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(served))?.id).toBe("served");
+    expect(shellToolFor(process("TAG=demo PORT=3001 sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
+  });
+
   it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
     const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
     const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });

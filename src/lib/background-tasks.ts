@@ -240,11 +240,32 @@ function isExecOf(command: string, launched: string): boolean {
   return false;
 }
 
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/** The command without the variables it sets first (`PORT=3001 pnpm dev`), which no process shows. */
+function withoutAssignments(command: string): string {
+  const words = command.split(' ');
+  let index = 0;
+  while (index < words.length - 1 && ASSIGNMENT.test(words[index])) index++;
+  return words.slice(index).join(' ');
+}
+
+/**
+ * The texts a process the launch started may show as: the command as given (an agent's own wrapper
+ * keeps it whole), without its variables, and the script of either when it runs one with `-c`.
+ */
+function launchForms(command: string): string[] {
+  const given = [command, withoutAssignments(command)];
+  const forms = [...given, ...given.map(scriptOf)].map(normalized).filter((form) => form !== '');
+  return [...new Set(forms)];
+}
+
 /** Whether a launch ran `command`, the scan's text for a process. */
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
-  const launched = normalized(scriptOf(normalized(tool.command ?? '')));
-  return launched !== '' && (sameCommand(launched, command) || isExecOf(command, launched));
+  return launchForms(normalized(tool.command ?? '')).some(
+    (launched) => sameCommand(launched, command) || isExecOf(command, launched),
+  );
 }
 
 /** The launch that started last, the one with no start time counting as earliest. */
