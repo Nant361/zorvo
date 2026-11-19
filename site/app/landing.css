@@ -66,7 +66,7 @@
   .lp-pts h3 { font-size: 16px; line-height: 24px; font-weight: 600; color: var(--color-fg); }
   .lp-pts p { font-size: 15px; line-height: 24px; color: var(--color-fg-muted); }
 
-  .lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; font-size: 15px; font-weight: 500; }
+  .lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; font-size: 15px; font-weight: 500; white-space: nowrap; }
   .lp-btn.lp-btn-primary { background: var(--color-fg); color: var(--color-on-primary); }
   .lp-btn.lp-btn-outline { border: 1px solid var(--lp-strong); color: var(--color-fg); }
   .lp-btn.lp-btn-ghost { color: var(--color-fg-secondary); padding: 0 12px; }
@@ -86,8 +86,9 @@
   .lp-sub { font-size: 11px; line-height: 16px; color: var(--color-fg-subtle); }
   .lp-stack { display: inline-grid; }
   .lp-stack > * { grid-area: 1 / 1; }
-  /* Where a scene starts: hidden until the motion shows it. Without the script they stay hidden, which is the finished state. */
-  .lp-st-a, .lp-pl-a, .lp-pop, .lp-wire-dot, .lp-typed { opacity: 0; visibility: hidden; }
+  /* Where a scene starts, or a moment it passes through (.lp-brief): hidden until the motion shows it.
+     Without the script they stay hidden, which is the finished state. */
+  .lp-st-a, .lp-pl-a, .lp-pop, .lp-wire-dot, .lp-typed, .lp-brief { opacity: 0; visibility: hidden; }
   .lp-ln { display: block; overflow: hidden; padding-bottom: 0.08em; }
   .lp-ln > span { display: block; }
 
@@ -115,7 +116,7 @@
   .lp-stat { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; }
   .lp-stat b { font-size: 56px; line-height: 60px; font-weight: 500; letter-spacing: -0.04em; color: var(--color-fg); }
   .lp-term { border-radius: 12px; border: 1px solid var(--color-border); background: #050506; overflow: hidden; }
-  .lp-cursor { display: inline-block; width: 8px; height: 14px; background: var(--color-fg); vertical-align: -2px; animation: lp-blink 1.1s steps(1) infinite; }
+  .lp-cursor { display: inline-block; width: 8px; height: 14px; background: var(--color-fg); vertical-align: -2px; }
   .lp-nav { display: flex; }
   .lp-wire { display: flex; }
 
@@ -126,11 +127,4 @@
     .lp-sec { padding: 72px 0; }
     .lp-nav { display: none; }
   }
-}
-
-@keyframes lp-blink {
-  50% { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lp-cursor { animation: none; }
 }

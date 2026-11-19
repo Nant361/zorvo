@@ -18,15 +18,17 @@ export function SiteHeader({ anchorBase = "" }: { anchorBase?: "" | "/" }) {
         <nav className="lp-nav gap-1" aria-label="Sections">
           <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#compare`}>Compare</a>
           <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#delegate`}>Delegate</a>
-          <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#private`}>Private</a>
           <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#review`}>Review</a>
           <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#features`}>Features</a>
-          <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#privacy`}>Privacy</a>
+          <a className="focus-ring lp-btn lp-btn-ghost" href={`${anchorBase}#private`}>Private mode</a>
+          {/* Hidden from 861px to 985px, where the six links would not fit beside the buttons. The footer
+              links the privacy docs at every width. */}
+          <a className="focus-ring lp-btn lp-btn-ghost min-[861px]:max-[985px]:hidden" href={`${anchorBase}#privacy`}>Privacy</a>
         </nav>
         <span className="flex items-center gap-1 ml-auto min-[861px]:justify-self-end">
-          {/* Hidden on a phone, and from 861px to 1100px, where it would make this side wider than the
+          {/* Hidden on a phone, and from 861px to 1140px, where it would make this side wider than the
               logo's and push the section links off the middle. The footer has the link at every width. */}
-          <a className="focus-ring lp-btn lp-btn-ghost max-[520px]:hidden min-[861px]:max-[1100px]:hidden" href={LINKS.repository}>GitHub</a>
+          <a className="focus-ring lp-btn lp-btn-ghost max-[520px]:hidden min-[861px]:max-[1140px]:hidden" href={LINKS.repository}>GitHub</a>
           <a className="focus-ring lp-btn lp-btn-ghost" href={LINKS.docs}>Docs</a>
           <a className="focus-ring lp-btn lp-btn-outline h-10" data-press="" href={LINKS.download}>
             Download

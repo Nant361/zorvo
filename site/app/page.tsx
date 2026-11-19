@@ -6,7 +6,6 @@ import { Download } from "../components/sections/Download";
 import { Features } from "../components/sections/Features";
 import { Hero } from "../components/sections/Hero";
 import { LongSessions } from "../components/sections/LongSessions";
-import { Near } from "../components/sections/Near";
 import { Privacy } from "../components/sections/Privacy";
 import { PrivateMode } from "../components/sections/PrivateMode";
 import { Review } from "../components/sections/Review";
@@ -34,12 +33,12 @@ export default function Home() {
         <Sessions />
         <Compare />
         <Delegate />
-        <PrivateMode />
-        <Near />
         <Review />
         <Control />
         <LongSessions />
         <Features />
+        {/* The optional paid extra comes after everything Zorvo does for free, right before privacy. */}
+        <PrivateMode />
         <Privacy />
         <Download />
       </main>
