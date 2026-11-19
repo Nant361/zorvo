@@ -254,13 +254,13 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("TAG=demo PORT=3001 sleep 300", NOW - 59_000), one(tagged))?.id).toBe("tagged");
   });
 
-  it("matches the last command of a list, which the shell replaced itself with", () => {
+  it("matches a command of a list, which the shell replaced itself with", () => {
     const moved = launch("moved", "cd /tmp && sleep 300", NOW - 60_000);
     const listed = launch("listed", "export PORT=3001; pnpm dev", NOW - 60_000);
 
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(moved))?.id).toBe("moved");
     expect(shellToolFor(process("node /app/pnpm dev", NOW - 59_000), one(listed))?.id).toBe("listed");
-    expect(shellToolFor(process("cd /tmp", NOW - 59_000), one(moved))).toBeUndefined();
+    expect(shellToolFor(process("sleep 30", NOW - 59_000), one(moved))).toBeUndefined();
     expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(launch("wrapped", `bash -lc "cd web && pnpm dev"`, NOW - 60_000)))?.id).toBe("wrapped");
   });
 
@@ -281,7 +281,7 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("env", "env TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("env");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envp", "/usr/bin/env -i TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("envp");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envu", "env -u TAG -C /tmp --unset OTHER sleep 300", NOW - 60_000)))?.id).toBe("envu");
-    for (const wrapped of ["nohup sleep 300", "nice -n 10 nohup sleep 300", "exec nohup env TAG=1 sleep 300", "setsid nice sleep 300", "cd /tmp && nohup sleep 300 > out.log 2>&1 &", "command sleep 300", "command -p sleep 300"]) {
+    for (const wrapped of ["nohup sleep 300", "nice -n 10 nohup sleep 300", "exec nohup env TAG=1 sleep 300", "setsid nice sleep 300", "cd /tmp && nohup sleep 300 > out.log 2>&1 &", "command sleep 300", "command -p sleep 300", "if true; then exec sleep 300; fi", "while true; do sleep 300; done", "{ sleep 300; }", "(cd /tmp && sleep 300)"]) {
       expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("w", wrapped, NOW - 60_000)))?.id).toBe("w");
     }
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("r", `exec sleep 300 > "/tmp/my log"`, NOW - 60_000)))?.id).toBe("r");

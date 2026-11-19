@@ -338,25 +338,38 @@ function withoutRedirections(command: string): string {
   return kept.join(' ');
 }
 
+/** Words that open or close a compound command and run nothing themselves. */
+const CONTROL_WORDS = /^(?:if|then|else|elif|fi|while|until|do|done|\{|\}|\(|\)|!)$/;
+
 /**
- * The last command of a list (`cd /tmp && sleep 300`, `a || b`, a `;` after it too, or one line after another), which a shell may replace
- * itself with, without an `exec` in front of it, which does the same.
+ * Each command of a list (`cd /tmp && sleep 300`, `a || b`, `;`, one line after another), with the
+ * words of a compound command around it gone (`if true; then exec sleep 300; fi`, `{ …; }`,
+ * `( … )`): a shell may replace itself with any of them. An `exec` in front goes with the wrappers.
  */
-function lastCommand(command: string): string {
-  const parts = command.split(/\s*(?:&&|\|\||;|\n)\s*/).filter((part) => part.trim() !== '');
-  const last = parts[parts.length - 1] ?? command;
-  return last.startsWith('exec ') ? last.slice('exec '.length).trimStart() : last;
+function listCommands(command: string): string[] {
+  return command
+    .split(/\s*(?:&&|\|\||;|\n)\s*/)
+    .map((part) => {
+      const words = part.replace(/^\(+/, '').replace(/\)+$/, '').trim().split(' ');
+      let index = 0;
+      while (index < words.length && CONTROL_WORDS.test(words[index])) index++;
+      return words.slice(index).join(' ');
+    })
+    .filter((part) => part !== '' && !CONTROL_WORDS.test(part));
 }
 
 /**
  * The texts a process the launch started may show as: the command as given (an agent's own wrapper
- * keeps it whole), its last command when it is a list, either without the variables it sets first,
- * and the script of each when it runs one with `-c`.
+ * keeps it whole), each command of it when it is a list, any of them without its redirections, the
+ * variables it sets first and the wrappers that run it, and the script of each when it runs one
+ * with `-c`.
  */
 function launchForms(command: string): string[] {
   const each = (forms: readonly string[], change: (form: string) => string) => [...forms, ...forms.map(change)];
-  // The script first, so a list inside `bash -lc "cd x && pnpm dev"` yields its last command too.
-  const forms = each(each(each(each([command], scriptOf), lastCommand), withoutRedirections), withoutAssignments);
+  // The script first, so a list inside `bash -lc "cd x && pnpm dev"` yields its commands too.
+  const scripts = each([command], scriptOf);
+  const commands = [...scripts, ...scripts.flatMap(listCommands)];
+  const forms = each(each(commands, withoutRedirections), withoutAssignments);
   return [...new Set(each(forms, scriptOf).map(normalized).filter((form) => form !== ''))];
 }
 
