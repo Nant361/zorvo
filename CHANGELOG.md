@@ -4,6 +4,8 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-19
+
 ### Added
 
 - **Artifacts.** An agent can show you a web page it made (a report, a diagram, a dashboard, a mockup) beside the chat, in the new **Artifacts** tab. Each time the agent changes the page you get a new version and can go back to an older one. **Export** saves the page as one HTML file, and **Artifacts** in the sidebar lists the pages of every session. A page runs in a window part of its own with no access to Zorvo or your files; it may load scripts from cdnjs, jsDelivr, unpkg, the Tailwind CDN and code.jquery.com and fonts from Google Fonts, and can send nothing anywhere. Pages stay on this Mac and are deleted with their session. Agents that get Zorvo's tools get this too; the switch in **Settings → Agents** turns it off.
@@ -397,7 +399,8 @@ Tagged but never published; its fix shipped in 0.11.2.
 
 - Approval safety, terminal handling, the stream parser and working folders. ([#1])
 
-[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/zakyirsyaad/zorvo/compare/v0.11.0...v0.11.1
