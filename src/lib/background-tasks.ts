@@ -282,11 +282,21 @@ function shellWords(command: string): string[] {
   return words;
 }
 
-/** The command without the variables it sets first (`PORT=3001 pnpm dev`), which no process shows. */
+/**
+ * The command without the variables it sets first (`PORT=3001 pnpm dev`), and without an `env` that
+ * sets them (`env -i TAG=demo sleep 300`), which replaces itself with the command: no process shows them.
+ */
 function withoutAssignments(command: string): string {
   const words = shellWords(command);
   let index = 0;
-  while (index < words.length - 1 && ASSIGNMENT.test(words[index])) index++;
+  const skip = (test: (word: string) => boolean) => {
+    while (index < words.length - 1 && test(words[index])) index++;
+  };
+  skip((word) => ASSIGNMENT.test(word));
+  if ((words[index]?.split('/').pop() ?? '') === 'env' && index < words.length - 1) {
+    index++;
+    skip((word) => ASSIGNMENT.test(word) || (word.startsWith('-') && word !== '-'));
+  }
   return words.slice(index).join(' ');
 }
 
