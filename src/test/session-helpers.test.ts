@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { folderNameOf, groupSessionsByWorkspace, mostRecentSessionId, nextSessionName, isAutoName, titleFromPrompt } from "../lib/session-helpers";
+import { folderNameOf, groupSessionsByWorkspace, isCommandOnly, mostRecentSessionId, nextSessionName, isAutoName, titleFromPrompt, titleSourceFor } from "../lib/session-helpers";
 import type { SessionNode } from "../lib/session-helpers";
 import type { Session } from "../types";
 
@@ -127,15 +127,77 @@ describe("titleFromPrompt", () => {
     expect(titleFromPrompt("  fix the   login bug\nand add a test")).toBe("fix the login bug");
   });
 
-  it("cuts a long prompt at a word boundary", () => {
+  it("cuts a long prompt at a word boundary, near 60 characters", () => {
     const title = titleFromPrompt("refactor the stream parser so that it handles partial escape sequences across chunks");
 
-    expect(title).toBe("refactor the stream parser so that it handles…");
-    expect(title.length).toBeLessThanOrEqual(49);
+    expect(title).toBe("refactor the stream parser so that it handles partial escape…");
+    expect(title.length).toBeLessThanOrEqual(61);
+  });
+
+  it("cuts between characters, never inside an emoji", () => {
+    const title = titleFromPrompt("🙂".repeat(80));
+    expect(title).toBe(`${"🙂".repeat(60)}…`);
+    expect(title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    const source = titleSourceFor(`${"a".repeat(499)}🙂 tail`, "short");
+    expect(source).toBe(`${"a".repeat(499)}🙂`);
   });
 
   it("falls back when the prompt has no text", () => {
     expect(titleFromPrompt("   \n ")).toBe("New session");
+    expect(titleFromPrompt("      ")).toBe("New session");
+  });
+
+  it("names a GitHub link by its owner and repository", () => {
+    expect(titleFromPrompt("apakah plugin https://github.com/affaan-m/ECC sudah terpasang di Qwen Code?")).toBe(
+      "apakah plugin affaan-m/ECC sudah terpasang di Qwen Code?",
+    );
+    expect(titleFromPrompt("review https://github.com/zakyirsyaad/zorvo/pull/250.")).toBe("review zakyirsyaad/zorvo.");
+    expect(titleFromPrompt("clone github.com/a/b.git first")).toBe("clone a/b first");
+    // Another host on github.com is a site, not a repository.
+    expect(titleFromPrompt("call https://api.github.com/repos/a/b now")).toBe("call api.github.com now");
+  });
+
+  it("names any other link by its site", () => {
+    expect(titleFromPrompt("cek https://docs.near.ai/cloud/verification lalu bandingkan dengan verify.rs")).toBe(
+      "cek docs.near.ai lalu bandingkan dengan verify.rs",
+    );
+    expect(titleFromPrompt("why does http://www.example.com:8080/a?b=1 fail")).toBe("why does example.com fail");
+    // The site, never the account a link signs in with.
+    expect(titleFromPrompt("fetch https://deploy:s3cret@registry.example.com/v2")).toBe("fetch registry.example.com");
+    // A markdown link already says what it is.
+    expect(titleFromPrompt("read [the NEAR docs](https://docs.near.ai/cloud/verification) first")).toBe(
+      "read the NEAR docs first",
+    );
+  });
+
+  it("shortens a long path to its last two parts, quoted or not", () => {
+    expect(
+      titleFromPrompt('Read the file "/Users/mac/Library/Application Support/xyz.zorvo.desktop/state.json" and tell me why it is so big'),
+    ).toBe("Read the file xyz.zorvo.desktop/state.json and tell me why…");
+    expect(titleFromPrompt("fix ~/developer/zorvo/src/App.tsx, please")).toBe("fix src/App.tsx, please");
+    expect(titleFromPrompt("why does `/Users/mac/developer/zorvo/src/App.tsx` crash")).toBe("why does src/App.tsx crash");
+    expect(titleFromPrompt("see (/Users/mac/developer/zorvo/README.md) first")).toBe("see (zorvo/README.md) first");
+    // An apostrophe in a later word never closes a quote that opened before a path.
+    expect(titleFromPrompt("check '/a/b/c/d isn't there")).toBe("check '/a/b/c/d isn't there");
+    // Two parts or fewer are already short.
+    expect(titleFromPrompt("look at /etc/hosts")).toBe("look at /etc/hosts");
+  });
+
+  it("leaves what is not a web link or a Mac path as written", () => {
+    expect(titleFromPrompt("write to mailto:team@example.com")).toBe("write to mailto:team@example.com");
+    expect(titleFromPrompt("open C:\\Users\\mac\\project\\main.ts")).toBe("open C:\\Users\\mac\\project\\main.ts");
+    expect(titleFromPrompt("use and/or here")).toBe("use and/or here");
+  });
+});
+
+describe("isCommandOnly", () => {
+  it("is true for a slash command, with or without arguments, and nothing else", () => {
+    expect(isCommandOnly("/init")).toBe(true);
+    expect(isCommandOnly("  /review src/App.tsx  ")).toBe(true);
+    expect(isCommandOnly("/compact\n\nfocus on the tests")).toBe(false);
+    expect(isCommandOnly("/Users/mac/x is broken")).toBe(false);
+    expect(isCommandOnly("please run /init")).toBe(false);
+    expect(isCommandOnly("")).toBe(false);
   });
 });
 

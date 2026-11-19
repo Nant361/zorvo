@@ -1,4 +1,4 @@
-import { titleFromPrompt } from './session-helpers';
+import { folderNameOf, isCommandOnly, titleFromPrompt, titleSourceFor, workspacePathOf } from './session-helpers';
 import { fileNameOf } from './attachments';
 import type { ListedSession } from './session-list';
 import type { FirstMessage } from '../hooks/session-engine/useAcpEngine';
@@ -16,9 +16,32 @@ import {
   type SessionWorktree,
 } from '../types';
 
-/** A session title from a message, or from its first file when it has no text. */
-export function titleFor({ text, attachments }: FirstMessage): string {
-  return titleFromPrompt(text || fileNameOf(attachments?.[0] ?? ''));
+/** Who works where, for a title when the message says nothing a title could use. */
+export interface TitlePlace {
+  agentName: string;
+  folderName: string;
+}
+
+/**
+ * A session title from a message, or from its first file when it has no text. A message that is only a
+ * slash command (`/init`) gives "{Agent} in {folder}", until the agent sends a title of its own.
+ */
+export function titleFor({ text, attachments }: FirstMessage, place?: TitlePlace): string {
+  if (place && isCommandOnly(text)) return `${place.agentName} in ${place.folderName}`;
+  return titleFromPrompt(text.trim() || fileNameOf(attachments?.[0] ?? ''));
+}
+
+/** The agent and folder a session's title names when its first message is only a command. */
+export function titlePlaceOf(session: Session, agents: readonly AgentProfile[]): TitlePlace | undefined {
+  const agentName = agents.find((agent) => agent.id === session.profileId)?.name;
+  return agentName ? { agentName, folderName: folderNameOf(workspacePathOf(session)) } : undefined;
+}
+
+/** A session's name from its first message, with the whole line it was cut from when it was cut. */
+export function namingFor(first: FirstMessage, place?: TitlePlace): Pick<Session, 'name' | 'titleSource'> {
+  const name = titleFor(first, place);
+  const titleSource = titleSourceFor(first.text, name);
+  return titleSource ? { name, titleSource } : { name };
 }
 
 /** What a new session is recorded and started with. */
@@ -27,6 +50,8 @@ export interface SessionSpec {
   agent: AgentProfile;
   cwd: string;
   name: string;
+  /** The whole line `name` was cut from, for its hover. */
+  titleSource?: string;
   forkedFrom?: string;
   initialMessages?: ChatMessage[];
   worktree?: SessionWorktree | null;
@@ -54,7 +79,7 @@ export interface StartSessionOptions {
 
 /** The record of a session about to start: running, with the spec's agent and folder. */
 export function newSessionRecord(spec: SessionSpec, createdAt: number = spec.createdAt ?? Date.now()): Session {
-  const { id, agent, cwd, name, forkedFrom, worktree, acpSessionId, compareRunId, privateMode, delegatedFrom, openedBy } = spec;
+  const { id, agent, cwd, name, titleSource, forkedFrom, worktree, acpSessionId, compareRunId, privateMode, delegatedFrom, openedBy } = spec;
   return {
     id: id ?? createId('s'),
     name,
@@ -66,6 +91,7 @@ export function newSessionRecord(spec: SessionSpec, createdAt: number = spec.cre
     transport: TRANSPORT_ACP,
     worktree: worktree ?? null,
     acpSessionId: acpSessionId ?? null,
+    ...(titleSource !== undefined ? { titleSource } : {}),
     ...(compareRunId !== undefined ? { compareRunId } : {}),
     ...(privateMode
       ? {
@@ -101,10 +127,15 @@ export function importedSessionSpec(
   // Rust accepts a leap second (`:60`), which Date reads as invalid: date it by the import time instead.
   const updatedAt = Number.isNaN(parsed.getTime()) ? new Date(now) : parsed;
   const date = updatedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  // A listed title is often the first prompt, so a bare command gets the same name as one typed here.
+  const place = { agentName: agent.name, folderName: folderNameOf(cwd) };
+  const name = firstLine ? titleFor({ text: firstLine }, place) : `${agent.name} session, ${date}`;
+  const titleSource = firstLine ? titleSourceFor(firstLine, name) : undefined;
   return {
     agent,
     cwd,
-    name: firstLine ? titleFromPrompt(firstLine) : `${agent.name} session, ${date}`,
+    name,
+    ...(titleSource ? { titleSource } : {}),
     acpSessionId: listed.acpSessionId,
   };
 }

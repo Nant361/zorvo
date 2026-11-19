@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { importedSessionSpec, isWaitingForAnswer, newSessionRecord } from "../lib/session-start";
+import { importedSessionSpec, isWaitingForAnswer, namingFor, newSessionRecord, titleFor, titlePlaceOf } from "../lib/session-start";
 import type { ListedSession } from "../lib/session-list";
 import { TRANSPORT_ACP, type AgentProfile, type ChatMessage, type Session } from "../types";
 
@@ -64,6 +64,12 @@ describe("importedSessionSpec", () => {
     acpSessionId: "acp-listed",
     ...(title === undefined ? {} : { title }),
     ...(updatedAt === undefined ? {} : { updatedAt }),
+  });
+
+  it("names an imported session whose listed title is only a command by its agent and folder", () => {
+    const spec = importedSessionSpec(listed("/init"), CLAUDE, "/w/antigravity-bridge", 1);
+    expect(spec.name).toBe("Claude Code in antigravity-bridge");
+    expect(spec.titleSource).toBe("/init");
   });
 
   it("names the session after its title in the agent's list", () => {
@@ -173,5 +179,57 @@ describe("isWaitingForAnswer", () => {
   it("waits on nothing in a session that is not running", () => {
     expect(isWaitingForAnswer({ ...acp, status: "terminated" }, pending, () => true)).toBe(false);
     expect(isWaitingForAnswer(undefined, pending, () => true)).toBe(false);
+  });
+});
+
+describe("titleFor", () => {
+  const place = { agentName: "Qwen Code", folderName: "antigravity-bridge" };
+
+  it("names a session whose first message is only a command by its agent and folder", () => {
+    expect(titleFor({ text: "/init" }, place)).toBe("Qwen Code in antigravity-bridge");
+    expect(titleFor({ text: "/review src/App.tsx" }, place)).toBe("Qwen Code in antigravity-bridge");
+  });
+
+  it("takes any other message as it is, tidied, and a command when no place is known", () => {
+    expect(titleFor({ text: "fix the login bug" }, place)).toBe("fix the login bug");
+    expect(titleFor({ text: "/init" })).toBe("/init");
+    expect(titleFor({ text: "", attachments: ["/Users/mac/shots/screen.png"] }, place)).toBe("screen.png");
+    // Stray spaces are not text: the file still names the session.
+    expect(titleFor({ text: "   ", attachments: ["/Users/mac/shots/screen.png"] }, place)).toBe("screen.png");
+  });
+});
+
+describe("namingFor", () => {
+  it("keeps the whole first line only when the name shortened it", () => {
+    const text = "cek https://docs.near.ai/cloud/verification lalu bandingkan dengan verify.rs\nand more";
+    expect(namingFor({ text })).toEqual({
+      name: "cek docs.near.ai lalu bandingkan dengan verify.rs",
+      titleSource: "cek https://docs.near.ai/cloud/verification lalu bandingkan dengan verify.rs",
+    });
+    expect(namingFor({ text: "fix the login bug" })).toEqual({ name: "fix the login bug" });
+    expect(namingFor({ text: "/init" }, { agentName: "Qwen Code", folderName: "zorvo" })).toEqual({
+      name: "Qwen Code in zorvo",
+      titleSource: "/init",
+    });
+  });
+
+  it("records the line on the new session", () => {
+    const record = newSessionRecord({ agent: CLAUDE, cwd: "/w", ...namingFor({ text: "see https://github.com/a/b/issues/3" }) });
+    expect(record.name).toBe("see a/b");
+    expect(record.titleSource).toBe("see https://github.com/a/b/issues/3");
+  });
+});
+
+describe("titlePlaceOf", () => {
+  const base = { id: "s-1", name: "Session #1", profileId: "claude-acp", status: "idle", createdAt: 1, transport: TRANSPORT_ACP } as Session;
+
+  it("names the agent and the folder, the repository's for a session in a worktree", () => {
+    expect(titlePlaceOf({ ...base, cwd: "/w/zorvo" }, [CLAUDE])).toEqual({ agentName: "Claude Code", folderName: "zorvo" });
+    const inWorktree = { ...base, cwd: "/data/worktrees/zorvo/fix", worktree: { repoPath: "/w/zorvo", path: "/data/worktrees/zorvo/fix", branch: "agent/fix" } };
+    expect(titlePlaceOf(inWorktree, [CLAUDE])).toEqual({ agentName: "Claude Code", folderName: "zorvo" });
+  });
+
+  it("has no place when the agent is not known", () => {
+    expect(titlePlaceOf({ ...base, cwd: "/w/zorvo" }, [QWEN])).toBeUndefined();
   });
 });

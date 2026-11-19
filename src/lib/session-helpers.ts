@@ -18,7 +18,7 @@ export function nextSessionName(sessions: readonly Pick<Session, 'name'>[]): str
   return `Session #${highest + 1}`;
 }
 
-const MAX_TITLE_LENGTH = 48;
+const MAX_TITLE_LENGTH = 60;
 const AUTO_NAME = /^Session #\d+$/;
 
 /** True for a numbered placeholder name, which the first message replaces. */
@@ -26,14 +26,88 @@ export function isAutoName(name: string): boolean {
   return AUTO_NAME.test(name);
 }
 
-/** A session title from the user's prompt: its first line, cut at a word boundary. */
+/** The rest of a link after the part a title keeps, without the punctuation that ends a sentence. */
+const LINK_REST = String.raw`(?:[^\s"'<>]*[^\s"'<>.,;:!?)])?`;
+/**
+ * `github.com/<owner>/<repo>`, with or without a scheme, but not inside another host (`api.github.com`);
+ * a repository's dots sit between word characters.
+ */
+const GITHUB_LINK = new RegExp(
+  String.raw`(?<![\w.-])(?:https?:\/\/)?(?:www\.)?github\.com\/([\w-]+(?:\.[\w-]+)*)\/([\w-]+(?:\.[\w-]+)*)` + LINK_REST,
+  'gi',
+);
+/** Any other web link: its host, without a user name, `www.` or a port. */
+const WEB_LINK = new RegExp(
+  String.raw`\bhttps?:\/\/(?:[^\s\/?#@"'<>]*@)?(?:www\.)?([^\s\/?#:@"'<>]+)(?::\d+)?` + LINK_REST,
+  'gi',
+);
+/** A markdown link to the web: its own text says what it is. */
+const MARKDOWN_LINK = /\[([^\]\n]+)\]\((?:https?:\/\/|(?:www\.)?github\.com\/)[^)\s]*\)/gi;
+/**
+ * A Mac path in quotes or backticks, which may hold spaces ("Application Support"). The closing mark must
+ * end a word, so an apostrophe inside a later word ("isn't") never closes it.
+ */
+const QUOTED_PATH = /(["'`])((?:~\/|\/)[^"'`\n]+)\1(?!\w)/g;
+/** A Mac path as one word, from the start of the line or after a space or an opening bracket. */
+const BARE_PATH = /(^|[\s([])((?:~\/|\/)[^\s"'`]+?)(?=[.,;:!?)\]]*(?:\s|$))/g;
+
+/** A path's last two parts when it has more than two, else the path as written. */
+function lastTwoParts(path: string): string {
+  const parts = path.split('/').filter((part) => part !== '' && part !== '~');
+  return parts.length > 2 ? parts.slice(-2).join('/') : path;
+}
+
+/** Links and long paths shortened to the part a reader knows them by. */
+function tidied(line: string): string {
+  return line
+    .replace(MARKDOWN_LINK, (_, text: string) => text)
+    .replace(GITHUB_LINK, (_, owner: string, repo: string) => `${owner}/${repo.replace(/\.git$/i, '')}`)
+    .replace(WEB_LINK, (_, host: string) => host)
+    .replace(QUOTED_PATH, (whole, _quote: string, path: string) => {
+      const short = lastTwoParts(path);
+      return short === path ? whole : short;
+    })
+    .replace(BARE_PATH, (_, before: string, path: string) => `${before}${lastTwoParts(path)}`);
+}
+
+/**
+ * The first `count` characters of `text`, counted as code points: a cut by UTF-16 units can split an emoji
+ * into a lone surrogate, which serde_json refuses, and the whole state would then fail to save.
+ */
+function firstChars(text: string, count: number): string {
+  return Array.from(text).slice(0, count).join('');
+}
+
+/** A message's first line with its white space collapsed: what a title is made from. */
+function firstLineOf(text: string): string {
+  return text.trim().split('\n')[0].replace(/\s+/g, ' ').trim();
+}
+
+/** True when a message is only a slash command (`/init`, `/review src`), which says nothing a title could use. */
+export function isCommandOnly(text: string): boolean {
+  return /^\/[\w:-]+(?:[ \t][^\n]*)?$/.test(text.trim());
+}
+
+/**
+ * A session title from the user's prompt: its first line, with a GitHub link as `owner/repo`, any other
+ * link as its site and a long path as its last two parts, cut at a word boundary.
+ */
 export function titleFromPrompt(prompt: string): string {
-  const firstLine = prompt.trim().split('\n')[0].replace(/\s+/g, ' ').trim();
+  const firstLine = tidied(firstLineOf(prompt));
   if (!firstLine) return 'New session';
-  if (firstLine.length <= MAX_TITLE_LENGTH) return firstLine;
-  const cut = firstLine.slice(0, MAX_TITLE_LENGTH + 1);
+  if (Array.from(firstLine).length <= MAX_TITLE_LENGTH) return firstLine;
+  const cut = firstChars(firstLine, MAX_TITLE_LENGTH + 1);
   const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : firstLine.slice(0, MAX_TITLE_LENGTH)).trimEnd()}…`;
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : firstChars(firstLine, MAX_TITLE_LENGTH)).trimEnd()}…`;
+}
+
+/** A title's whole line can be long; the hover keeps this much of it. */
+const MAX_TITLE_SOURCE = 500;
+
+/** The whole first line a title was made from, for its hover, when the title shortened it. */
+export function titleSourceFor(text: string, title: string): string | undefined {
+  const line = firstChars(firstLineOf(text), MAX_TITLE_SOURCE);
+  return line !== '' && line !== title ? line : undefined;
 }
 
 export function patchSessionIn(

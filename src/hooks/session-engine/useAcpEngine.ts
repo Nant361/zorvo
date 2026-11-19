@@ -13,7 +13,7 @@ import {
   type PermissionRequestPayload,
 } from '../../lib/acp-events';
 import { changesToApply, NO_CHOICES, type AcpChange, type AcpChoices, type AgentOptions } from '../../lib/acp-draft';
-import { findCard, titleFromPrompt, userMessage, withoutMessage } from '../../lib/session-helpers';
+import { findCard, titleFromPrompt, titleSourceFor, userMessage, withoutMessage } from '../../lib/session-helpers';
 import { createId } from '../../lib/ids';
 import { toCommands, useAcpSessions, type AcpOptions, type AcpSessionInfo, type TurnResult } from '../useAcpSessions';
 import { useLatest } from '../useLatest';
@@ -188,7 +188,10 @@ export function useAcpEngine({
         // prompt, but never a name the user gave; it is held to the same
         // one-line, bounded shape.
         const isNamedByUser = sessions.find((s) => s.id === sessionId)?.namedByUser === true;
-        if (!isNamedByUser) patchSession(sessionId, { name: titleFromPrompt(title) });
+        if (!isNamedByUser) {
+          const name = titleFromPrompt(title);
+          patchSession(sessionId, { name, titleSource: titleSourceFor(title, name) });
+        }
         return;
       }
       if (isCommandsUpdate(update)) {

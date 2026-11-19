@@ -104,7 +104,8 @@ export function SessionRow({ session, context, isInRun = false }: SessionRowProp
         type="button"
         onClick={() => context.onSelectSession(session.id)}
         title={[
-          session.name,
+          // The whole line a shortened name was cut from; a name you gave is shown as you wrote it.
+          session.namedByUser ? session.name : (session.titleSource ?? session.name),
           rowSubtitle(agentName, status, session.createdAt, Date.now(), session.privateMode !== undefined),
           session.worktree?.branch,
         ]
