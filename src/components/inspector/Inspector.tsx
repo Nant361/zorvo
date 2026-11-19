@@ -10,15 +10,16 @@ const LABELS: Record<InspectorTab, string> = {
   activity: "Activity",
   files: "Files",
   artifacts: "Artifacts",
+  tasks: "Tasks",
   terminal: "Terminal",
   private: "Private",
 };
-const ORDER: readonly InspectorTab[] = ["changes", "activity", "files", "artifacts", "terminal", "private"];
+const ORDER: readonly InspectorTab[] = ["changes", "activity", "files", "artifacts", "tasks", "terminal", "private"];
 const ID_PREFIX = "inspector";
 
 export interface InspectorProps {
   tab: InspectorTab;
-  /** The tabs this session can show; the order is always Changes, Activity, Files, Artifacts, Terminal, Private. */
+  /** The tabs this session can show; the order is always Changes, Activity, Files, Artifacts, Tasks, Terminal, Private. */
   tabs: readonly InspectorTab[];
   /** The remembered width; the Terminal tab shows at least `INSPECTOR_WIDTH.wide`. */
   width: number;

@@ -8,6 +8,7 @@ import type {
   ToolExecution,
 } from '../types';
 import { fileNameOf } from './attachments';
+import { agentTypeOf, parentToolIdOf, withChildText, withChildThought, withChildTool } from './acp-subagents';
 import { countChanges, diffDetail } from './diff-rows';
 import { parseUserQuestions } from './user-questions';
 
@@ -217,7 +218,44 @@ function addToolCall(messages: readonly ChatMessage[], update: Json, ctx: AcpRed
     locations: toLocations(update.locations),
     command: commandOf(update.rawInput),
   };
-  return withOpenReply(messages, ctx, (reply) => appendTool(reply, tool));
+  const parentId = parentToolIdOf(update._meta);
+  const agentType = agentTypeOf(update._meta);
+  return (
+    filedInTurn(messages, parentId, (reply, id) => withChildTool(reply, id, tool, agentType)) ??
+    withOpenReply(messages, ctx, (reply) => appendTool(reply, tool))
+  );
+}
+
+/**
+ * Files a subagent's update in the reply of this turn that holds its parent tool call, or returns
+ * undefined when none does. The open reply is not enough: an answered permission request closes
+ * its reply, and what the subagent does next would otherwise read as the agent's own.
+ */
+function filedInTurn(
+  messages: readonly ChatMessage[],
+  parentId: string | undefined,
+  file: (reply: ChatMessage, parentId: string) => ChatMessage | undefined,
+): ChatMessage[] | undefined {
+  if (parentId === undefined) return undefined;
+  for (const index of runningTurnReplyIndexes(messages)) {
+    const filed = file(messages[index], parentId);
+    if (filed) return messages.map((other, i) => (i === index ? filed : other));
+  }
+  return undefined;
+}
+
+/**
+ * The replies of the turn that runs now, newest first. The turn began with the user's message,
+ * and a finished reply belongs to an earlier one: `closeTurn` marks the turn's last reply complete.
+ */
+export function runningTurnReplyIndexes(messages: readonly ChatMessage[]): number[] {
+  const indexes: number[] = [];
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.role !== 'agent' || message.isComplete) break;
+    indexes.push(index);
+  }
+  return indexes;
 }
 
 /** Applies a tool_call_update: fields it carries replace the old ones (content as a whole), the rest stay. */
@@ -273,12 +311,18 @@ export function applyAcpUpdate(
       // Agents send stray empty chunks (Qwen Code does after a turn); they must not open a blank reply.
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      return withOpenReply(messages, ctx, (reply) => appendText(reply, chunk));
+      return (
+        filedInTurn(messages, parentToolIdOf(update._meta), (reply, id) => withChildText(reply, id, chunk)) ??
+        withOpenReply(messages, ctx, (reply) => appendText(reply, chunk))
+      );
     }
     case 'agent_thought_chunk': {
       const chunk = textOf(update.content);
       if (!chunk) return messages;
-      return withOpenReply(messages, ctx, (reply) => ({ ...reply, thinking: (reply.thinking ?? '') + chunk }));
+      return (
+        filedInTurn(messages, parentToolIdOf(update._meta), (reply, id) => withChildThought(reply, id, chunk)) ??
+        withOpenReply(messages, ctx, (reply) => ({ ...reply, thinking: (reply.thinking ?? '') + chunk }))
+      );
     }
     case 'tool_call':
       return addToolCall(messages, update, ctx);
@@ -381,6 +425,7 @@ export function applyPermissionRequest(
     timestamp: ctx.now,
     options: toChoices(payload.options),
     requestId: payload.requestId,
+    ...(typeof toolCall.toolCallId === 'string' ? { toolCallId: toolCall.toolCallId } : {}),
     ...(questions ? { questions } : {}),
     ...(edits ? { edits } : {}),
   };
