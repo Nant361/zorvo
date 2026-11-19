@@ -42,7 +42,8 @@ use sign_in::{is_auth_required, offers_sign_in};
 
 /// ACP protocol version this client speaks.
 pub const PROTOCOL_VERSION: u64 = 1;
-/// The first start may download an adapter through npx, so allow a long handshake.
+/// The first start of a uvx agent may download it, so allow a long handshake. (An npx agent
+/// is installed beforehand and downloads nothing here.)
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(180);
 pub(super) const SESSION_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// JSON-RPC "method not found", returned for client methods we do not offer.

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::resolve::LEGACY_IDS;
+use crate::installer::install::is_single_name;
 
 /// One agent at one version, as Zorvo stores and runs it.
 ///
@@ -352,13 +353,14 @@ fn is_reserved_id(id: &str) -> bool {
 }
 
 /// A binary's version is checked too: the installer joins it into a path
-/// under `tools/`. An npx or uvx version is only shown; its package is pinned.
+/// under `tools/`. So does an npx agent's, which only has to be one plain
+/// name, since its package is what is pinned. A uvx version is only shown.
 fn is_valid_entry(entry: &RegistryEntry) -> bool {
     is_valid_id(&entry.id)
         && !is_reserved_id(&entry.id)
         && match &entry.distribution {
             Distribution::Npx { package, env, .. } => {
-                is_pinned_npm_package(package) && is_safe_env(env)
+                is_single_name(&entry.version) && is_pinned_npm_package(package) && is_safe_env(env)
             }
             Distribution::Uvx { package, env, .. } => {
                 (is_pinned_npm_package(package) || is_pinned_pypi_package(package))

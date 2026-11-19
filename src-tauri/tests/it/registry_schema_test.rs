@@ -126,7 +126,7 @@ fn skips_a_binary_entry_whose_version_is_not_exact() {
 
 #[test]
 fn keeps_a_package_entry_whose_version_is_not_exact() {
-    // An npx or uvx version never becomes a path, and the package is pinned.
+    // The package is what is pinned; the version only has to name a dir (see below).
     let json = doc(&[
         npx("two-part", "a@1.0.0").replace(r#""version":"1.0.0""#, r#""version":"1.0""#),
         npx("good", "b@1.0.0"),
@@ -135,6 +135,23 @@ fn keeps_a_package_entry_whose_version_is_not_exact() {
         ids(&parse_registry(&json).unwrap()),
         vec!["two-part", "good"]
     );
+}
+
+#[test]
+fn skips_an_npx_entry_whose_version_is_not_one_plain_name() {
+    // An npx agent's version becomes a dir under `tools/agents/<id>/`, so an
+    // entry whose version could never be one is not offered at all.
+    let with_version = |id: &str, version: &str| {
+        npx(id, "a@1.0.0").replace(r#""version":"1.0.0""#, &format!(r#""version":"{version}""#))
+    };
+    let json = doc(&[
+        with_version("climbs", "../x"),
+        with_version("nested", "1.0.0/rc"),
+        with_version("parent", ".."),
+        with_version("empty", ""),
+        npx("good", "b@1.0.0"),
+    ]);
+    assert_eq!(ids(&parse_registry(&json).unwrap()), vec!["good"]);
 }
 
 #[test]
@@ -479,6 +496,31 @@ fn keeps_every_binary_agent_in_the_bundled_history() {
 }
 
 // Entries that offer several distribution kinds, and agents Zorvo lists but cannot offer.
+
+/// An npx agent is installed under `tools/agents/<id>/<version>` and shown at
+/// that version, so every bundled entry's package must be pinned to it.
+#[test]
+fn every_bundled_npx_package_is_pinned_to_its_entrys_version() {
+    let bundle: serde_json::Value =
+        serde_json::from_str(include_str!("../../resources/registry-history.json")).unwrap();
+    let agents = bundle["agents"].as_object().expect("agents object");
+    let mut checked = 0;
+    for (id, versions) in agents {
+        for (version, record) in versions.as_object().expect("versions object") {
+            let entry = &record["entry"];
+            let Some(package) = entry["distribution"]["npx"]["package"].as_str() else {
+                continue;
+            };
+            assert_eq!(
+                package.rsplit('@').next(),
+                entry["version"].as_str(),
+                "{id} {version} must pin its own version, got {package}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "the bundle has npx agents");
+}
 
 const LIVE_SAMPLE: &str = include_str!("../fixtures/registry-live-sample.json");
 

@@ -24,6 +24,9 @@ pub struct InstalledTools {
     pub pinned_uv_installed: bool,
     /// `(id, version)` to the agent's install dir.
     pub agents: BTreeMap<(String, String), PathBuf>,
+    /// `(id, version)` to the program its install record names, relative to
+    /// the install dir. Only an npm package's install records one.
+    pub agent_bins: BTreeMap<(String, String), String>,
     /// Prerequisite command to the `bin` folder of its pinned install.
     pub prereq_bins: BTreeMap<String, PathBuf>,
     pub manifest: Option<RuntimeManifest>,
@@ -50,22 +53,30 @@ impl InstalledTools {
             })
             .collect();
 
+        let (agents, agent_bins) = installed_agents(tools);
+
         Self {
             user_node_major,
             node: installed_runtime(tools, RuntimeKind::Node, manifest, platform),
             uv: installed_runtime(tools, RuntimeKind::Uv, manifest, platform),
             pinned_node_installed: pinned(RuntimeKind::Node),
             pinned_uv_installed: pinned(RuntimeKind::Uv),
-            agents: installed_agents(tools),
+            agents,
+            agent_bins,
             prereq_bins,
             manifest: Some(manifest.clone()),
         }
     }
 }
 
-/// Every `tools/agents/<id>/<version>` dir that holds an install record.
-fn installed_agents(tools: &ToolsDir) -> BTreeMap<(String, String), PathBuf> {
-    let mut found = BTreeMap::new();
+type AgentKey = (String, String);
+
+/// Every `tools/agents/<id>/<version>` dir that holds an install record, and
+/// the program that record names for the installs that name one. Each record
+/// is read once.
+fn installed_agents(tools: &ToolsDir) -> (BTreeMap<AgentKey, PathBuf>, BTreeMap<AgentKey, String>) {
+    let mut dirs = BTreeMap::new();
+    let mut bins = BTreeMap::new();
     for id_dir in subdirs(&tools.root().join("agents")) {
         let Some(id) = id_dir
             .file_name()
@@ -82,12 +93,17 @@ fn installed_agents(tools: &ToolsDir) -> BTreeMap<(String, String), PathBuf> {
             else {
                 continue;
             };
-            if read_record(&version_dir).is_some() {
-                found.insert((id.clone(), version), version_dir);
+            let Some(record) = read_record(&version_dir) else {
+                continue;
+            };
+            let key = (id.clone(), version);
+            if let Some(bin) = record.bin {
+                bins.insert(key.clone(), bin);
             }
+            dirs.insert(key, version_dir);
         }
     }
-    found
+    (dirs, bins)
 }
 
 fn subdirs(dir: &std::path::Path) -> Vec<PathBuf> {
@@ -113,6 +129,14 @@ pub enum PlannedStep {
         cmd: String,
     },
     Prerequisite(&'static Prerequisite),
+    /// An agent the registry distributes as an npm package, installed with
+    /// npm under `tools/agents/<id>/<version>`. `package` is the pinned spec.
+    NpmAgent {
+        id: String,
+        name: String,
+        version: String,
+        package: String,
+    },
 }
 
 /// A step as the UI shows it.
@@ -145,12 +169,14 @@ impl PlannedStep {
                         .map(|t| t.size),
                 }
             }
-            Self::Agent { name, version, .. } => InstallStep {
-                kind: "agent".to_string(),
-                name: name.clone(),
-                version: version.clone(),
-                download_bytes: None,
-            },
+            Self::Agent { name, version, .. } | Self::NpmAgent { name, version, .. } => {
+                InstallStep {
+                    kind: "agent".to_string(),
+                    name: name.clone(),
+                    version: version.clone(),
+                    download_bytes: None,
+                }
+            }
             Self::Prerequisite(p) => InstallStep {
                 kind: "prerequisite".to_string(),
                 name: p.command.to_string(),
