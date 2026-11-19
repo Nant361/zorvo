@@ -346,9 +346,40 @@ const CONTROL_WORDS = /^(?:if|then|else|elif|fi|while|until|do|done|\{|\}|\(|\)|
  * words of a compound command around it gone (`if true; then exec sleep 300; fi`, `{ …; }`,
  * `( … )`): a shell may replace itself with any of them. An `exec` in front goes with the wrappers.
  */
+/** The commands of a list, split on `&&`, `||`, `;` and line breaks that are not quoted or escaped. */
+function splitList(command: string): string[] {
+  const parts: string[] = [];
+  let part = '';
+  let quote: string | null = null;
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
+    const pair = command.slice(index, index + 2);
+    if (char === '\\' && quote !== "'") {
+      part += char + (command[index + 1] ?? '');
+      index++;
+    } else if (quote) {
+      if (char === quote) quote = null;
+      part += char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      part += char;
+    } else if (pair === '&&' || pair === '||') {
+      parts.push(part);
+      part = '';
+      index++;
+    } else if (char === ';' || char === '\n') {
+      parts.push(part);
+      part = '';
+    } else {
+      part += char;
+    }
+  }
+  parts.push(part);
+  return parts.map((one) => one.trim());
+}
+
 function listCommands(command: string): string[] {
-  return command
-    .split(/\s*(?:&&|\|\||;|\n)\s*/)
+  return splitList(command)
     .map((part) => {
       const words = part.replace(/^\(+/, '').replace(/\)+$/, '').trim().split(' ');
       let index = 0;
