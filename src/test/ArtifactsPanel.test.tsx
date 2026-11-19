@@ -385,3 +385,74 @@ describe("the more menu", () => {
     await waitFor(() => expect(calls("artifact_rename")).toEqual([{ sessionId: "s-1", artifactId: REPORT.id, title: "List speed" }]));
   });
 });
+
+describe("comments", () => {
+  const commentsState = (overrides: Partial<import("../hooks/useArtifactComments").ArtifactCommentsState> = {}) => ({
+    sessionId: "s-1",
+    comments: [],
+    isCommenting: false,
+    setCommenting: vi.fn(),
+    candidate: null,
+    candidateBody: () => "",
+    setCandidateBody: vi.fn(),
+    cancelCandidate: vi.fn(),
+    saveCandidate: vi.fn(() => "saved" as const),
+    missing: new Set<number>(),
+    editComment: vi.fn(),
+    deleteComment: vi.fn(),
+    clearSent: vi.fn(),
+    ...overrides,
+  });
+  const addReview = () => ({ inMessage: new Set<string>(), blockedReason: undefined, add: vi.fn() });
+
+  it("Comment is off on an older version, with the reason", () => {
+    show({ viewed: { artifactId: REPORT.id, version: 2 }, comments: commentsState(), addReview: addReview(), cwd: "/w" });
+
+    const button = screen.getByRole("button", { name: "Comment" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText("Comments go on the newest version.")).toBeTruthy();
+  });
+
+  it("pressing Comment calls setCommenting(true)", () => {
+    const comments = commentsState();
+    show({ ...viewingReport, comments, addReview: addReview(), cwd: "/w" });
+
+    const button = screen.getByRole("button", { name: "Comment" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(button);
+
+    expect(comments.setCommenting).toHaveBeenCalledWith(true);
+  });
+
+  it("Reload turns comment mode off first", () => {
+    const comments = commentsState({ isCommenting: true });
+    show({ ...viewingReport, comments, addReview: addReview(), cwd: "/w" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+
+    expect(comments.setCommenting).toHaveBeenCalledWith(false);
+  });
+
+  it("Expand keeps comment mode and the half-written candidate", () => {
+    const candidate = {
+      page: { sessionId: "s-1", artifactId: REPORT.id, version: 3 },
+      anchor: { kind: "text" as const, quote: "Annual", before: "", after: "" },
+      isPickHeld: false,
+    };
+    const comments = commentsState({ isCommenting: true, candidate, candidateBody: () => "Half written" });
+    const { unmount } = show({ ...viewingReport, comments, addReview: addReview(), cwd: "/w" });
+    unmount();
+
+    show({ ...viewingReport, isExpanded: true, comments, addReview: addReview(), cwd: "/w" });
+
+    expect(screen.getByRole("button", { name: "Comment" }).getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByRole("textbox", { name: /Comment on/ }) as HTMLTextAreaElement).value).toBe("Half written");
+  });
+
+  it("no strip or button without comments state", () => {
+    show(viewingReport);
+
+    expect(screen.queryByRole("button", { name: "Comment" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Comments on this page" })).toBeNull();
+  });
+});

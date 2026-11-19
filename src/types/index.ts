@@ -168,6 +168,8 @@ export interface Session {
   openedBy?: OpenedByLink | null;
   /** Comments written on lines of the session's diff; absent when there are none. */
   reviewComments?: ReviewComment[];
+  /** Comments written on the session's artifact pages; absent when there are none. */
+  artifactComments?: ArtifactComment[];
   /** Set when the session runs privately; the model it was started with, whose key it spends, and its credit cap. */
   privateMode?: { modelId: string; ownKey?: boolean; sessionCap?: number };
   /** The last total this session used, kept across restarts; records themselves are in memory. */
@@ -446,6 +448,60 @@ export interface Artifact {
   sourcePath: string;
   versions: ArtifactVersion[];
 }
+
+/** Where a comment is on an artifact page: selected text with its context, or a clicked element. */
+export type ArtifactAnchor =
+  | { kind: 'text'; quote: string; before: string; after: string }
+  | {
+      kind: 'element';
+      tag: string;
+      elementId?: string;
+      classes: string[];
+      label?: string;
+      text: string;
+      path: string;
+    };
+
+/** A comment on an artifact page, for the agent. It never moves to another version. */
+export interface ArtifactComment {
+  id: string;
+  artifactId: string;
+  /** The version it was written on. */
+  version: number;
+  anchor: ArtifactAnchor;
+  body: string;
+  createdAt: number;
+  /** Send was pressed with it in the message, not that the agent acted. */
+  sentAt?: number;
+}
+
+/** One version of one artifact, as the page view shows it. */
+export interface PageRef {
+  sessionId: string;
+  artifactId: string;
+  version: number;
+}
+
+/** A comment's number and where it is, for the page to draw. */
+export interface PageMark {
+  n: number;
+  anchor: ArtifactAnchor;
+}
+
+/** What an artifact page reported through Zorvo's script. */
+export type PageMessage =
+  | { kind: 'pick-text'; quote: string; before: string; after: string }
+  | {
+      kind: 'pick-element';
+      tag: string;
+      elementId?: string;
+      classes: string[];
+      label?: string;
+      text: string;
+      path: string;
+    }
+  | { kind: 'cancel' }
+  | { kind: 'marks-missing'; numbers: number[] };
 
 export interface ArtifactCard {
   artifactId: string;

@@ -36,6 +36,14 @@ function enqueue(call: () => Promise<unknown>, onError?: (error: unknown) => voi
 }
 
 /**
+ * Puts a call about the page view (comment mode, marks) in the same queue as
+ * its show, move and close, so it reaches the backend after them, in order.
+ */
+export function enqueueArtifactViewCall(call: () => Promise<unknown>, onError?: (error: unknown) => void): void {
+  enqueue(call, onError);
+}
+
+/**
  * The one page view is shared by every box that shows a page, so what it shows is kept here, not in a box.
  * `claimed` is the page a mounted box wants, and which box; `live` is the page the backend's view holds. A box that leaves
  * gives up its claim, and the view is closed only if nothing claimed it by the time the close's turn comes:

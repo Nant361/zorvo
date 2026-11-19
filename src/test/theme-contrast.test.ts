@@ -95,6 +95,8 @@ describe("light theme contrast", () => {
     for (const fg of ["fg", "fg-secondary", "fg-subtle"]) expectContrast(fg, "attention-surface", 4.5);
     expectContrast("on-primary", "primary", 4.5);
     expectContrast("on-primary", "primary-hover", 4.5);
+    // The number on an artifact comment, and on its mark in the page.
+    expectContrast("on-mark", "mark", 4.5);
   });
 
   it("redefines every non-terminal @theme color in the light block", () => {

@@ -14,9 +14,10 @@ import { agentNameOr } from "./lib/agent-name";
 import { FilesPanel } from "./components/FilesPanel";
 import { ArtifactsPanel } from "./components/artifacts/ArtifactsPanel";
 import { ArtifactGallery } from "./components/artifacts/ArtifactGallery";
+import { useArtifactComments, useArtifactCommentSweep } from "./hooks/useArtifactComments";
 import { useArtifacts } from "./hooks/useArtifacts";
 import { useArtifactOpening } from "./hooks/useArtifactOpening";
-import { galleryRows, newestVersion } from "./lib/artifacts";
+import { galleryRows, hasVersion, newestVersion, shownArtifactOf } from "./lib/artifacts";
 import { markersOf } from "./lib/file-markers";
 import { EmptyFolderState, FileDropOverlay } from "./components/AppPlaceholders";
 import { Toast, ToastStack } from "./components/ui/Toast";
@@ -171,7 +172,7 @@ import {
   type AgentOptions,
   type ProbedOptions,
 } from "./lib/acp-draft";
-import type { AgentProfile, ArtifactCard, ReviewComment, Session, SessionWorktree, Settings } from "./types";
+import type { AgentProfile, ArtifactCard, ArtifactComment, ReviewComment, Session, SessionWorktree, Settings } from "./types";
 import { replyBlockedReason } from "./lib/reply-quote";
 
 const NO_FOLDER_NOTICE = "Open a project folder first: choose one from the folder chip by the message box.";
@@ -469,6 +470,19 @@ export default function App() {
       })),
     [updateState],
   );
+  const updateArtifactComments = useCallback(
+    (sessionId: string, change: (prev: ArtifactComment[]) => ArtifactComment[]) =>
+      updateState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((s) => {
+          if (s.id !== sessionId) return s;
+          const current = s.artifactComments ?? [];
+          const next = change(current);
+          return next === current ? s : { ...s, artifactComments: next };
+        }),
+      })),
+    [updateState],
+  );
   const reviewComments = useReviewComments(activeSession?.id, activeSession?.reviewComments, updateReviewComments);
   const unsentCommentCount = reviewComments.comments.filter((comment) => comment.sentAt === undefined).length;
 
@@ -762,6 +776,26 @@ export default function App() {
   const inspectorTab = inspector.tab && inspectorTabs.includes(inspector.tab) ? inspector.tab : null;
   // The open artifact's page takes the chat's place: only on the Artifacts tab of a session that still has one.
   const isArtifactExpanded = inspector.isArtifactExpanded && inspectorTab === "artifacts" && sessionArtifacts.length > 0;
+  // The artifact page on screen, for its comments: the Artifacts tab's viewer shows it, expanded or not.
+  const shownArtifact = inspectorTab === "artifacts" ? shownArtifactOf(sessionArtifacts, inspector.viewedArtifact) : undefined;
+  const viewedVersion = inspector.viewedArtifact?.artifactId === shownArtifact?.id ? inspector.viewedArtifact?.version : null;
+  const shownVersion = shownArtifact ? (viewedVersion ?? newestVersion(shownArtifact)) : 0;
+  const shownPage =
+    activeSession && shownArtifact && hasVersion(shownArtifact, shownVersion)
+      ? { sessionId: activeSession.id, artifactId: shownArtifact.id, version: shownVersion }
+      : null;
+  // The review wiring is built further down; its `forget` reaches the comments through this ref.
+  const forgetReviewRef = useRef<((ids: readonly string[]) => void) | null>(null);
+  const forgetInMessage = useCallback((ids: readonly string[]) => forgetReviewRef.current?.(ids), []);
+  const artifactComments = useArtifactComments({
+    sessionId: activeSession?.id,
+    comments: activeSession?.artifactComments,
+    update: updateArtifactComments,
+    shownPage,
+    forget: forgetInMessage,
+    onError: reportError,
+  });
+  useArtifactCommentSweep(sessions, artifacts.bySession, artifacts.readSessions, updateArtifactComments, forgetInMessage);
   /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
   const openTask = (sessionId: string, tab: TaskTab) => {
     taskTabs.open(sessionId, tab);
@@ -1300,14 +1334,17 @@ export default function App() {
     sessions,
     comments: reviewComments,
     updateComments: updateReviewComments,
+    updateArtifactComments,
     composerRef,
     canContinue: isActiveRunning || isResumable,
     hasComposer: activeAgentRemoved === null,
     isComposerDisabled,
     collapseDiff: inspector.collapseDiff,
+    collapseArtifact: () => inspector.setArtifactExpanded(false),
     agentNameOf: (profileId) => agents.find((a) => a.id === profileId)?.name ?? profileId,
   });
   rearmReviewRef.current = review.rearm;
+  forgetReviewRef.current = review.forget;
 
   /** What a delegation to an agent starts with: the picks, and the agent's remembered model and effort. */
   const delegationChoicesFor = (agentId: string): AcpChoices =>
@@ -2121,6 +2158,9 @@ export default function App() {
                     isExpanded
                     onToggleExpanded={() => inspector.setArtifactExpanded(false)}
                     onError={reportError}
+                    comments={artifactComments}
+                    addReview={review.addArtifactReview}
+                    cwd={activeSession.cwd}
                   />
                   {/* The chat, which draws the app's notice, is hidden under an expanded page: a failure here
                       (export, rename, delete, a page that cannot be shown) is said here. The page hides under it. */}
@@ -2239,6 +2279,9 @@ export default function App() {
                   isExpanded={false}
                   onToggleExpanded={() => inspector.setArtifactExpanded(true)}
                   onError={reportError}
+                  comments={artifactComments}
+                  addReview={review.addArtifactReview}
+                  cwd={activeSession.cwd}
                 />
               )}
               {inspectorTab === "private" && activeSession?.privateMode && (

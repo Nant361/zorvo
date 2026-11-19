@@ -29,6 +29,8 @@
   --color-status-attention: #fbbf24;
   --color-status-unread: #38bdf8;
   --color-status-merged: #c084fc;
+  --color-mark: #2563eb;
+  --color-on-mark: #ffffff;
   --color-danger: #f87171;
   --color-danger-surface: #2a1215;
   --color-attention-surface: #1f1a0d;
@@ -102,6 +104,8 @@
     --color-status-attention: #a34b08;
     --color-status-unread: #0369a1;
     --color-status-merged: #7e22ce;
+    --color-mark: #2563eb;
+    --color-on-mark: #ffffff;
     --color-danger: #b91c1c;
     --color-danger-surface: #fef2f2;
     --color-attention-surface: #fffbeb;

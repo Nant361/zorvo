@@ -7,6 +7,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 ### Added
 
 - **Artifacts.** An agent can show you a web page it made (a report, a diagram, a dashboard, a mockup) beside the chat, in the new **Artifacts** tab. Each time the agent changes the page you get a new version and can go back to an older one. **Export** saves the page as one HTML file, and **Artifacts** in the sidebar lists the pages of every session. A page runs in a window part of its own with no access to Zorvo or your files; it may load scripts from cdnjs, jsDelivr, unpkg, the Tailwind CDN and code.jquery.com and fonts from Google Fonts, and can send nothing anywhere. Pages stay on this Mac and are deleted with their session. Agents that get Zorvo's tools get this too; the switch in **Settings → Agents** turns it off.
+- **Comments on artifact pages.** Press **Comment** above a page, then select text or click a part of it, and write what should change. Comments are numbered on the page and listed under it; **Add to message** puts them in your message to the agent, with the file and version they are about, the same way diff comments go. A comment written on an older version says so. Your comment text never reaches the page.
 - **Background task tabs.** A subagent or a shell command an agent started opens as a tab beside the chat, and the chat shows one row per subagent instead of every step. With Claude Code and Qwen Code you can follow a subagent's steps as they arrive.
 
 ### Changed

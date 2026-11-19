@@ -129,6 +129,8 @@ function handleStoreCommand(cmd: string, args: StoreArgs | undefined): Promise<u
     case "artifact_view_bounds":
     case "artifact_view_hide":
     case "artifact_view_close":
+    case "artifact_comment_mode":
+    case "artifact_view_marks":
       return Promise.resolve(undefined);
     case "artifact_export":
       return Promise.resolve(false);
