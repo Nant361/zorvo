@@ -176,10 +176,27 @@ export function useArtifactView(
 /** Points of the box, inset from its edges, that must be free for the page to show. */
 const SAMPLES = [0.1, 0.5, 0.9];
 
+/** Whether one of Zorvo's marked overlays (a notice) lies over the box: a small one can miss every sampled point. */
+function hasOverlayOver(box: DOMRect): boolean {
+  return Array.from(document.querySelectorAll('[data-overlay]')).some((overlay) => {
+    const rect = overlay.getBoundingClientRect();
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.left < box.right &&
+      rect.right > box.left &&
+      rect.top < box.bottom &&
+      rect.bottom > box.top
+    );
+  });
+}
+
 function isCoveredNow(box: HTMLElement): boolean {
-  const { x, y, width, height } = box.getBoundingClientRect();
+  const rect = box.getBoundingClientRect();
+  const { x, y, width, height } = rect;
   // No size: the box is in a part of the window that is hidden, so the page must not show either.
   if (width === 0 || height === 0) return true;
+  if (hasOverlayOver(rect)) return true;
   if (typeof document.elementFromPoint !== 'function') return false;
   return SAMPLES.some((fx) =>
     SAMPLES.some((fy) => {

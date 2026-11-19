@@ -301,8 +301,27 @@ export function useAcpEngine({
     return message.attachments ? { text: message.content, attachments: message.attachments } : { text: message.content };
   };
 
-  /** A private session's prompt refused for credits, a key or a sign-in: the message goes back to its composer. */
+  /** Whether the agent answered or acted after `messageId`: a reply, a tool call or a card follows it in the chat. */
+  const hasWorkAfter = (sessionId: string, messageId: string): boolean => {
+    const messages = transcriptOf(sessionId) ?? [];
+    const index = messages.findIndex((message) => message.id === messageId);
+    return index !== -1 && index < messages.length - 1;
+  };
+
+  /**
+   * A private session's prompt refused for credits or a key: the message goes back to its composer,
+   * unless the agent already worked on it. Credits usually run out several model calls into a turn;
+   * the agent then holds the message in its own history, so it stays in the chat above what the agent
+   * did, and sending it again would give the agent the same prompt twice.
+   */
   const handBackRefused = (sessionId: string) => {
+    const sent = lastPromptRef.current.get(sessionId)?.message;
+    // The turn end landed what the agent sent before this runs, so the transcript is current.
+    if (sent && hasWorkAfter(sessionId, sent.id)) {
+      lastPromptRef.current.delete(sessionId);
+      failedPromptRef.current.delete(sessionId);
+      return;
+    }
     const unsent = takeRefusedPrompt(sessionId);
     if (unsent) giveBack?.(sessionId, unsent);
   };

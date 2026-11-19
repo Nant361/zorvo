@@ -49,6 +49,46 @@ describe("usePrivateUsage", () => {
     expect(spy).toHaveBeenCalledWith("private_session_usage", { sessionId: "s-1" }, undefined);
   });
 
+  it("does not count this run's records twice after the window reloads", async () => {
+    vi.spyOn(tauriInternals(), "invoke").mockResolvedValue({ credits: 30, estimated: false, calls: 0 });
+    const first = vi.fn();
+    const before = renderHook(() => usePrivateUsage({ sessions: [session()], updateSession: first }));
+    await act(async () => before.result.current.refresh("s-1"));
+    await waitFor(() => expect(first).toHaveBeenLastCalledWith("s-1", { credits: 30, estimated: false }));
+    before.unmount();
+
+    // The reloaded page loads the saved total, 30, while the backend still holds the same records.
+    const second = vi.fn();
+    const after = renderHook(() =>
+      usePrivateUsage({ sessions: [session({ credits: 30, estimated: false })], updateSession: second }),
+    );
+    await act(async () => after.result.current.refresh("s-1"));
+
+    await waitFor(() => expect(second).toHaveBeenLastCalledWith("s-1", { credits: 30, estimated: false }));
+  });
+
+  it("reads the total of the session the backend counts a fork's calls for", async () => {
+    // A native fork spends on its source's token; the fork in between was deleted, so only the
+    // backend still knows whose token it is.
+    const spy = vi.spyOn(tauriInternals(), "invoke").mockImplementation((_cmd, args) =>
+      Promise.resolve(
+        args?.sessionId === "s-1"
+          ? { credits: 50, estimated: false, calls: 0 }
+          : { credits: 0, estimated: false, calls: 0, countedFor: "s-1" },
+      ),
+    );
+    const updateSession = vi.fn();
+    const fork: Session = { ...session(), id: "s-fork", forkedFrom: "s-deleted" };
+    const sessions = [session(), fork];
+    const { result } = renderHook(() => usePrivateUsage({ sessions, updateSession }));
+
+    await act(async () => result.current.refresh("s-fork"));
+
+    await waitFor(() => expect(updateSession).toHaveBeenCalledWith("s-1", { credits: 50, estimated: false }));
+    expect(updateSession).toHaveBeenCalledWith("s-fork", { credits: 0, estimated: false });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the saved base when a reopen makes the backend total cumulative", async () => {
     const spy = vi
       .spyOn(tauriInternals(), "invoke")

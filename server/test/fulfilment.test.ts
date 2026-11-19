@@ -576,6 +576,28 @@ describe("alarm", () => {
     expect(reads()).toHaveLength(50);
   });
 
+  it("keeps one place a tick for a checkout that can no longer be paid, however many are still open", async () => {
+    await seedStock(10_000);
+    const late = await newDevice();
+    const expired = await checkout(late.deviceId);
+    await stub().cancelTopup(late.deviceId, expired.topupId, NOW);
+    ping.pay(expired.sessionId);
+    // Four open checkouts, each due every minute: more than a tick's three places.
+    const open = await newDevice();
+    const openSessions: string[] = [];
+    for (let i = 0; i < 4; i += 1) openSessions.push((await checkout(open.deviceId)).sessionId);
+    await runInDurableObject(stub(), (_ledger, state) => {
+      state.storage.sql.exec("UPDATE topups SET reserved_until = ? WHERE status = 'created'", NOW + HOUR_MS);
+    });
+    const readsOf = (sessionId: string) => ping.calls.filter((call) => call.url.endsWith(`/checkout/sessions/${sessionId}`)).length;
+
+    await tick(NOW + 3 * MINUTE_MS);
+
+    // The late payment is found at once, and the open checkouts share the other two places.
+    expect(await statusOf(expired.topupId)).toBe("credited");
+    expect(openSessions.filter((sessionId) => readsOf(sessionId) > 0)).toHaveLength(2);
+  });
+
   it("polls while a poll's reserve still fits the tick's budget", async () => {
     // Two fetches for a session and its payment; nothing is spent before the poll.
     await setVars({ TICK_SUBREQUEST_BUDGET: "2" });

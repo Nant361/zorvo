@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { ArtifactsPanel, type ArtifactsPanelProps } from "../components/artifacts/ArtifactsPanel";
 import { fakeTauriInvoke } from "./setup";
 import { formatShortTime } from "../lib/relative-time";
+import { ToastStack } from "../components/ui/Toast";
 import type { Artifact } from "../types";
 
 type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
@@ -79,6 +80,43 @@ describe("the viewer", () => {
     expect(calls("artifact_view_show")[0]).toEqual({ sessionId: "s-1", artifactId: REPORT.id, version: 3, ...RECT });
     expect(container.querySelector("iframe")).toBeNull();
     expect(screen.getByRole("img", { name: "Session list performance" })).toBeTruthy();
+  });
+
+  it("hides the page while a notice lies over its box, even where no sampled point falls", async () => {
+    // A toast near the bottom of a tall box can miss every sampled point; its rectangle is what counts.
+    show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+
+    const toast = render(
+      <ToastStack>
+        <span>Zorvo could not save that file.</span>
+      </ToastStack>,
+    );
+
+    await waitFor(() => expect(calls("artifact_view_hide")).toContainEqual({ hidden: true }));
+    toast.unmount();
+    await waitFor(() => expect(calls("artifact_view_hide").at(-1)).toEqual({ hidden: false }));
+  });
+
+  it("keeps the page shown while a notice lies elsewhere in the window", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const isNotice = this.closest("[data-overlay]") !== null;
+      const { x, y, width, height } = isNotice ? { x: 40, y: 700, width: 300, height: 60 } : RECT;
+      return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
+    });
+    show(viewingReport);
+    await waitFor(() => expect(calls("artifact_view_show")).toHaveLength(1));
+
+    render(
+      <ToastStack>
+        <span>Saved.</span>
+      </ToastStack>,
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(calls("artifact_view_hide")).not.toContainEqual({ hidden: true });
   });
 
   it("goes back to the list", () => {

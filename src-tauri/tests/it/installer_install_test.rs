@@ -861,3 +861,331 @@ fn stopping_a_job_that_is_not_running_records_nothing() {
         Ok(())
     );
 }
+
+/// An `npm` that installs the programs named in `$FAKE_BINS` (space separated)
+/// under `--prefix`, after `$FAKE_SLEEP` seconds, and counts its runs in `$FAKE_COUNTER`.
+const FAKE_NPM_BINS: &str = r#"#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--prefix" ]; then prefix="$2"; fi
+  last="$1"; shift
+done
+if [ -n "$FAKE_COUNTER" ]; then echo run >> "$FAKE_COUNTER"; fi
+if [ -n "$FAKE_SLEEP" ]; then /bin/sleep "$FAKE_SLEEP"; fi
+/bin/mkdir -p "$prefix/bin"
+printf '%s' "$last" > "$prefix/spec.txt"
+for b in $FAKE_BINS; do printf '#!/bin/sh\necho ok\n' > "$prefix/bin/$b"; /bin/chmod +x "$prefix/bin/$b"; done
+"#;
+
+/// An env whose `PATH` starts with a dir holding the fake npm, plus `vars`.
+fn npm_env(dir: &Path, vars: &[(&str, &str)]) -> HashMap<String, String> {
+    let user_bin = dir.join("user-bin");
+    fs::create_dir_all(&user_bin).unwrap();
+    fs::write(user_bin.join("npm"), FAKE_NPM_BINS).unwrap();
+    fs::set_permissions(user_bin.join("npm"), fs::Permissions::from_mode(0o755)).unwrap();
+    let mut env = HashMap::from([(
+        "PATH".to_string(),
+        format!("{}:/usr/bin:/bin", user_bin.display()),
+    )]);
+    env.extend(vars.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+    env
+}
+
+fn npm_agent_step(id: &str, package: &str) -> PlannedStep {
+    PlannedStep::NpmAgent {
+        id: id.to_string(),
+        name: "Fake".to_string(),
+        version: "1.0.0".to_string(),
+        package: package.to_string(),
+    }
+}
+
+#[test]
+fn installs_an_npm_agent_and_records_its_program() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    let events = Mutex::new(Vec::new());
+
+    installer(&d, &server)
+        .run(
+            "fake",
+            &[npm_agent_step("fake", "@scope/fake@1.0.0")],
+            &env,
+            Some(24),
+            &|p| events.lock().unwrap().push(p),
+        )
+        .unwrap();
+
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    let record = read_record(&dest).unwrap();
+    assert_eq!(record.source, "npm:@scope/fake@1.0.0");
+    assert_eq!(record.bin.as_deref(), Some("bin/fake"));
+    assert_eq!(record.sha256, None);
+    assert!(dest.join("bin/fake").is_file());
+    assert_eq!(
+        fs::read_to_string(dest.join("spec.txt")).unwrap(),
+        "@scope/fake@1.0.0"
+    );
+    let events = events.into_inner().unwrap();
+    let npm = events.iter().find(|e| e.phase == "npm").unwrap();
+    assert_eq!((npm.kind.as_str(), npm.name.as_str()), ("agent", "Fake"));
+    assert!(staging_is_empty(&d));
+}
+
+#[test]
+fn an_npm_agent_already_installed_is_skipped() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let counter = d.join("runs.txt");
+    let env = npm_env(
+        &d,
+        &[
+            ("FAKE_BINS", "fake"),
+            ("FAKE_COUNTER", counter.to_str().unwrap()),
+        ],
+    );
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(counter).unwrap().lines().count(), 1);
+}
+
+#[test]
+fn two_installs_of_one_npm_agent_at_once_run_npm_once() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let counter = d.join("runs.txt");
+    let env = npm_env(
+        &d,
+        &[
+            ("FAKE_BINS", "fake"),
+            ("FAKE_SLEEP", "1"),
+            ("FAKE_COUNTER", counter.to_str().unwrap()),
+        ],
+    );
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+
+    // Two jobs whose plans hold the same agent: the second waits for the
+    // first, then finds the install and skips.
+    let results = thread::scope(|s| {
+        let jobs = ["first", "second"]
+            .map(|job| s.spawn(|| install.run(job, &steps, &env, Some(24), &no_progress)));
+        jobs.map(|job| job.join().unwrap())
+    });
+
+    assert_eq!(results, [Ok(()), Ok(())]);
+    assert_eq!(fs::read_to_string(counter).unwrap().lines().count(), 1);
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(staging_is_empty(&d));
+}
+
+#[test]
+fn an_npm_agent_without_a_program_to_pick_installs_nothing() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    for bins in ["a b", ""] {
+        let env = npm_env(&d, &[("FAKE_BINS", bins)]);
+
+        let err = installer(&d, &server)
+            .run(
+                "fake",
+                &[npm_agent_step("fake", "@scope/fake@1.0.0")],
+                &env,
+                Some(24),
+                &no_progress,
+            )
+            .unwrap_err();
+
+        assert_eq!(err, "Fake's package has no program Zorvo can pick.");
+        assert!(!ToolsDir::new(&d).agent_dir("fake", "1.0.0").exists());
+        assert!(staging_is_empty(&d));
+    }
+}
+
+#[test]
+fn cancelling_an_npm_agent_install_leaves_no_dir() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let slow = npm_env(&d, &[("FAKE_BINS", "fake"), ("FAKE_SLEEP", "20")]);
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+    let reached_npm = Mutex::new(false);
+
+    thread::scope(|s| {
+        let job = s.spawn(|| {
+            install.run("fake", &steps, &slow, Some(24), &|p| {
+                if p.phase == "npm" {
+                    *reached_npm.lock().unwrap() = true;
+                }
+            })
+        });
+        let started = Instant::now();
+        while !*reached_npm.lock().unwrap() {
+            assert!(started.elapsed() < WAIT_LIMIT, "the npm phase never began");
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(200));
+        assert!(install.cancel("fake"));
+        assert_eq!(job.join().unwrap(), Err(INSTALL_CANCELLED.to_string()));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    });
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    assert!(!dest.exists());
+    assert!(staging_is_empty(&d));
+
+    let quick = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    install
+        .run("fake", &steps, &quick, Some(24), &no_progress)
+        .unwrap();
+    assert!(read_record(&dest).is_some());
+}
+
+#[test]
+fn an_npm_agent_without_any_node_fails() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+
+    let err = installer(&d, &server)
+        .run(
+            "fake",
+            &[npm_agent_step("fake", "fake@1.0.0")],
+            &env(),
+            None,
+            &no_progress,
+        )
+        .unwrap_err();
+
+    assert_eq!(err, "Fake needs Node.js, which is not installed");
+    assert!(!ToolsDir::new(&d).agent_dir("fake", "1.0.0").exists());
+}
+
+#[test]
+fn an_npm_agent_id_that_is_not_a_plain_name_installs_nothing() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+
+    let err = installer(&d, &server)
+        .run(
+            "job",
+            &[npm_agent_step("../x", "fake@1.0.0")],
+            &env,
+            Some(24),
+            &no_progress,
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        "Zorvo cannot install Fake: its id or version is not a plain name"
+    );
+    assert!(!ToolsDir::new(&d).root().join("agents").exists());
+}
+
+/// The first `name` on the process `PATH`.
+fn on_process_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH").and_then(|path| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    })
+}
+
+#[test]
+fn a_real_npm_install_keeps_its_program_runnable_after_the_move() {
+    if on_process_path("npm").is_none() || on_process_path("node").is_none() {
+        eprintln!("skipped: npm or node is not on PATH");
+        return;
+    }
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let package = d.join("fixture-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        r#"{"name":"zorvo-fixture-agent","version":"1.0.0","bin":{"zorvo-fixture-agent":"cli.js"}}"#,
+    )
+    .unwrap();
+    fs::write(
+        package.join("cli.js"),
+        "#!/usr/bin/env node\nconsole.log(\"fixture-ok\")\n",
+    )
+    .unwrap();
+    let packed = std::process::Command::new("npm")
+        .args(["pack", "--silent"])
+        .current_dir(&package)
+        .output()
+        .unwrap();
+    assert!(packed.status.success(), "npm pack failed");
+    let tarball = package.join("zorvo-fixture-agent-1.0.0.tgz");
+    let env: HashMap<String, String> = std::env::vars().collect();
+
+    installer(&d, &server)
+        .run(
+            "fixture",
+            &[npm_agent_step("fixture", tarball.to_str().unwrap())],
+            &env,
+            Some(24),
+            &no_progress,
+        )
+        .unwrap();
+
+    let dest = ToolsDir::new(&d).agent_dir("fixture", "1.0.0");
+    let bin = read_record(&dest).unwrap().bin.unwrap();
+    assert_eq!(bin, "bin/zorvo-fixture-agent");
+    let out = std::process::Command::new(dest.join(bin)).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "fixture-ok");
+}
+
+#[test]
+fn installing_repairs_an_npm_agent_whose_program_is_gone() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    let install = installer(&d, &server);
+    let steps = [npm_agent_step("fake", "fake@1.0.0")];
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    fs::remove_file(dest.join("bin/fake")).unwrap();
+
+    install
+        .run("fake", &steps, &env, Some(24), &no_progress)
+        .unwrap();
+
+    assert!(dest.join("bin/fake").is_file());
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(staging_is_empty(&d));
+}
+
+#[test]
+fn installing_repairs_an_npm_agent_whose_record_names_no_program() {
+    let server = Server::start(vec![]);
+    let d = data_dir();
+    let env = npm_env(&d, &[("FAKE_BINS", "fake")]);
+    let dest = ToolsDir::new(&d).agent_dir("fake", "1.0.0");
+    mark_installed(&dest);
+
+    installer(&d, &server)
+        .run(
+            "fake",
+            &[npm_agent_step("fake", "fake@1.0.0")],
+            &env,
+            Some(24),
+            &no_progress,
+        )
+        .unwrap();
+
+    assert_eq!(read_record(&dest).unwrap().bin.as_deref(), Some("bin/fake"));
+    assert!(dest.join("bin/fake").is_file());
+}

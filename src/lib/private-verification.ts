@@ -157,3 +157,15 @@ export const VERIFICATION_LABEL: Record<VerificationState, string> = {
   not_signed: 'Not signed',
   checking: 'Checking the signature',
 };
+
+/** What a verified answer is called when its signer is not the model's own TEE. */
+export const SIGNED_LABEL = 'Signed by NEAR AI';
+
+/**
+ * The badge's words. "Verified in TEE" is kept for an answer the model's TEE signed; one signed by
+ * NEAR AI's gateway, or by signers of more than one kind, is signed, which is all Zorvo can say.
+ */
+export function verificationLabel(verification: Pick<MessageVerification, 'state' | 'kind'>): string {
+  if (verification.state === 'verified' && verification.kind !== 'provider_tee') return SIGNED_LABEL;
+  return VERIFICATION_LABEL[verification.state];
+}

@@ -89,8 +89,10 @@ import { isTopupActive } from "./lib/private-flow";
 import { usePrivateLowBalanceNotice } from "./hooks/usePrivateLowBalanceNotice";
 import { usePrivateUsage } from "./hooks/usePrivateUsage";
 import { usePrivateVerification } from "./hooks/usePrivateVerification";
-import { lowBalanceNote, privateErrorText } from "./lib/private-credits";
+import { actionError, lowBalanceNote } from "./lib/private-credits";
 import { useAgentProfiles, useSuggestedFolders } from "./hooks/useDiscovery";
+import { useAutoInstall } from "./hooks/useAutoInstall";
+import { usedAgentIds } from "./lib/agent-catalog";
 import { useDraftInstall } from "./hooks/useDraftInstall";
 import { useWorkspaceSelection } from "./hooks/useWorkspaceSelection";
 import { Onboarding, type OnboardingResult } from "./components/Onboarding";
@@ -288,6 +290,12 @@ export default function App() {
   const isActiveRunning = activeSession?.status === "running";
   // Only the agents in use are offered: the defaults and installed ones.
   const agentsInUse = agents.filter((agent) => isInUse(agent, state.settings));
+  // After an update of Zorvo, the npm packages of the agents you have used are installed without a click.
+  useAutoInstall({
+    agentsInUse,
+    usedIds: usedAgentIds(state.settings, state.sessions),
+    isReady: isLoaded && areAgentsLoaded && state.settings.onboardingCompleted,
+  });
   // A saved session of a removed agent stays readable; once it stops, its composer offers to add the agent again.
   const activeAgentRemoved = removedAgentNameFor(activeSession, agents, state.settings);
   // Hidden, not unmounted: a look at either must not cost the message being written.
@@ -643,7 +651,9 @@ export default function App() {
       error ? setFailedTurns((prev) => ({ ...prev, [sessionId]: error })) : clearFailedTurn(sessionId),
     // Read when a retry runs, long after the render that built the engine: the latest hook decides.
     promptBlockedReason: (sessionId) => delegationBlockedRef.current(sessionId),
-    onPrivateCreditsOut: onCreditsOut,
+    // An own-key session's refusal is about the user's NEAR AI key, not about Zorvo's balance.
+    onPrivateCreditsOut: (sessionId, reason) =>
+      onCreditsOut(sessionId, reason, sessions.find((s) => s.id === sessionId)?.privateMode?.ownKey === true),
     onPrivateTurnEnd,
     giveBack: (sessionId, message) => giveBackMessage(sessionId, message.text, message.attachments),
   });
@@ -1007,7 +1017,7 @@ export default function App() {
       });
       privateCredits.clearCreditsOut(session.id);
     } catch (error) {
-      setNotice(privateErrorText(String(error)), "warning");
+      setNotice(actionError("raise", String(error)), "warning");
     } finally {
       setIsRaisingPrivateCap(false);
     }
@@ -1580,7 +1590,10 @@ export default function App() {
   const isSendWaiting = compare.isCompare
     ? !canUseWorktree
     : draftNeedsInstall || draftNeedsSignIn || privateDraft.blocksSend || creditsOutReason !== undefined;
-  const isSendBlocked = isSendWaiting || review.blocksSend || delegationBlock !== undefined;
+  // A draft's message is still being checked for secrets: a second Send would start a second session.
+  // Only Send waits; disabling the box would take the focus away from what the user types next.
+  const isCheckingDraftSecrets = isNewSessionDraft && secretGuard.isCheckingDraft;
+  const isSendBlocked = isSendWaiting || isCheckingDraftSecrets || review.blocksSend || delegationBlock !== undefined;
   const privateModelId = activeSession?.privateMode?.modelId ?? privateDraft.privateMode?.modelId;
   const privateModel = privateCredits.models?.find((model) => model.id === privateModelId);
   const privateSessionCap = activeSession?.privateMode?.sessionCap;

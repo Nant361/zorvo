@@ -595,6 +595,13 @@ describe("a saved verification", () => {
     expect(message.verification).toEqual(reply.verification);
   });
 
+  it("settles a check that was still running when the transcript was saved", () => {
+    // After a restart nothing is left to finish it: the badge must not spin for good.
+    const [message] = normalizeTranscript([{ ...reply, verification: { ...reply.verification, state: "checking" } }]);
+
+    expect(message.verification).toEqual({ ...reply.verification, state: "not_signed" });
+  });
+
   it("drops a malformed verification but keeps the reply", () => {
     for (const verification of [
       { ...reply.verification, state: "maybe" },

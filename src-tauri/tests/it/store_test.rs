@@ -1054,6 +1054,7 @@ fn keeps_a_private_sessions_model_through_a_save() {
     state.sessions[0].private_mode = Some(PrivateModeRecord {
         model_id: "Qwen/Qwen3.8-27B".to_string(),
         own_key: false,
+        session_cap: Some(200),
     });
 
     store.save_state(&state).expect("save state");

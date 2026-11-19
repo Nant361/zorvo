@@ -52,6 +52,11 @@ export function Toast({ tone = "warning", message, action, onDismiss }: ToastPro
 }
 
 /** Holds the toasts at the bottom right of the main area, which must be `relative`. */
+/** `data-overlay`: an artifact page, a native layer, hides while this lies over it (`useBoxCovered`). */
 export function ToastStack({ children }: { children: ReactNode }) {
-  return <div className="absolute right-6 bottom-6 z-40 flex flex-col gap-2.5">{children}</div>;
+  return (
+    <div data-overlay="" className="absolute right-6 bottom-6 z-40 flex flex-col gap-2.5">
+      {children}
+    </div>
+  );
 }

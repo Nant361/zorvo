@@ -11,6 +11,7 @@ pub mod commands;
 pub mod download;
 pub mod install;
 pub mod layout;
+pub mod npm_bin;
 pub mod plan;
 pub mod prerequisites;
 pub mod runtimes;
