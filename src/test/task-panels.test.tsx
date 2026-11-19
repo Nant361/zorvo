@@ -272,6 +272,10 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("c", "exec sleep 300 # keep alive", NOW - 60_000)))?.id).toBe("c");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("cl", "# start it\ncd /tmp # here\nsleep 300", NOW - 60_000)))?.id).toBe("cl");
     expect(shellToolFor(process("curl http://x/#top", NOW - 59_000), one(launch("h", "curl http://x/#top", NOW - 60_000)))?.id).toBe("h");
+    const quoted = `python3 -c 'import time; print("hello # world"); time.sleep(300)'`;
+    expect(shellToolFor(process(quoted, NOW - 59_000), one(launch("q", quoted, NOW - 60_000)))?.id).toBe("q");
+    expect(shellToolFor(process(`import time; print("hello # world"); time.sleep(300)`, NOW - 59_000), one(launch("q", quoted, NOW - 60_000)))?.id).toBe("q");
+    expect(shellToolFor(process(`echo "a # b"`, NOW - 59_000), one(launch("d", `echo "a # b" # note`, NOW - 60_000)))?.id).toBe("d");
   });
 
   it("matches a launch that redirects its output or runs in the background", () => {

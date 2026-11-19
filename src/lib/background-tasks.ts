@@ -299,12 +299,33 @@ function launchForms(command: string): string[] {
   return [...new Set(each(forms, scriptOf).map(normalized).filter((form) => form !== ''))];
 }
 
-/** Each line without its comment: a word that starts with `#` and the rest of the line; a `#` inside a word stays. */
+/**
+ * The command without its comments: an unquoted word that starts with `#`, to the end of its line.
+ * A `#` inside quotes, escaped, or inside a word stays.
+ */
 function withoutComments(command: string): string {
-  return command
-    .split('\n')
-    .map((line) => line.replace(/(^|\s)#.*$/, ''))
-    .join('\n');
+  let out = '';
+  let quote: string | null = null;
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
+    if (char === '\\' && quote !== "'") {
+      out += char + (command[index + 1] ?? '');
+      index++;
+    } else if (quote) {
+      if (char === quote) quote = null;
+      out += char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      out += char;
+    } else if (char === '#' && (index === 0 || /\s/.test(command[index - 1]))) {
+      const end = command.indexOf('\n', index);
+      if (end < 0) break;
+      index = end - 1;
+    } else {
+      out += char;
+    }
+  }
+  return out;
 }
 
 /** Whether a launch ran `command`, the scan's text for a process. */
