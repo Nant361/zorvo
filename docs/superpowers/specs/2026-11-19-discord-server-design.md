@@ -93,7 +93,7 @@ Per-category overwrites:
 
 | Category | `@everyone` | Team |
 |---|---|---|
-| START HERE | Deny Send Messages, Create Public Threads | Allow Send Messages |
+| START HERE | Deny Send Messages, Create Public Threads, Use Application Commands (so no bot posts there at a member's request) | Allow Send Messages |
 | COMMUNITY | Inherit | Inherit |
 | SUPPORT | Inherit (can create posts and reply) | Inherit; Manage Threads applies moderated tags |
 | TEAM | Deny View Channel | Allow View Channel |
@@ -160,8 +160,8 @@ Posted by the bot during setup, then edited by the team when needed:
 Secret patterns, one AutoMod regex each (Rust regex syntax, each under Discord's 260-character limit, 8 of the 10 allowed):
 
 ```
-sk-ant-[A-Za-z0-9_-]{20,}
-sk-(?:proj-)?[A-Za-z0-9_-]{20,}
+\bsk-ant-[A-Za-z0-9_-]{20,}
+\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}
 gh[pousr]_[A-Za-z0-9]{36}
 github_pat_[A-Za-z0-9_]{22,}
 AKIA[0-9A-Z]{16}
@@ -222,3 +222,8 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - Moving bug reports to GitHub automatically.
 - A vanity invite URL.
 - Removing Jockie's Administrator (declined by the maintainer).
+
+## Changes after review (2026-11-19)
+
+- The two OpenAI and Anthropic key patterns start with `\b`. Without it they matched hyphenated words such as `fix/task-tabs-for-background-subagents`, so AutoMod blocked ordinary messages about branches and files.
+- START HERE also denies `@everyone` Use Application Commands, so a member cannot make a bot (Jockie has Administrator) answer a slash command in a read-only channel.

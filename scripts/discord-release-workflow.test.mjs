@@ -9,37 +9,61 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKFLOW = readFileSync(join(ROOT, ".github/workflows/discord-release.yml"), "utf8");
-const code = WORKFLOW.replace(/^[ \t]*#.*$/gm, "");
 
-/** The `on:` block, up to the next top-level key. */
-const onBlock = code.slice(code.indexOf("\non:\n") + 1).split(/\n(?=\S)/)[0];
-/** The text of every `run:` block (the lines indented below `run: |`). */
-const runBlocks = [...code.matchAll(/^( +)run: \|\n((?:\1 +.*\n?|\s*\n)*)/gm)].map((match) => match[2]);
+/** Every way `text` breaks the rules above, as short sentences; empty when it keeps them. */
+function problemsOf(text) {
+  const code = text.replace(/^[ \t]*#.*$/gm, "");
+  const problems = [];
+  const onBlock = code.slice(code.indexOf("\non:\n") + 1).split(/\n(?=\S)/)[0];
+  if (onBlock.replace(/\s+/g, " ").trim() !== "on: release: types: [published]") problems.push("trigger");
+  if (!/if: .*!github\.event\.release\.prerelease/.test(code)) problems.push("prerelease");
+  // Exactly one `permissions:` line, the empty top-level one: a job-level grant would add a second.
+  const permissions = code.match(/^[ \t]*permissions:.*$/gm) ?? [];
+  if (permissions.length !== 1 || permissions[0] !== "permissions: {}") problems.push("permissions");
+  // Any `secrets.X` or `secrets['X']`, so bracket syntax cannot read another secret unseen.
+  const secrets = new Set([...code.matchAll(/secrets\s*(?:\.|\[\s*['"])([A-Za-z0-9_]+)/g)].map((match) => match[1]));
+  if (JSON.stringify([...secrets]) !== JSON.stringify(["DISCORD_RELEASES_WEBHOOK"])) problems.push("secrets");
+  for (const word of ["actions/checkout", "pnpm", "npm ", "node "]) if (code.includes(word)) problems.push(`runs ${word}`);
+  // One step, no actions: nothing but the one shell step runs next to the secret.
+  if ((code.match(/^[ \t]+- (?:name|uses|run):/gm) ?? []).length !== 1 || /^[ \t]+-?[ \t]*uses:/m.test(code)) problems.push("steps");
+  // An expression may only be an env value or the job's prerelease guard, never inside a script of any run form.
+  const allowed = [/^[ \t]+[A-Z_]+: \$\{\{ [^}]+ \}\}$/, /^[ \t]+if: \$\{\{ !github\.event\.release\.prerelease \}\}$/];
+  for (const line of code.split("\n").filter((l) => l.includes("${{"))) {
+    if (!allowed.some((pattern) => pattern.test(line))) problems.push(`expression outside env: ${line.trim()}`);
+  }
+  return problems;
+}
+
+/** The workflow with `line` added as a new last line of the post step. */
+const withStepLine = (line) => WORKFLOW.replace("      - name: Post to Discord\n", `      - name: Post to Discord\n${line}\n`);
 
 describe("the Discord release workflow", () => {
-  it("runs only when a release is published", () => {
-    expect(onBlock.replace(/\s+/g, " ").trim()).toBe("on: release: types: [published]");
+  it("keeps every rule", () => {
+    expect(problemsOf(WORKFLOW)).toEqual([]);
   });
 
-  it("skips prereleases", () => {
-    expect(code).toMatch(/if: .*!github\.event\.release\.prerelease/);
+  it("would be caught running only for a published release", () => {
+    expect(problemsOf(WORKFLOW.replace("types: [published]", "types: [published, created]"))).not.toEqual([]);
   });
 
-  it("has no permissions", () => {
-    expect(code).toMatch(/^permissions: \{\}$/m);
+  it("would be caught putting event text inline in a one-line run", () => {
+    const mutated = WORKFLOW.replace(
+      "      - name: Post to Discord\n",
+      '      - name: Echo\n        run: echo "${{ github.event.release.name }}"\n      - name: Post to Discord\n',
+    );
+    expect(problemsOf(mutated)).not.toEqual([]);
   });
 
-  it("uses one secret, the webhook", () => {
-    const secrets = new Set([...code.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]));
-    expect([...secrets]).toEqual(["DISCORD_RELEASES_WEBHOOK"]);
+  it("would be caught granting the job permissions", () => {
+    expect(problemsOf(WORKFLOW.replace("    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    permissions: write-all\n"))).not.toEqual([]);
   });
 
-  it("runs no project code", () => {
-    for (const word of ["actions/checkout", "pnpm", "npm ", "node "]) expect(code).not.toContain(word);
+  it("would be caught reading another secret with bracket syntax", () => {
+    expect(problemsOf(withStepLine("        env2: ${{ secrets['NPM_TOKEN'] }}"))).not.toEqual([]);
   });
 
-  it("passes event text through the environment, never inline in a script", () => {
-    expect(runBlocks.length).toBeGreaterThan(0);
-    for (const block of runBlocks) expect(block).not.toContain("${{");
+  it("would be caught using a third-party action", () => {
+    const mutated = WORKFLOW.replace("      - name: Post to Discord\n", "      - uses: someone/action@main\n      - name: Post to Discord\n");
+    expect(problemsOf(mutated)).not.toEqual([]);
   });
 });
