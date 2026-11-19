@@ -14,6 +14,14 @@ describe("the agent tools setting", () => {
     expect(settingsOf({ agentTools: false }).agentTools).toBe(false);
   });
 
+  it("keeps computerUse only when it is true, so a saved true round-trips", () => {
+    const settingsOf = (settings: Record<string, unknown>) =>
+      normalizePersistedState({ version: 2, settings, recentFolders: [], sessions: [] }).settings;
+    expect(settingsOf({}).computerUse).toBe(false);
+    expect(settingsOf({ computerUse: "yes" }).computerUse).toBe(false);
+    expect(settingsOf({ computerUse: true }).computerUse).toBe(true);
+  });
+
   it("shows the switch with its label, its state and when a change applies", () => {
     render(<AgentToolsSetting isOn onChange={vi.fn()} />);
     const toggle = screen.getByRole("switch", { name: "Let agents delegate and open sessions" });
