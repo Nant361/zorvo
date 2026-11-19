@@ -251,8 +251,6 @@ function isExecOf(command: string, launched: string): boolean {
 }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
-/** The options of `env` whose value is the next word (`-u NAME`, `-C DIR`, `-P PATH`, `-S STRING`). */
-const ENV_OPTIONS_WITH_VALUE = new Set(['-u', '-C', '-P', '-S', '--unset', '--chdir', '--split-string']);
 
 /**
  * The command's words as the shell splits them: a space inside quotes or after a backslash does
@@ -285,18 +283,36 @@ function shellWords(command: string): string[] {
 }
 
 /**
- * The command without the variables it sets first (`PORT=3001 pnpm dev`), and without an `env` that
- * sets them (`env -i TAG=demo sleep 300`), which replaces itself with the command: no process shows them.
+ * Programs that run the command after them and replace themselves with it, with the options of
+ * each whose value is the next word: no process shows them or what they set.
+ */
+const WRAPPERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['env', new Set(['-u', '-C', '-P', '-S', '--unset', '--chdir', '--split-string'])],
+  ['exec', new Set(['-a'])],
+  ['nohup', new Set<string>()],
+  ['nice', new Set(['-n', '--adjustment'])],
+  ['setsid', new Set<string>()],
+]);
+
+/**
+ * The command without the variables it sets first (`PORT=3001 pnpm dev`) and without the wrappers
+ * that run it (`nohup`, `nice -n 10`, `env -u TAG`, `exec`), however they are stacked.
  */
 function withoutAssignments(command: string): string {
   const words = shellWords(command);
   let index = 0;
-  while (index < words.length - 1 && ASSIGNMENT.test(words[index])) index++;
-  if ((words[index]?.split('/').pop() ?? '') === 'env' && index < words.length - 1) {
+  const isLast = () => index >= words.length - 1;
+  while (!isLast()) {
+    if (ASSIGNMENT.test(words[index])) {
+      index++;
+      continue;
+    }
+    const valued = WRAPPERS.get(words[index].split('/').pop() ?? '');
+    if (!valued) break;
     index++;
-    while (index < words.length - 1) {
+    while (!isLast()) {
       const word = words[index];
-      if (ENV_OPTIONS_WITH_VALUE.has(word)) index += 2;
+      if (valued.has(word)) index += 2;
       else if (ASSIGNMENT.test(word) || (word.startsWith('-') && word !== '-')) index++;
       else break;
     }

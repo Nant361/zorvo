@@ -281,6 +281,9 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("env", "env TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("env");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envp", "/usr/bin/env -i TAG=demo sleep 300", NOW - 60_000)))?.id).toBe("envp");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("envu", "env -u TAG -C /tmp --unset OTHER sleep 300", NOW - 60_000)))?.id).toBe("envu");
+    for (const wrapped of ["nohup sleep 300", "nice -n 10 nohup sleep 300", "exec nohup env TAG=1 sleep 300", "setsid nice sleep 300", "cd /tmp && nohup sleep 300 > out.log 2>&1 &"]) {
+      expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("w", wrapped, NOW - 60_000)))?.id).toBe("w");
+    }
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("r", `exec sleep 300 > "/tmp/my log"`, NOW - 60_000)))?.id).toBe("r");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(launch("e", "sleep 300 2>/tmp/my\\ log", NOW - 60_000)))?.id).toBe("e");
     expect(shellToolFor(process("sleep 300", NOW - 59_000), one(tool("n", { name: "sleep 300", kind: "execute", startedAt: NOW - 60_000 })))?.id).toBe("n");
