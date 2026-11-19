@@ -265,7 +265,8 @@ const REDIRECTION = /^(?:\d*>>?|&>>?|\d*<)(&\d+|.*)?$/;
 
 /** The command without its redirections and a trailing `&`, which no process shows in its arguments. */
 function withoutRedirections(command: string): string {
-  const words = command.split(' ');
+  // A redirection may touch the word before it (`/dev/null>/dev/null`): it ends that word all the same.
+  const words = command.replace(/(?<=[^\s\d&<>])(?=>|<)/g, ' ').split(' ');
   const kept: string[] = [];
   for (let index = 0; index < words.length; index++) {
     const match = REDIRECTION.exec(words[index]);

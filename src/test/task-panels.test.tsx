@@ -278,6 +278,7 @@ describe("finding a shell task and its tool call", () => {
     expect(at("cd /tmp && sleep 300 &> log.txt &")).toBe("x");
     expect(at("sleep 3000 > /dev/null")).toBeUndefined();
     expect(at("cd /tmp\nsleep 300")).toBe("x");
+    expect(shellToolFor(process("tail -f /dev/null", NOW - 59_000), one(launch("t", "exec tail -f /dev/null>/dev/null 2>&1", NOW - 60_000)))?.id).toBe("t");
     expect(at("cd /tmp\r\n  sleep   300\n")).toBe("x");
   });
 
