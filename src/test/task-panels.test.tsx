@@ -277,6 +277,8 @@ describe("finding a shell task and its tool call", () => {
     expect(at("sleep 300 >>out.log 2>/dev/null < /dev/null")).toBe("x");
     expect(at("cd /tmp && sleep 300 &> log.txt &")).toBe("x");
     expect(at("sleep 3000 > /dev/null")).toBeUndefined();
+    expect(at("cd /tmp\nsleep 300")).toBe("x");
+    expect(at("cd /tmp\r\n  sleep   300\n")).toBe("x");
   });
 
   it("keeps two scripts of one name apart when the launch names its path", () => {

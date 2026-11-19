@@ -277,11 +277,11 @@ function withoutRedirections(command: string): string {
 }
 
 /**
- * The last command of a list (`cd /tmp && sleep 300`, a `;` after it too), which a shell may replace
+ * The last command of a list (`cd /tmp && sleep 300`, a `;` after it too, or one line after another), which a shell may replace
  * itself with, without an `exec` in front of it, which does the same.
  */
 function lastCommand(command: string): string {
-  const parts = command.split(/\s*(?:&&|;)\s*/).filter((part) => part !== '');
+  const parts = command.split(/\s*(?:&&|;|\n)\s*/).filter((part) => part.trim() !== '');
   const last = parts[parts.length - 1] ?? command;
   return last.startsWith('exec ') ? last.slice('exec '.length).trimStart() : last;
 }
@@ -301,7 +301,9 @@ function launchForms(command: string): string[] {
 /** Whether a launch ran `command`, the scan's text for a process. */
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
-  return launchForms(normalized(tool.command ?? '')).some(
+  // Lines stay apart until the forms are made: a line break separates commands as `;` does.
+  const given = (tool.command ?? '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+  return launchForms(given).some(
     (launched) => sameCommand(launched, command) || isExecOf(command, launched),
   );
 }
