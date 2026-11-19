@@ -182,29 +182,67 @@ function toolIdOf(task: BackgroundTask): string | undefined {
   return task.id.startsWith(prefix) ? task.id.slice(prefix.length) : undefined;
 }
 
-/** The scan cuts a long command and ends it with this. */
+/** The scan cuts a long command and ends it with this, and so does a tool's recorded command. */
 const CUT_MARK = '…';
-/**
- * How much earlier than the tool call a process may seem to start: the scan reads its age in whole
- * seconds, while a tool call's start is kept to the millisecond.
- */
-const START_SLACK_MS = 2000;
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'fish']);
 
-/** Whether a launch ran `command`: the same text, or for a command the scan cut, the same start. */
+/** True for `-c` and for combined flags that include it, like `-lc`. */
+function runsScript(flag: string): boolean {
+  return flag.startsWith('-') && !flag.startsWith('--') && flag.includes('c');
+}
+
+/** `text` without one pair of matching quotes around it. */
+function unquoted(text: string): string {
+  const quote = text[0];
+  return text.length >= 2 && (quote === '"' || quote === "'") && text.endsWith(quote) ? text.slice(1, -1) : text;
+}
+
+/**
+ * The script of a shell invocation (`bash -lc "pnpm dev"` runs `pnpm dev`), as the process scan
+ * shows a shell's command; any other command as it is.
+ */
+function scriptOf(command: string): string {
+  const words = command.split(' ');
+  const program = words[0].split('/').pop() ?? '';
+  if (!SHELLS.has(program)) return command;
+  let index = 1;
+  while (index < words.length && !runsScript(words[index])) index++;
+  index++;
+  while (index < words.length && (words[index] === '-l' || words[index] === '-i')) index++;
+  const script = unquoted(words.slice(index).join(' ').trim());
+  return script === '' ? command : script;
+}
+
+/** Whether two commands are one, either of them perhaps cut short with `…`. */
+function sameCommand(a: string, b: string): boolean {
+  const kept = (text: string) => text.slice(0, -CUT_MARK.length).trimEnd();
+  if (a.endsWith(CUT_MARK)) return kept(a) !== '' && b.startsWith(kept(a));
+  if (b.endsWith(CUT_MARK)) return kept(b) !== '' && a.startsWith(kept(b));
+  return a === b;
+}
+
+/** Whether a launch ran `command`, the scan's text for a process. */
 function launchedCommand(tool: ToolExecution, command: string): boolean {
   if (tool.kind !== 'execute') return false;
-  const launched = normalized(tool.command ?? '');
-  if (launched === '') return false;
-  if (!command.endsWith(CUT_MARK)) return launched === command;
-  const kept = command.slice(0, -CUT_MARK.length).trimEnd();
-  return kept !== '' && launched.startsWith(kept);
+  const launched = normalized(scriptOf(normalized(tool.command ?? '')));
+  return launched !== '' && sameCommand(launched, command);
+}
+
+/** The launch that started last, the one with no start time counting as earliest. */
+function latest(tools: readonly ToolExecution[]): ToolExecution | undefined {
+  return tools.reduce<ToolExecution | undefined>(
+    (best, tool) => (best === undefined || (tool.startedAt ?? 0) >= (best.startedAt ?? 0) ? tool : best),
+    undefined,
+  );
 }
 
 /**
  * The tool call a shell task's output comes from: a tool row's own, or for a process the launch of
- * the same command that started last before it did. A later launch of the same command (one that
- * failed because the first still holds its port, say) never takes the running process's output,
- * and a command never matches one it is only part of. A process nothing matches has none.
+ * the same command that started last before it did. The scan's start for a process is never early
+ * (it counts the process's age in whole seconds back from when the answer arrived), so a launch is
+ * never announced after it; a launch that failed is taken only when no other is left, so a retry
+ * that failed because the first still holds its port never takes the running process's output.
+ * A command never matches one it is only part of. A process nothing matches has none.
  */
 export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessage[]): ToolExecution | undefined {
   const tools = messages.flatMap((message) => message.tools ?? []);
@@ -213,13 +251,9 @@ export function shellToolFor(task: BackgroundTask, messages: readonly ChatMessag
   const command = normalized(task.name);
   if (command === '') return undefined;
   const launches = tools.filter(
-    (tool) => launchedCommand(tool, command) && (tool.startedAt ?? 0) <= task.startedAt + START_SLACK_MS,
+    (tool) => launchedCommand(tool, command) && (tool.startedAt ?? 0) <= task.startedAt,
   );
-  // The newest launch that started before the process; one with no start time counts as earliest.
-  return launches.reduce<ToolExecution | undefined>(
-    (best, tool) => (best === undefined || (tool.startedAt ?? 0) >= (best.startedAt ?? 0) ? tool : best),
-    undefined,
-  );
+  return latest(launches.filter((tool) => tool.status !== 'failed')) ?? latest(launches);
 }
 
 /**

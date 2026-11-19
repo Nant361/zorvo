@@ -214,6 +214,28 @@ describe("finding a shell task and its tool call", () => {
     expect(shellToolFor(process(`pnpm vitest run ${"a".repeat(283)}…`, NOW - 59_000), one(long))?.id).toBe("long");
   });
 
+  it("matches a launch given as a shell invocation, as the scan shows only its script", () => {
+    const wrapped = launch("wrapped", `bash -lc "pnpm dev"`, NOW - 60_000);
+    const zsh = launch("zsh", "/bin/zsh -l -c 'cargo watch -x test'", NOW - 60_000);
+
+    expect(shellToolFor(process("pnpm dev", NOW - 59_000), one(wrapped))?.id).toBe("wrapped");
+    expect(shellToolFor(process("cargo watch -x test", NOW - 59_000), one(zsh))?.id).toBe("zsh");
+    expect(shellToolFor(process("bash -lc", NOW - 59_000), one(wrapped))).toBeUndefined();
+  });
+
+  it("keeps the first launch when a retry that failed started within the scan's rounding", () => {
+    const first = launch("first", "pnpm dev", 100_000, { status: "completed" });
+    const retry = launch("retry", "pnpm dev", 101_500, { status: "failed" });
+
+    expect(shellToolFor(process("pnpm dev", 101_600), one(first, retry))?.id).toBe("first");
+  });
+
+  it("matches no launch the scan says started later than the process", () => {
+    const late = launch("late", "pnpm dev", NOW + 1);
+
+    expect(shellToolFor(process("pnpm dev", NOW), one(late))).toBeUndefined();
+  });
+
   it("follows a tab from the first launch's row to its process after a second launch", () => {
     const first = launch("first", "pnpm dev", NOW - 60_000);
     const again = launch("again", "pnpm dev", NOW - 5_000, { status: "failed" });
