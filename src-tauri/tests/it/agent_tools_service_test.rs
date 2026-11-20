@@ -176,10 +176,15 @@ fn list_and_initialize_are_answered_without_an_event() {
     assert_eq!(client.read()["result"]["protocolVersion"], "2025-06-18");
     client.send(json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
     client.send(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
-    assert_eq!(
-        client.read()["result"]["tools"].as_array().unwrap().len(),
-        zorvo_lib::agent_tools::tools::TOOL_NAMES.len()
-    );
+    let listed = client.read();
+    let tools = listed["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), zorvo_lib::agent_tools::tools::TOOL_NAMES.len());
+    let browser = tools.iter().find(|tool| tool["name"] == "browser").unwrap();
+    let properties = &browser["inputSchema"]["properties"];
+    assert_eq!(properties["url"]["type"], "string");
+    assert_eq!(properties["tabID"]["type"], "string");
+    assert_eq!(properties["deltaY"]["type"], "number");
+    assert_eq!(browser["inputSchema"]["additionalProperties"], false);
     client.send(json!({"jsonrpc":"2.0","id":3,"method":"prompts/list"}));
     assert_eq!(client.read()["error"]["code"], -32601);
     assert!(rig.calls.recv_timeout(QUIET).is_err());

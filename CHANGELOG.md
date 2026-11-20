@@ -13,6 +13,11 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 - **A compact browser toolbar.** Navigation, the address and element selection share one row. Tabs, browser choices and debugging tools live in the menu, leaving more room for the page.
 - **Site information in the browser.** See the connection, cookie count and agent access for the current page, and clear its cookies and origin storage. A menu keeps a still image of the page behind it instead of showing an empty panel.
 
+### Fixed
+
+- **Clearer browser commands for agents.** Browser tools now describe URLs, tab IDs and scroll distances directly, so agents can open and scroll a page without guessing the arguments.
+- **OpenCode retry errors in the chat.** Failed model requests now show the agent's retry status and error instead of leaving only a working indicator.
+
 ## [0.14.0] - 2026-11-20
 
 ### Changed
