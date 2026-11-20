@@ -35,6 +35,19 @@ runtime behavior of this integration.
   element selection and its menu. Tab management, engine choices and diagnostic
   views are available from that menu. The main Tauri CSP remains unchanged.
 
+Site information reads the current native view's TLS properties and its session's
+cookie store; cookie names and values never cross IPC. Clear is a manual action
+bound to the displayed URL. It removes cookies applicable to the host on all
+paths (including shared parent-domain cookies), and clears that origin's local
+and session storage, IndexedDB, CacheStorage and service-worker registrations.
+Blocked deletion reports a partial result. Shared HTTP network caches are left
+alone because WebKit's grouped data records can include other hosts. Agent access
+reflects the existing session grant; the information panel grants no permissions.
+
+An overlapping browser menu captures one native PNG and decodes it before hiding
+the view beneath the HTML panel. Closing the menu restores the retained native
+view and releases that still image. No capture loop or per-scroll IPC is used.
+
 The manual element picker uses the fixed named-world helper, with no messages on
 hover or scroll. A trusted main-frame click returns bounded, quoted page context
 to the composer without sending a message. Its native view, document token and

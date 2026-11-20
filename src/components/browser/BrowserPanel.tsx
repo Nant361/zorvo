@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, Globe } from "lucide-react";
 import { useBrowser } from "../../hooks/useBrowser";
 import { useBrowserView } from "../../hooks/useBrowserView";
 import { useBoxCovered } from "../../hooks/useArtifactView";
 import { useBrowserPicker } from "../../hooks/useBrowserPicker";
+import { useBrowserSiteInfo } from "../../hooks/useBrowserSiteInfo";
+import { useLatest } from "../../hooks/useLatest";
 import { browserAddress, type BrowserEngine } from "../../lib/browser";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
@@ -17,10 +19,21 @@ export function BrowserPanel({ sessionId, onError, onAddContext }: { sessionId: 
   const [overlay, setOverlay] = useState<BrowserOverlay>(null);
   const browser = useBrowser(sessionId, engine);
   const active = browser.state.tabs.find(tab => tab.id === browser.state.activeTabId);
+  const site = useBrowserSiteInfo(sessionId, engine === "webkit" ? active?.id : undefined, active?.url, overlay === "site", onError);
+  const [preview, setPreview] = useState<{ key: string; source: string } | null>(null);
+  const pageKey = JSON.stringify([sessionId, engine, active?.id, active?.url]);
+  const currentPage = useLatest(pageKey);
+  useEffect(() => { setPreview(null); }, [pageKey]);
+  useLayoutEffect(() => { setOverlay(null); }, [pageKey]);
   const picker = useBrowserPicker({ sessionId, tab: engine === "webkit" && panel === "page" ? active : undefined, onAddContext, onError });
   const boxRef = useRef<HTMLDivElement>(null);
   const covered = useBoxCovered(boxRef, engine === "webkit" && panel === "page" && Boolean(active));
-  useBrowserView(boxRef, sessionId, engine === "webkit" ? active?.id ?? null : null, panel === "page" && !covered && !overlay && !browser.state.dialog, onError);
+  useBrowserView(boxRef, sessionId, engine === "webkit" ? active?.id ?? null : null, panel === "page" && !covered && !overlay && !browser.state.dialog, onError, {
+    key: `${pageKey}/${overlay}`,
+    covered: panel === "page" && Boolean(overlay),
+    onPreview: source => { if (currentPage.current === pageKey) setPreview(source ? { key: pageKey, source } : null); },
+    onCaptureFailed: () => { if (currentPage.current === pageKey) setOverlay(null); },
+  });
   const [localError, setLocalError] = useState<string | null>(null);
   const promptRef = useRef<HTMLInputElement>(null);
   const run = (args: Record<string, unknown>) => {
@@ -39,6 +52,7 @@ export function BrowserPanel({ sessionId, onError, onAddContext }: { sessionId: 
   return (
     <div className="flex min-h-0 flex-1 flex-col" aria-label="Browser">
       <BrowserToolbar tabs={browser.state.tabs} active={active} engine={engine} panel={panel} busy={browser.busy}
+        site={site.site} siteBusy={site.busy} onClearSite={() => void site.clear()}
         overlay={overlay} onOverlay={setOverlay} onNavigate={navigate} onAction={run}
         onEngine={next => { setEngine(next); setPanel("page"); }} onPanel={setPanel}
         onSelectElement={engine === "webkit" && panel === "page" && active && onAddContext ? picker.toggle : undefined} selectingElement={picker.active}
@@ -63,6 +77,7 @@ export function BrowserPanel({ sessionId, onError, onAddContext }: { sessionId: 
       )}
       <div role="region" aria-label={currentPanel.label === "Page" ? "Browser page" : currentPanel.label} className="flex min-h-0 flex-1 flex-col">
           <div ref={boxRef} className={`relative min-h-0 flex-1 ${panel === "page" ? "" : "hidden"}`} data-browser-box="">
+            {preview?.key === pageKey && <img alt="" aria-hidden="true" draggable={false} src={preview.source} className="pointer-events-none absolute inset-0 h-full w-full object-fill" />}
             {!active ? <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-ui-sm text-fg-muted"><Globe size={24} /><p>Enter an address or search to open a page.</p></div> : engine === "chromium" ? <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-ui-sm text-fg-muted"><Globe size={24} /><p>Chromium debugging uses a separate browser window.</p><Button onClick={() => run({ operation: "tabs.focus", tabId: active.id })}>Show browser</Button></div> : null}
           </div>
         {panel !== "page" && <BrowserTools key={`${sessionId}/${engine}/${panel}`} panel={panel} sessionId={sessionId} engine={engine} tabId={active?.id} execute={browser.execute} />}

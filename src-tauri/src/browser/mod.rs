@@ -92,6 +92,58 @@ fn picker_color(color: &str) -> bool {
         })
 }
 
+fn site_target(session: &str, tab: &str) -> Result<(), String> {
+    if !crate::artifacts::store::is_session_id(session) || tab.is_empty() || tab.len() > 200 {
+        return Err("Invalid browser site request.".into());
+    }
+    Ok(())
+}
+
+/// Site controls are manual UI commands, outside the agent operation allowlist.
+pub async fn site_info(app: &AppHandle, session: String, tab: String) -> Result<Value, String> {
+    site_target(&session, &tab)?;
+    #[cfg(target_os = "macos")]
+    {
+        native::execute(
+            app,
+            session,
+            serde_json::json!({"operation":"__manual_site_info","tabId":tab}),
+        )
+        .await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, session, tab);
+        Err("The embedded browser requires macOS.".into())
+    }
+}
+
+pub async fn site_clear(
+    app: &AppHandle,
+    session: String,
+    tab: String,
+    expected_url: String,
+) -> Result<Value, String> {
+    site_target(&session, &tab)?;
+    navigation_url(&expected_url)?;
+    #[cfg(target_os = "macos")]
+    {
+        let storage = native::execute(app, session.clone(), serde_json::json!({"operation":"__manual_site_clear","tabId":tab,"expectedUrl":expected_url})).await?;
+        let mut info = native::execute(app, session, serde_json::json!({"operation":"__manual_site_cookies_clear","tabId":tab,"expectedUrl":expected_url})).await?;
+        let complete = storage["siteDataCleared"] == true;
+        info["siteDataCleared"] = serde_json::json!(complete);
+        if !complete {
+            info["clearWarning"] = serde_json::json!("Some site data could not be cleared. Close other tabs for this site and try again.");
+        }
+        Ok(info)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, session, tab, expected_url);
+        Err("The embedded browser requires macOS.".into())
+    }
+}
+
 /// Runs after the caller has granted access to the session. No view is
 /// allocated before that grant; manual UI calls have their own command.
 pub async fn execute(app: &AppHandle, session_id: String, args: Value) -> Result<Value, String> {

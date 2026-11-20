@@ -54,6 +54,19 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
         let separate=execute(app,b.clone(),json!({"operation":"evaluate","expression":"document.cookie"})).await?;
         if !shared.as_str().is_some_and(|s|s.contains("native_smoke=alpha"))||separate.as_str().is_some_and(|s|s.contains("native_smoke=alpha")){return Err("Session cookie isolation failed.".into());}
         steps.push(json!({"name":"shared store within session, separate store across sessions","pass":true}));
+        let site_tab=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?["activeTabId"].as_str().ok_or("No site-controls tab.")?.to_owned();
+        let other_tab=execute(app,b.clone(),json!({"operation":"tabs.list"})).await?["activeTabId"].as_str().ok_or("No independent site-controls tab.")?.to_owned();
+        execute(app,a.clone(),json!({"operation":"evaluate","expression":"localStorage.setItem('site_smoke','alpha');sessionStorage.setItem('site_smoke','alpha');document.cookie='path_smoke=alpha; Path=/private; SameSite=Lax';true"})).await?;
+        execute(app,b.clone(),json!({"operation":"evaluate","expression":"document.cookie='other_smoke=beta; SameSite=Lax';true"})).await?;
+        let info=super::site_info(app,a.clone(),site_tab.clone()).await?;
+        if info["cookieCount"]!=1 || info["security"]!="local" {return Err(format!("Native site metadata did not describe applicable cookies: {info}"));}
+        let expected=info["url"].as_str().ok_or("Site URL missing.")?.to_owned();
+        if super::site_clear(app,a.clone(),site_tab.clone(),format!("{expected}changed")).await.is_ok(){return Err("Site clear accepted a stale expected URL.".into());}
+        let cleared=super::site_clear(app,a.clone(),site_tab,expected).await?;
+        let storage=execute(app,a.clone(),json!({"operation":"evaluate","expression":"[localStorage.getItem('site_smoke'),sessionStorage.getItem('site_smoke'),document.cookie]"})).await?;
+        let other=super::site_info(app,b.clone(),other_tab).await?;
+        if cleared["cookieCount"]!=0 || storage!=json!([null,null,""]) || other["cookieCount"]!=1 {return Err(format!("Site clear escaped its session or kept origin data: {cleared}; {storage}; {other}"));}
+        steps.push(json!({"name":"native site metadata and origin clear preserve other sessions and reject stale URLs","pass":true,"siteDataCleared":cleared["siteDataCleared"]}));
         execute(app,a.clone(),json!({"operation":"navigate","url":url})).await?;
         execute(app,a.clone(),json!({"operation":"wait","selector":"#input"})).await?;
         if execute(app,a.clone(),json!({"operation":"click","ref":button})).await.is_ok(){return Err("A stale reference was accepted.".into());}

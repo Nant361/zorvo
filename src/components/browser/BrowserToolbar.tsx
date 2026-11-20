@@ -1,7 +1,8 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, MoreHorizontal, RefreshCw, SlidersHorizontal, SquareMousePointer, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Cookie, Globe, LockKeyhole, MoreHorizontal, RefreshCw, ShieldOff, SlidersHorizontal, SquareMousePointer, X } from "lucide-react";
 import type { BrowserEngine, BrowserTab } from "../../lib/browser";
 import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui/Button";
 import { Popover, PopoverGroup, PopoverOption } from "../ui/Popover";
 
 export const BROWSER_PANELS = [
@@ -11,6 +12,15 @@ export const BROWSER_PANELS = [
 ] as const;
 export type BrowserPanelId = typeof BROWSER_PANELS[number]["id"];
 export type BrowserOverlay = "options" | "site" | null;
+
+export interface BrowserSiteInfo {
+  url: string;
+  host: string;
+  security: "secure" | "insecure" | "unknown" | "local";
+  cookieCount: number;
+  agentAccess: boolean;
+  clearWarning?: string;
+}
 
 interface BrowserToolbarProps {
   tabs: BrowserTab[];
@@ -27,6 +37,9 @@ interface BrowserToolbarProps {
   onRevoke: () => void;
   onSelectElement?: () => void;
   selectingElement?: boolean;
+  site: BrowserSiteInfo | null;
+  siteBusy: boolean;
+  onClearSite: () => void;
 }
 
 function menuKeys(event: KeyboardEvent<HTMLDivElement>) {
@@ -41,11 +54,15 @@ function menuKeys(event: KeyboardEvent<HTMLDivElement>) {
 }
 
 /** The page keeps one navigation row; less frequent controls live in its menu. */
-export function BrowserToolbar({ tabs, active, engine, panel, busy, overlay, onOverlay, onNavigate, onAction, onEngine, onPanel, onRevoke, onSelectElement, selectingElement }: BrowserToolbarProps) {
+export function BrowserToolbar({ tabs, active, engine, panel, busy, overlay, onOverlay, onNavigate, onAction, onEngine, onPanel, onRevoke, onSelectElement, selectingElement, site, siteBusy, onClearSite }: BrowserToolbarProps) {
   const menu = useRef<HTMLDivElement>(null);
   const choose = (action: () => void) => { onOverlay(null); action(); };
-  let origin = "No page open";
-  try { if (active) origin = new URL(active.url).origin; } catch { /* A loading tab may not have a web address yet. */ }
+  const pageSite = site?.url === active?.url ? site : null;
+  let hostname = "No page open";
+  try { if (active) hostname = new URL(active.url).host; } catch { /* A loading tab may not have a web address yet. */ }
+  const connection = pageSite?.security === "secure" ? "Connection is secure"
+    : pageSite?.security === "insecure" ? "Connection is not secure"
+    : pageSite?.security === "local" ? "Local server" : "Connection details unavailable";
   return <div role="toolbar" aria-label="Browser navigation" className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3 [&_svg]:stroke-1">
     <div className="flex shrink-0 items-center">
       <IconButton label="Navigate back" size="md" disabled={busy || !active?.canGoBack} onClick={() => onAction({ operation: "back", tabId: active?.id })}><ArrowLeft size={16} /></IconButton>
@@ -55,10 +72,21 @@ export function BrowserToolbar({ tabs, active, engine, panel, busy, overlay, onO
       </IconButton>
     </div>
     <Address key={`${engine}/${active?.id ?? "new"}/${active?.url ?? ""}`} tab={active} onNavigate={onNavigate}
-      siteButton={<Popover isOpen={overlay === "site"} onClose={() => onOverlay(null)} role="dialog" label="Site information" className="w-64"
-        trigger={<IconButton label="Site information" size="xs" disabled={!active} aria-haspopup="dialog" aria-expanded={overlay === "site"} onClick={() => onOverlay(overlay === "site" ? null : "site")}><SlidersHorizontal size={13} /></IconButton>}>
-        <p className="break-all px-2 py-1 text-ui text-fg">{origin}</p>
-        <p className="px-2 py-1 text-caption text-fg-muted">Camera, microphone and location are blocked.</p>
+      siteButton={<Popover isOpen={overlay === "site"} onClose={() => onOverlay(null)} role="dialog" label="Site information" className="w-[261px]"
+        trigger={<IconButton label="Site information" size="xs" disabled={!active || engine !== "webkit"} aria-haspopup="dialog" aria-expanded={overlay === "site"} onClick={() => onOverlay(overlay === "site" ? null : "site")}><SlidersHorizontal size={13} /></IconButton>}>
+        <h2 className="flex items-center gap-2 px-2 py-1 text-ui font-normal text-fg"><Globe size={16} aria-hidden="true" className="shrink-0 text-fg-muted" /><span className="truncate">{pageSite?.host || hostname}</span></h2>
+        <div role="separator" className="my-1 border-t border-border" />
+        <div className="space-y-0.5 text-ui text-fg-secondary">
+          <p className="flex items-center gap-2 px-2 py-1"><LockKeyhole size={16} aria-hidden="true" className="shrink-0 text-fg-muted" />{connection}</p>
+          <div className="flex items-start gap-2 px-2 py-1"><Cookie size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-fg-muted" /><div className="min-w-0 flex-1">Cookies and site data
+            <p className="mt-1 text-caption text-fg-muted">{pageSite && !siteBusy ? `${pageSite.cookieCount} cookies in use` : "Loading…"}</p></div>
+            <Button size="sm" disabled={busy || siteBusy || !pageSite} onClick={onClearSite}>Clear</Button>
+          </div>
+          {pageSite?.clearWarning && <p role="status" className="px-2 py-1 text-caption text-fg-muted">{pageSite.clearWarning}</p>}
+          <div className="flex items-start gap-2 px-2 py-1"><ShieldOff size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-fg-muted" /><div>Permissions are blocked<p className="mt-1 text-caption text-fg-muted">Camera, microphone, location, and notifications don&apos;t work in this browser.</p></div></div>
+          <div className="flex items-start gap-2 px-2 py-1"><SquareMousePointer size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-fg-muted" /><div>{!pageSite ? "Checking agent access…" : pageSite.agentAccess ? "Agent can use this page" : "Agent access is off"}
+            <p className="mt-1 text-caption text-fg-muted">{pageSite?.agentAccess ? "It can read the page, run scripts, and fill in forms." : "Browser access requires your approval for this session."}</p></div></div>
+        </div>
       </Popover>} />
     <div className="flex shrink-0 items-center">
       <IconButton label="Select an element to comment on" size="md" disabled={busy || !active || !onSelectElement} aria-pressed={Boolean(selectingElement)} onClick={onSelectElement}><SquareMousePointer size={16} /></IconButton>

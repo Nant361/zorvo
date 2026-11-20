@@ -23,6 +23,8 @@ use wry::{WebViewBuilderExtMacos, WebViewExtMacOS};
 use super::{navigation_url, Bounds};
 #[path = "policy.rs"]
 mod policy;
+#[path = "site.rs"]
+mod site;
 
 const PAGE: &str = include_str!("page.js");
 const CONSOLE: &str = include_str!("console.js");
@@ -366,6 +368,37 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     let found = with_tab(sid, &tid, |tab| {
         let reply = reply.take().expect("one native operation");
         match operation {
+            "__manual_site_info" => {
+                site::read(Retained::into_super(tab.view.webview()), sid, &tid, reply)
+            }
+            "__manual_site_cookies_clear" => {
+                let expected = args["expectedUrl"].as_str().unwrap_or_default();
+                site::clear_cookies(
+                    Retained::into_super(tab.view.webview()),
+                    sid,
+                    &tid,
+                    expected,
+                    reply,
+                );
+            }
+            "__manual_site_clear" => {
+                let expected = args["expectedUrl"].as_str().unwrap_or_default();
+                let view = tab.view.webview();
+                // SAFETY: dispatch runs on the main thread and retains this tab's view.
+                let current = unsafe {
+                    view.URL()
+                        .and_then(|url| url.absoluteString())
+                        .map(|url| url.to_string())
+                };
+                if current.as_deref() != Some(expected) {
+                    let _ = reply.send(Err(
+                        "The page changed. Open site information again before clearing its data."
+                            .into(),
+                    ));
+                } else {
+                    helper(&view, None, &tab.frames, &args, reply);
+                }
+            }
             "__manual_pick" => {
                 let enabled = args["enabled"] == true;
                 let request_id = args["requestId"].as_str().unwrap_or_default();

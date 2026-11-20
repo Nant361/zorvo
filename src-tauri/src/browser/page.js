@@ -102,6 +102,44 @@
         const a = JSON.parse(encoded);
         let el;
         switch (a.operation) {
+          case '__manual_site_clear': {
+            if (window !== window.top || location.href !== a.expectedUrl) throw new Error('The page changed. Open site information again before clearing its data.');
+            let complete = true;
+            for (const storage of ['localStorage', 'sessionStorage']) {
+              try { Storage.prototype.clear.call(globalThis[storage]); } catch { complete = false; }
+            }
+            const boundedTask = async task => {
+              let timer;
+              try { return await Promise.race([task(), new Promise(resolve => { timer = setTimeout(() => resolve(false), 2500); })]); }
+              catch { return false; }
+              finally { clearTimeout(timer); }
+            };
+            const tasks = [];
+            if (globalThis.indexedDB) tasks.push(boundedTask(async () => {
+              if (typeof indexedDB.databases !== 'function') return false;
+              const databases = await indexedDB.databases();
+              if (databases.length > 1000) return false;
+              const outcomes = await Promise.all(databases.filter(database => typeof database.name === 'string').map(database => new Promise(resolve => {
+                const request = indexedDB.deleteDatabase(database.name);
+                request.onsuccess = () => resolve(true);
+                request.onerror = request.onblocked = () => resolve(false);
+              })));
+              return outcomes.every(Boolean);
+            }));
+            if (globalThis.caches) tasks.push(boundedTask(async () => {
+              const keys = await caches.keys();
+              if (keys.length > 1000) return false;
+              return (await Promise.all(keys.map(key => caches.delete(key)))).every(Boolean);
+            }));
+            if (navigator.serviceWorker) tasks.push(boundedTask(async () => {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              if (registrations.length > 1000) return false;
+              return (await Promise.all(registrations.map(registration => registration.unregister()))).every(Boolean);
+            }));
+            const outcomes = await Promise.all(tasks);
+            if (location.href !== a.expectedUrl) throw new Error('The page changed while its site data was being cleared.');
+            return result({siteDataCleared:complete && outcomes.every(Boolean)});
+          }
           case '__manual_pick': {
             if (!a.enabled) { stopPicker(); return result({active:false}); }
             if (window !== window.top || a.document !== prefix || typeof a.nonce !== 'string' || !CSS.supports('color', a.color)) throw new Error('The browser selection request is stale.');

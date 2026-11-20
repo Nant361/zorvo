@@ -11,6 +11,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 ### Changed
 
 - **A compact browser toolbar.** Navigation, the address and element selection share one row. Tabs, browser choices and debugging tools live in the menu, leaving more room for the page.
+- **Site information in the browser.** See the connection, cookie count and agent access for the current page, and clear its cookies and origin storage. A menu keeps a still image of the page behind it instead of showing an empty panel.
 
 ## [0.14.0] - 2026-11-20
 

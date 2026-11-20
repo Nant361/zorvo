@@ -215,6 +215,39 @@ async fn execute(
 }
 
 #[tauri::command]
+pub async fn browser_site_info(
+    app: AppHandle,
+    session_id: String,
+    tab_id: String,
+) -> Result<Value, String> {
+    workspace(&app, &session_id)?;
+    let info = crate::browser::site_info(&app, session_id.clone(), tab_id).await?;
+    site_agent_access(&app, &session_id, info)
+}
+
+#[tauri::command]
+pub async fn browser_site_clear(
+    app: AppHandle,
+    session_id: String,
+    tab_id: String,
+    expected_url: String,
+) -> Result<Value, String> {
+    workspace(&app, &session_id)?;
+    let info = crate::browser::site_clear(&app, session_id.clone(), tab_id, expected_url).await?;
+    site_agent_access(&app, &session_id, info)
+}
+
+fn site_agent_access(app: &AppHandle, session: &str, mut info: Value) -> Result<Value, String> {
+    info["agentAccess"] = json!(app
+        .state::<BrowserPermissions>()
+        .grants
+        .lock()
+        .map_err(|_| "Browser grants are unavailable.")?
+        .contains_key(session));
+    Ok(info)
+}
+
+#[tauri::command]
 pub async fn browser_pick(
     app: AppHandle,
     session_id: String,
@@ -487,6 +520,9 @@ mod tests {
             json!({}),
             json!({"operation":"shell"}),
             json!({"operation":"__manual_pick","enabled":true}),
+            json!({"operation":"__manual_site_info"}),
+            json!({"operation":"__manual_site_clear"}),
+            json!({"operation":"__manual_site_cookies_clear"}),
             json!({"operation":"tabs.open","engine":"cef"}),
         ] {
             assert!(validate_args(&args).is_err());

@@ -584,6 +584,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             browser_commands::browser_execute,
             browser_commands::browser_pick,
+            browser_commands::browser_site_info,
+            browser_commands::browser_site_clear,
             browser_commands::browser_agent_execute,
             browser_commands::browser_permission,
             browser_commands::browser_file_permission,
