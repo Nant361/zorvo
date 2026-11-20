@@ -225,6 +225,12 @@ pub async fn execute(
             if let Some(worker) = workers.get(&session) {
                 Arc::clone(worker)
             } else {
+                if args["operation"] == "tabs.list" {
+                    return Ok(json!({"tabs":[],"activeTabId":null,"engine":"chromium"}));
+                }
+                if workers.len() >= 8 {
+                    return Err("Close a debug browser session before opening another.".into());
+                }
                 let worker = Arc::new(WorkerSlot {
                     closed: AtomicBool::new(false),
                     worker: Mutex::new(Worker::start(&app, root.clone())?),
@@ -250,7 +256,27 @@ pub async fn execute(
             object.remove("_zorvoCallId");
             object.remove("_zorvoGrant");
         }
-        worker.execute(args)
+        let closing_last = args["operation"] == "tabs.close";
+        let result = worker.execute(args);
+        let idle = closing_last
+            && result
+                .as_ref()
+                .is_ok_and(|value| value["remainingTabs"] == 0);
+        drop(worker);
+        if idle {
+            let mut workers = state
+                .0
+                .lock()
+                .map_err(|_| "Browser state is unavailable.")?;
+            if workers
+                .get(&session)
+                .is_some_and(|current| Arc::ptr_eq(current, &slot))
+            {
+                slot.closed.store(true, Ordering::Release);
+                workers.remove(&session);
+            }
+        }
+        result
     })
     .await
     .map_err(|e| e.to_string())?
