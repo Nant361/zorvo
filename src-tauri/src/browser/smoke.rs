@@ -1,7 +1,15 @@
 //! Debug-only exercise of the real native views using a synthetic loopback page.
 use super::{browser_bounds, execute, Bounds};
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
+
+static FRONTEND_READY: AtomicBool = AtomicBool::new(false);
+
+/// Start after the real frontend's startup teardown, which otherwise races the harness.
+pub fn frontend_ready(app: &AppHandle) {
+    let _ = app.run_on_main_thread(|| FRONTEND_READY.store(true, Ordering::Release));
+}
 
 async fn chrome_smoke(app: &AppHandle, session: &str, url: &str) -> Result<Value, String> {
     let session = session.to_string();
@@ -201,6 +209,13 @@ async fn responsive_smoke(
 }
 
 pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !FRONTEND_READY.load(Ordering::Acquire) {
+        if std::time::Instant::now() >= deadline {
+            return Err("The embedded frontend did not finish startup before native smoke.".into());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
     let url = std::env::var("ZORVO_BROWSER_SMOKE_URL").map_err(|_| "Smoke URL is missing.")?;
     let parsed = url::Url::parse(&url).map_err(|_| "Invalid smoke URL.")?;
     if parsed.scheme() != "http" || !matches!(parsed.host_str(), Some("127.0.0.1" | "localhost")) {
@@ -210,6 +225,22 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
     let b = "native-browser-smoke-b".to_string();
     let mut steps = vec![];
     let result=async{
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("lifecycle") {
+            steps.push(super::lifecycle_smoke::smoke(app, &url).await?);
+            return Ok::<_,String>(());
+        }
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("forms") {
+            steps.push(super::forms_smoke::smoke(app, &parsed).await?);
+            return Ok::<_,String>(());
+        }
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("placement") {
+            steps.push(super::placement_smoke::smoke(app, &url).await?);
+            return Ok::<_,String>(());
+        }
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("sites") {
+            steps.push(super::sites_smoke::smoke(app).await?);
+            return Ok::<_,String>(());
+        }
         if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("chrome") {
             steps.push(chrome_smoke(app, &a, &url).await?);
             return Ok::<_,String>(());
@@ -251,7 +282,7 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
             if data["title"]!="Browser smoke" {return Err("A frame snapshot failed.".into());}
         }
         steps.push(json!({"name":"same- and cross-origin frame snapshots","pass":true,"frames":frames}));
-        execute(app,a.clone(),json!({"operation":"evaluate","expression":"document.cookie='native_smoke=alpha; SameSite=Lax'; document.cookie"})).await?;
+        execute(app,a.clone(),json!({"operation":"evaluate","expression":"(()=>{document.cookie='native_smoke=alpha; SameSite=Lax';return document.cookie})()"})).await?;
         execute(app,a.clone(),json!({"operation":"tabs.open","url":url})).await?;
         execute(app,a.clone(),json!({"operation":"wait","selector":"#input"})).await?;
         let shared=execute(app,a.clone(),json!({"operation":"evaluate","expression":"document.cookie"})).await?;
@@ -262,38 +293,27 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
         steps.push(json!({"name":"shared store within session, separate store across sessions","pass":true}));
         let site_tab=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?["activeTabId"].as_str().ok_or("No site-controls tab.")?.to_owned();
         let other_tab=execute(app,b.clone(),json!({"operation":"tabs.list"})).await?["activeTabId"].as_str().ok_or("No independent site-controls tab.")?.to_owned();
-        execute(app,a.clone(),json!({"operation":"evaluate","expression":"localStorage.setItem('site_smoke','alpha');sessionStorage.setItem('site_smoke','alpha');document.cookie='path_smoke=alpha; Path=/private; SameSite=Lax';true"})).await?;
-        execute(app,b.clone(),json!({"operation":"evaluate","expression":"document.cookie='other_smoke=beta; SameSite=Lax';true"})).await?;
+        execute(app,a.clone(),json!({"operation":"evaluate","expression":"(()=>{localStorage.setItem('site_smoke','alpha');sessionStorage.setItem('site_smoke','alpha');document.cookie='path_smoke=alpha; Path=/private; SameSite=Lax';return true})()"})).await?;
+        execute(app,b.clone(),json!({"operation":"evaluate","expression":"(()=>{document.cookie='other_smoke=beta; SameSite=Lax';return true})()"})).await?;
         let info=super::site_info(app,a.clone(),site_tab.clone()).await?;
         if info["cookieCount"]!=1 || info["security"]!="local" {return Err(format!("Native site metadata did not describe applicable cookies: {info}"));}
         let expected=info["url"].as_str().ok_or("Site URL missing.")?.to_owned();
         if super::site_clear(app,a.clone(),site_tab.clone(),format!("{expected}changed")).await.is_ok(){return Err("Site clear accepted a stale expected URL.".into());}
-        let cleared=super::site_clear(app,a.clone(),site_tab,expected).await?;
+        let cleared=super::site_clear(app,a.clone(),site_tab.clone(),expected).await?;
         let storage=execute(app,a.clone(),json!({"operation":"evaluate","expression":"[localStorage.getItem('site_smoke'),sessionStorage.getItem('site_smoke'),document.cookie]"})).await?;
         let other=super::site_info(app,b.clone(),other_tab).await?;
         if cleared["cookieCount"]!=0 || storage!=json!([null,null,""]) || other["cookieCount"]!=1 {return Err(format!("Site clear escaped its session or kept origin data: {cleared}; {storage}; {other}"));}
         steps.push(json!({"name":"native site metadata and origin clear preserve other sessions and reject stale URLs","pass":true,"siteDataCleared":cleared["siteDataCleared"]}));
-        execute(app,a.clone(),json!({"operation":"navigate","url":url})).await?;
-        execute(app,a.clone(),json!({"operation":"wait","selector":"#input"})).await?;
-        if execute(app,a.clone(),json!({"operation":"click","ref":button})).await.is_ok(){return Err("A stale reference was accepted.".into());}
-        steps.push(json!({"name":"stale cross-tab/document reference rejected","pass":true}));
-        let dialog_eval = {
-            let app=app.clone(); let session=a.clone();
-            tauri::async_runtime::spawn(async move { execute(&app,session,json!({"operation":"evaluate","expression":"(globalThis.smokeDialog=confirm('Browser smoke confirm'))"})).await })
-        };
-        let mut dialog=Value::Null;
-        for _ in 0..30 {
-            dialog=execute(app,a.clone(),json!({"operation":"dialog","action":"inspect"})).await?;
-            if !dialog["dialog"].is_null(){break;}
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
-        if dialog["dialog"].is_null(){return Err("Native confirm did not reach the dialog delegate.".into());}
-        let inspected=execute(app,a.clone(),json!({"operation":"dialog","action":"inspect"})).await?;
-        if inspected["dialog"]["id"]!=dialog["dialog"]["id"] {return Err("Inspect consumed a native dialog.".into());}
-        execute(app,a.clone(),json!({"operation":"dialog","action":"accept"})).await?;
-        dialog_eval.await.map_err(|e|e.to_string())??;
-        if execute(app,a.clone(),json!({"operation":"evaluate","expression":"globalThis.smokeDialog"})).await?!=true {return Err("Native dialog accept did not return true.".into());}
-        steps.push(json!({"name":"dialog inspection does not consume and accept returns true","pass":true}));
+        let before=execute(app,a.clone(),json!({"operation":"evaluate","tabId":site_tab,"expression":"window.smokeDocument"})).await?;
+        let same_tab_snapshot=execute(app,a.clone(),json!({"operation":"snapshot","tabId":site_tab})).await?;
+        let same_tab_ref=same_tab_snapshot["controls"].as_array().and_then(|rows|rows.iter().find(|row|row["name"]=="Increment")).and_then(|row|row["ref"].as_str()).ok_or("No same-tab reference before navigation.")?;
+        let mut destination=parsed.clone();destination.set_query(Some("navigation=smoke"));
+        execute(app,a.clone(),json!({"operation":"navigate","tabId":site_tab,"url":destination.as_str()})).await?;
+        let ready=super::dialog_smoke::wait_document(app,&a,&site_tab,destination.as_str(),Some(&before)).await?;
+        if execute(app,a.clone(),json!({"operation":"click","tabId":site_tab,"ref":same_tab_ref})).await.is_ok(){return Err("A same-tab reference survived document replacement.".into());}
+        steps.push(json!({"name":"navigation observes a new complete document and rejects its old same-tab ref","pass":true,"document":ready}));
+        browser_bounds(app.clone(),a.clone(),Some(site_tab.clone()),Some(Bounds{x:20.,y:100.,width:800.,height:600.}),true).await?;
+        steps.push(super::dialog_smoke::smoke(app,&a,&site_tab).await?);
         let before=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?["tabs"].as_array().map(Vec::len).unwrap_or(0);
         execute(app,a.clone(),json!({"operation":"evaluate","expression":"(window.open(location.href),true)"})).await?;
         let mut after=before;

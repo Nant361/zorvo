@@ -229,6 +229,8 @@ fn end_orphaned_sessions(
 ) -> usize {
     browser::close_all(&app);
     browser_debug::close(&app, None);
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    browser::frontend_ready(&app);
     let terminals = pty.session_ids();
     // Agent sessions are taken off the routes here, not just listed: the new UI
     // reopens a saved session under the same app session id, and that one
@@ -570,7 +572,14 @@ pub fn run() {
             if std::env::var_os("ZORVO_BROWSER_SMOKE_URL").is_some() {
                 let app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let result = browser::smoke(&app).await;
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(120),
+                        browser::smoke(&app),
+                    )
+                    .await
+                    .unwrap_or_else(|_| {
+                        Err("Native browser smoke exceeded its 120-second deadline.".into())
+                    });
                     let passed = result.as_ref().is_ok_and(|value| value["status"] == "pass");
                     if let Ok(path) = std::env::var("ZORVO_BROWSER_SMOKE_OUTPUT") {
                         let _ = std::fs::write(

@@ -222,7 +222,7 @@
     }
   },
   "evaluate": {
-    "description": "Evaluate JavaScript in a page, a frame or on an element.",
+    "description": "Evaluate JavaScript in a page, a frame or on an element. WebKit accepts an expression or async IIFE and awaits promises; wrap multiple statements in an IIFE. Chromium also accepts full scripts.",
     "inputSchema": {
       "type": "object",
       "properties": {

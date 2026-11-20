@@ -1,7 +1,7 @@
 //! All retained Objective-C objects and wry views stay on the main thread.
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -35,7 +35,36 @@ const WORLD: &str = "xyz.zorvo.browser.operations";
 const MAX_TABS: usize = 12;
 const MAX_SESSIONS: usize = 8;
 const RESULT_LIMIT: usize = 2 * 1024 * 1024;
-type Reply = oneshot::Sender<Result<Value, String>>;
+
+type Response = Result<Value, String>;
+type SharedReply = Rc<RefCell<Option<oneshot::Sender<Response>>>>;
+type WeakReply = Weak<RefCell<Option<oneshot::Sender<Response>>>>;
+
+struct Reply(SharedReply);
+impl Reply {
+    fn is_closed(&self) -> bool {
+        self.0
+            .borrow()
+            .as_ref()
+            .is_none_or(oneshot::Sender::is_closed)
+    }
+    fn send(self, value: Response) -> Result<(), Response> {
+        match self.0.borrow_mut().take() {
+            Some(sender) => sender.send(value),
+            None => Err(value),
+        }
+    }
+}
+
+fn cancel_pending(pending: &mut Vec<WeakReply>) {
+    for reply in pending.drain(..).filter_map(|reply| reply.upgrade()) {
+        if let Some(sender) = reply.borrow_mut().take() {
+            let _ = sender.send(Err(
+                "WebKit could not complete the script (the page navigated or closed).".into(),
+            ));
+        }
+    }
+}
 
 pub(super) struct Tab {
     view: wry::WebView,
@@ -46,6 +75,7 @@ pub(super) struct Tab {
     dialog: Option<policy::Dialog>,
     document: Option<String>,
     picker: Option<Picker>,
+    pending: Vec<WeakReply>,
 }
 pub(super) struct Picker {
     document: String,
@@ -97,6 +127,93 @@ fn state(session_id: &str) -> Value {
 }
 pub(super) fn changed(app: &AppHandle, session: &str) {
     let _ = app.emit("browser-state-changed", state(session));
+}
+
+#[cfg(debug_assertions)]
+pub(super) fn smoke_process(pid: libc::pid_t) -> Value {
+    // SAFETY: fixed-size read of a known process; this never requests a grant.
+    unsafe {
+        let mut info: libc::proc_taskinfo = std::mem::zeroed();
+        let size = std::mem::size_of_val(&info) as libc::c_int;
+        let written = libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTASKINFO,
+            0,
+            (&mut info as *mut libc::proc_taskinfo).cast(),
+            size,
+        );
+        let gone = libc::kill(pid, 0) == -1
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+        let mut bsd: libc::proc_bsdinfo = std::mem::zeroed();
+        let bsd_size = std::mem::size_of_val(&bsd) as libc::c_int;
+        let bsd_written = libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            (&mut bsd as *mut libc::proc_bsdinfo).cast(),
+            bsd_size,
+        );
+        json!({"pid":pid,"gone":gone,"status":(bsd_written==bsd_size).then_some(bsd.pbi_status),
+            "parentPid":(bsd_written==bsd_size).then_some(bsd.pbi_ppid),
+            "residentBytes":(written==size).then_some(info.pti_resident_size),
+            "cpuNanoseconds":(written==size).then_some(info.pti_total_user+info.pti_total_system)})
+    }
+}
+
+/// Native observations for the opt-in integration harness, never an IPC command.
+#[cfg(debug_assertions)]
+pub(super) async fn smoke_state(app: &AppHandle) -> Result<Value, String> {
+    let (send, receive) = oneshot::channel();
+    app.run_on_main_thread(move || {
+        let value = SESSIONS.with(|sessions| {
+            let sessions = sessions.borrow();
+            let rows: Vec<_> = sessions
+                .iter()
+                .map(|(id, session)| {
+                    let tabs: Vec<_> = session
+                        .tabs
+                        .iter()
+                        .map(|(id, tab)| {
+                            // Retained native views are inspected on their main thread.
+                            {
+                                let view = tab.view.webview();
+                                let frame = view.frame();
+                                // SAFETY: optional debug observation, guarded on this retained main-thread view.
+                                let process = unsafe {
+                                    let supported: bool = msg_send![&*view, respondsToSelector:objc2::sel!(_webProcessIdentifier)];
+                                    if supported {
+                                        let pid: libc::pid_t = msg_send![&*view, _webProcessIdentifier];
+                                        (pid > 0).then(|| smoke_process(pid))
+                                    } else { None }
+                                };
+                                let network = unsafe {
+                                    let store = view.configuration().websiteDataStore();
+                                    let supported: bool = msg_send![&*store, respondsToSelector:objc2::sel!(_networkProcessIdentifier)];
+                                    if supported {
+                                        let pid: libc::pid_t = msg_send![&*store, _networkProcessIdentifier];
+                                        (pid > 0).then(|| smoke_process(pid))
+                                    } else { None }
+                                };
+                                let navigation = unsafe { json!({"url":view.URL().and_then(|u|u.absoluteString()).map(|u|u.to_string()),"loading":view.isLoading(),"progress":view.estimatedProgress()}) };
+                                json!({"id":id,"hidden":view.isHidden(),"bounds":{
+                            "x":frame.origin.x,"y":frame.origin.y,
+                            "width":frame.size.width,"height":frame.size.height},"process":process,"networkProcess":network,"navigation":navigation})
+                            }
+                        })
+                        .collect();
+                    json!({"id":id,"tabs":tabs})
+                })
+                .collect();
+            json!({"sessions":rows,"totalSessions":sessions.len(),"appProcess":smoke_process(std::process::id() as libc::pid_t),
+                "totalTabs":sessions.values().map(|session| session.tabs.len()).sum::<usize>()})
+        });
+        let _ = send.send(value);
+    })
+    .map_err(|_| "The browser main thread is unavailable.")?;
+    tokio::time::timeout(Duration::from_secs(3), receive)
+        .await
+        .map_err(|_| "Native browser inspection timed out.")?
+        .map_err(|_| "Native browser inspection was cancelled.".into())
 }
 
 fn world(mtm: MainThreadMarker) -> Retained<WKContentWorld> {
@@ -195,6 +312,7 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                     with_tab(&sid, &tid, |tab| {
                         tab.loading = matches!(event, wry::PageLoadEvent::Started);
                         if tab.loading {
+                            cancel_pending(&mut tab.pending);
                             tab.frames.clear();
                             tab.document = None;
                             if let Some(picker) = tab.picker.take() {
@@ -240,6 +358,7 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 dialog: None,
                 document: None,
                 picker: None,
+                pending: vec![],
             },
         ));
         session.active = Some(id.clone());
@@ -255,11 +374,15 @@ fn rect(b: Bounds) -> wry::Rect {
 }
 
 fn end(mut tab: Tab) {
+    cancel_pending(&mut tab.pending);
     if let Some(dialog) = tab.dialog.take() {
         dialog.dismiss();
     }
     let view = tab.view.webview();
-    // SAFETY: checked private termination selector is the same process-lifetime policy as artifact views.
+    // SAFETY: this retained WKWebView stays on its main thread. Each private
+    // termination/reset/close selector is checked before a no-argument void
+    // call. Reset ends provisional process state too; close releases the page
+    // state which wry's intentionally retained native wrapper can keep alive.
     unsafe {
         view.stopLoading();
         let controller = view.configuration().userContentController();
@@ -271,8 +394,16 @@ fn end(mut tab: Tab) {
         view.setUIDelegate(None);
         let responds: bool =
             msg_send![&*view,respondsToSelector:objc2::sel!(_killWebContentProcess)];
-        if responds {
+        let reset: bool =
+            msg_send![&*view,respondsToSelector:objc2::sel!(_killWebContentProcessAndResetState)];
+        if reset {
+            let _: () = msg_send![&*view, _killWebContentProcessAndResetState];
+        } else if responds {
             let _: () = msg_send![&*view, _killWebContentProcess];
+        }
+        let close: bool = msg_send![&*view,respondsToSelector:objc2::sel!(_close)];
+        if close {
+            let _: () = msg_send![&*view, _close];
         }
     }
     drop(tab);
@@ -287,8 +418,15 @@ pub async fn execute(app: &AppHandle, sid: String, args: Value) -> Result<Value,
         .unwrap_or(10000)
         .clamp(100, 30000)
         + 2000;
-    app.run_on_main_thread(move || dispatch(&handle, &sid, args, send))
-        .map_err(|_| "The browser main thread is unavailable.")?;
+    app.run_on_main_thread(move || {
+        dispatch(
+            &handle,
+            &sid,
+            args,
+            Reply(Rc::new(RefCell::new(Some(send)))),
+        )
+    })
+    .map_err(|_| "The browser main thread is unavailable.")?;
     tokio::time::timeout(Duration::from_millis(timeout), receive)
         .await
         .map_err(|_| "The browser operation timed out.")?
@@ -386,6 +524,30 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     let mut reply = Some(reply);
     let found = with_tab(sid, &tid, |tab| {
         let reply = reply.take().expect("one native operation");
+        tab.pending.retain(|reply| {
+            reply
+                .upgrade()
+                .is_some_and(|reply| !Reply(reply).is_closed())
+        });
+        if !matches!(
+            operation,
+            "navigate"
+                | "back"
+                | "forward"
+                | "reload"
+                | "stop"
+                | "dialog"
+                | "frames"
+                | "__manual_zoom"
+        ) {
+            if tab.pending.len() >= 64 {
+                let _ = reply.send(Err(
+                    "Too many pending operations in this browser tab.".into()
+                ));
+                return;
+            }
+            tab.pending.push(Rc::downgrade(&reply.0));
+        }
         match operation {
             "__manual_zoom" => {
                 // SAFETY: this public WebKit property belongs to the retained
@@ -482,11 +644,25 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                     .and_then(Value::as_str)
                     .ok_or_else(|| "Provide a URL.".into())
                     .and_then(navigation_url)
-                    .and_then(|u| tab.view.load_url(&u).map_err(|e| e.to_string()))
+                    .and_then(|u| {
+                        cancel_pending(&mut tab.pending);
+                        // A dialog can prevent navigation from starting, so the
+                        // load-start callback is too late to dismiss it.
+                        if let Some(dialog) = tab.dialog.take() {
+                            dialog.dismiss();
+                        }
+                        tab.view.load_url(&u).map_err(|e| e.to_string())
+                    })
                     .map(|_| json!({"navigating":true}));
                 let _ = reply.send(result);
             }
             "back" | "forward" | "reload" | "stop" => {
+                if operation != "stop" {
+                    cancel_pending(&mut tab.pending);
+                    if let Some(dialog) = tab.dialog.take() {
+                        dialog.dismiss();
+                    }
+                }
                 unsafe {
                     let v = tab.view.webview();
                     match operation {
@@ -563,6 +739,9 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                     &tab.frames,
                     reply,
                     operation == "console",
+                    operation == "evaluate"
+                        && args.get("expression").is_none()
+                        && args.get("script").is_some(),
                 );
             }
             "snapshot" | "find" | "wait" | "click" | "hover" | "drag" | "fill" | "fill_form"
@@ -622,7 +801,23 @@ fn callback(
             return;
         };
         let result = if !error.is_null() {
-            Err("WebKit could not complete the script (navigation, page error or denied execution).".into())
+            // SAFETY: WebKit retains the callback's error. Its message is bounded,
+            // page-controlled diagnostic data, never a command or HTML.
+            let message = unsafe {
+                (&*error)
+                    .userInfo()
+                    .objectForKey(&NSString::from_str("WKJavaScriptExceptionMessage"))
+                    .and_then(|value| {
+                        value
+                            .downcast_ref::<NSString>()
+                            .map(|value| value.to_string())
+                    })
+                    .unwrap_or_else(|| (&*error).localizedDescription().to_string())
+            };
+            Err(format!(
+                "WebKit could not complete the script: {}",
+                message.chars().take(2000).collect::<String>()
+            ))
         } else if value.is_null() {
             Ok(Value::Null)
         } else {
@@ -713,6 +908,7 @@ fn evaluate(
     frames: &[(String, Retained<WKFrameInfo>)],
     reply: Reply,
     parse: bool,
+    script: bool,
 ) {
     let selected = match frame(id, frames) {
         Ok(v) => v,
@@ -723,20 +919,28 @@ fn evaluate(
     };
     let mtm = MainThreadMarker::new().expect("browser evaluate main");
     let cb = callback(reply, parse, false);
-    let key = NSString::from_str("expression");
-    let expression = NSString::from_str(source);
-    let arguments: Retained<NSDictionary<NSString, AnyObject>> =
-        NSDictionary::from_slices(&[&*key], &[&*expression]);
-    // SAFETY: explicit evaluate runs caller code only in the page world. Typed arguments
-    // never splice source into the isolated helper or a frame handler.
+    // SAFETY: caller-provided code is intentionally compiled by WebKit only in
+    // the page world. It never enters our isolated helper or an IPC handler.
+    // Avoid indirect eval: a site's CSP may deny eval while native execution is
+    // available. Expression mode awaits promises; the script alias preserves
+    // ordinary program completion values through WebKit's script API.
     unsafe {
-        view.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
-            &NSString::from_str("return await (0,eval)(expression)"),
-            Some(&arguments),
-            selected,
-            &WKContentWorld::pageWorld(mtm),
-            Some(&cb),
-        );
+        if script {
+            view.evaluateJavaScript_inFrame_inContentWorld_completionHandler(
+                &NSString::from_str(source),
+                selected,
+                &WKContentWorld::pageWorld(mtm),
+                Some(&cb),
+            );
+        } else {
+            view.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
+                &NSString::from_str(&format!("return await (\n{source}\n)")),
+                None,
+                selected,
+                &WKContentWorld::pageWorld(mtm),
+                Some(&cb),
+            );
+        }
     }
 }
 fn screenshot(view: &WKWebView, reply: Reply) {
@@ -860,4 +1064,26 @@ pub fn close_all(app: &AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod reply_tests {
+    use super::*;
+
+    #[test]
+    fn navigation_cancels_a_pending_reply_before_a_late_webkit_completion() {
+        let (send, mut receive) = oneshot::channel();
+        let reply = Reply(Rc::new(RefCell::new(Some(send))));
+        let late_callback = Reply(Rc::clone(&reply.0));
+        let mut pending = vec![Rc::downgrade(&reply.0)];
+        cancel_pending(&mut pending);
+        assert!(pending.is_empty());
+        assert!(receive
+            .try_recv()
+            .unwrap()
+            .unwrap_err()
+            .contains("navigated or closed"));
+        assert!(late_callback.send(Ok(json!("outgoing document"))).is_err());
+        assert!(reply.is_closed());
+    }
 }

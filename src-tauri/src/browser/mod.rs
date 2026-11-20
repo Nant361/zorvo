@@ -5,12 +5,22 @@ use tauri::AppHandle;
 
 pub mod history;
 
+#[cfg(all(target_os = "macos", debug_assertions))]
+mod dialog_smoke;
+#[cfg(all(target_os = "macos", debug_assertions))]
+mod forms_smoke;
+#[cfg(all(target_os = "macos", debug_assertions))]
+mod lifecycle_smoke;
 #[cfg(target_os = "macos")]
 mod native;
 #[cfg(all(target_os = "macos", debug_assertions))]
+mod placement_smoke;
+#[cfg(all(target_os = "macos", debug_assertions))]
+mod sites_smoke;
+#[cfg(all(target_os = "macos", debug_assertions))]
 mod smoke;
 #[cfg(all(target_os = "macos", debug_assertions))]
-pub use smoke::smoke;
+pub use smoke::{frontend_ready, smoke};
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 pub struct Bounds {
