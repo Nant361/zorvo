@@ -118,7 +118,7 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       let registered = NSWorkspace.shared.urlForApplication(
         withBundleIdentifier: Bundle.main.bundleIdentifier ?? "missing")
       let output: [String: Any] = [
-        "schemaVersion": 2, "longHidden": longHidden, "launchContext": launchContext(),
+        "schemaVersion": 3, "longHidden": longHidden, "launchContext": launchContext(),
         "os": ProcessInfo.processInfo.operatingSystemVersionString,
         "mode": args[3],
         "bundleIdentifier": Bundle.main.bundleIdentifier ?? "missing",
@@ -414,7 +414,7 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
   }
 
   func permissions(_ view: WKWebView, frame: WKFrameInfo?, label: String) async throws {
-    let surfaces =
+    var surfaces =
       try await js(
         view,
         """
@@ -431,8 +431,18 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         """, frame: frame) as? [String: Any] ?? [:]
     let absent = surfaces["mediaDevices"] as? String == "undefined"
     let present = surfaces["cameraOrMicrophone"] as? String == "function"
+    let inherited =
+      args[3] == "zorvo"
+      && ProcessInfo.processInfo.environment["ZORVO_BROWSER_SPIKE_LAUNCH"] == "direct"
+    let expectedSurface =
+      inherited || args[3] == "usage-strings"
+      ? "present"
+      : args[3] == "zorvo" ? "absent" : "observed"
     let expected =
-      args[3] == "zorvo" ? absent : args[3] == "usage-strings" ? present : absent || present
+      expectedSurface == "present"
+      ? present : expectedSurface == "absent" ? absent : absent || present
+    surfaces["expectedMediaDevices"] = expectedSurface
+    surfaces["usageStringBoundaryHolds"] = absent
     record(
       "capture APIs in " + label,
       surfaces["secure"] as? Bool == true && expected

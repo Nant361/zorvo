@@ -23,9 +23,9 @@ const modes = {
 
 export function requiredChecks(mode, version = 1, longHidden = false) {
   if (!Object.hasOwn(modes, mode)) throw new Error("Invalid probe mode.");
-  if (![1, 2].includes(version)) throw new Error("Unsupported report schema.");
+  if (![1, 2, 3].includes(version)) throw new Error("Unsupported report schema.");
   const required = [...modes[mode].required];
-  if (version === 2 && mode === "zorvo") {
+  if (version >= 2 && mode === "zorvo") {
     required.push("visible-window fallback interaction");
     if (longHidden) required.push("long hidden React interaction");
   }
@@ -73,9 +73,19 @@ export function assessReport(report, mode) {
   }
   const missing = required.filter(gate => !seen.has(gate));
   if (missing.length) throw new Error("Missing probe checks. " + missing.join(", "));
-  if (version === 2) {
+  if (version >= 2) {
     if (typeof report.longHidden !== "boolean") throw new Error("Missing hidden-run scope.");
     for (const row of report.results) {
+      if (version >= 3 && row.status === "pass" && row.gate.startsWith("capture APIs in ")) {
+        const evidence = row.evidence;
+        const direct = report.launchContext?.launch === "direct";
+        const expected = mode === "usage-strings" || (mode === "zorvo" && direct) ? "present" : mode === "zorvo" ? "absent" : "observed";
+        if (evidence?.expectedMediaDevices !== expected || evidence.screen !== "undefined" ||
+          (expected === "present" && (evidence.mediaDevices !== "object" || evidence.cameraOrMicrophone !== "function")) ||
+          (expected === "absent" && evidence.mediaDevices !== "undefined")) {
+          throw new Error("Capture surface pass contradicts the launch expectation.");
+        }
+      }
       if (row.status === "pass" && row.gate.startsWith("location denied in ") && !locationDenialPass(row.evidence)) {
         throw new Error("Location pass contradicts the recorded delegate callbacks.");
       }

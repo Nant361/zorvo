@@ -53,6 +53,11 @@ async function main() {
     console.log(JSON.stringify(result));
     return;
   }
+  await run("git", ["diff", "--quiet", "HEAD", "--", "run.mjs", "snapshot.mjs"], { ...options, cwd: directory });
+  const { stdout: collectorCommit } = await run("git", ["rev-parse", "HEAD"], { ...options, cwd: directory });
+  const collectorSources = Object.fromEntries(await Promise.all(["run.mjs", "snapshot.mjs"].map(async name => [
+    name, hash(await readFile(path.join(directory, name))),
+  ])));
   if (prepare) await mkdir(preparedRoot, { recursive: true });
   outputDirectory = reuse ? cli.reuse
     : await mkdtemp(path.join(prepare ? preparedRoot : os.tmpdir(), "zorvo-browser-wk-"));
@@ -179,6 +184,7 @@ async function main() {
       report.assessment = assessReport(report, manifest.mode);
       report.harness = {
         collectedAt: new Date().toISOString(), node: process.version, ...manifest,
+        collectorCommit: collectorCommit.trim(), collectorSources,
         buildManifestSha256: hash(await readFile(manifestPath)),
         reusedBinary: reuse, launch: direct ? "Direct child of Node runner" : "LaunchServices via open -W -n",
       };

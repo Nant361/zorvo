@@ -178,6 +178,19 @@ test("location denial needs exactly one public callback on 27 and zero below it"
   assert.throws(() => assessReport(input, "zorvo"), /Location pass/);
 });
 
+test("the direct capture run must expose the inherited API instead of passing an unexercised denial", () => {
+  const input = currentReport();
+  input.schemaVersion = 3;
+  input.launchContext = { launch: "direct" };
+  const surfaces = input.results.filter(row => row.gate.startsWith("capture APIs in "));
+  for (const row of surfaces) row.evidence = {
+    expectedMediaDevices: "present", mediaDevices: "object", cameraOrMicrophone: "function", screen: "undefined",
+  };
+  assert.equal(assessReport(input, "zorvo").status, "pass");
+  surfaces[1].evidence.mediaDevices = "undefined";
+  assert.throws(() => assessReport(input, "zorvo"), /Capture surface pass/);
+});
+
 test("only the ordinary experiment plist is guarded by the experiment suite", async () => {
   const plist = await readFile(new URL("./Info.plist", import.meta.url), "utf8");
   for (const key of ["NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationUsageDescription"]) {
