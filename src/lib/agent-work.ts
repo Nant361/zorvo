@@ -80,10 +80,27 @@ function outputOf(tool: ToolExecution): string {
     .join('\n');
 }
 
+/** Shells whose `-c` script holds the commands an agent wrapped (`bash -lc "gh pr create …"`). */
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
+
+/** How deep shell scripts inside shell scripts are opened. */
+const MAX_SCRIPT_DEPTH = 3;
+
+/** The words of every command in `text`, a shell's `-c` script opened into its own commands. */
+function commandsIn(text: string, depth = 0): string[][] {
+  return splitList(text).flatMap((part) => {
+    const words = commandWords(part);
+    const isShell = SHELLS.has(words[0]?.split('/').pop() ?? '');
+    const flag = isShell ? words.findIndex((word, index) => index > 0 && /^-[a-z]*c[a-z]*$/.test(word)) : -1;
+    const script = flag > 0 ? words[flag + 1] : undefined;
+    return script && depth < MAX_SCRIPT_DEPTH ? commandsIn(script, depth + 1) : [words];
+  });
+}
+
 /** What one finished shell command made: the branches it named and, for `gh pr create`, the address it printed. */
 function workOfTool(tool: ToolExecution): AgentWork {
   if (tool.status !== 'completed' || tool.kind !== 'execute' || !tool.command) return EMPTY;
-  const commands = splitList(tool.command).map(commandWords);
+  const commands = commandsIn(tool.command);
   const branches = commands.flatMap((words) => {
     const branch = branchOf(words);
     return branch && BRANCH.test(branch) ? [branch] : [];
@@ -132,8 +149,12 @@ export function agentWorkOf(messages: readonly ChatMessage[]): AgentWork {
  * rewind removes the messages, not the branch or the pull request the agent made.
  */
 export function mergedAgentWork(saved: AgentWork | undefined, found: AgentWork): AgentWork | undefined {
-  const branches = newestUnique([...(saved?.branches ?? []), ...found.branches]);
-  const pullRequestUrls = newestUnique([...(saved?.pullRequestUrls ?? []), ...found.pullRequestUrls]);
+  // A value already saved keeps its place: after a rewind the transcript holds only older work,
+  // which must not move ahead of, or push out, what was made after it.
+  const added = (kept: readonly string[], seen: readonly string[]) =>
+    [...kept, ...seen.filter((value) => !kept.includes(value))].slice(-MAX_AGENT_WORK_ITEMS);
+  const branches = added(saved?.branches ?? [], found.branches);
+  const pullRequestUrls = added(saved?.pullRequestUrls ?? [], found.pullRequestUrls);
   return branches.length > 0 || pullRequestUrls.length > 0 ? { branches, pullRequestUrls } : undefined;
 }
 

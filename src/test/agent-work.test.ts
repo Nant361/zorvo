@@ -36,6 +36,14 @@ describe("agentWorkOf", () => {
     expect(work).toEqual({ branches: ["fix/notice"], pullRequestUrls: ["https://github.com/O/R/pull/259"] });
   });
 
+  it("opens a shell's -c script, as agents wrap their commands", () => {
+    const work = agentWorkOf([
+      reply(shell(`bash -lc "gh pr create --head fix/a --title 'x'"`, "https://github.com/o/r/pull/7")),
+      reply(shell(`/bin/zsh -c 'cd /r && git worktree add -b fix/b wt'`)),
+    ]);
+    expect(work).toEqual({ branches: ["fix/a", "fix/b"], pullRequestUrls: ["https://github.com/o/r/pull/7"] });
+  });
+
   it("ignores what did not finish, other programs, and pull requests it only mentioned", () => {
     const work = agentWorkOf([
       reply(shell("git worktree add -b fix/failed wt", "", "failed")),
@@ -61,8 +69,15 @@ describe("saving what an agent made", () => {
   it("adds what a transcript holds now to what was saved, and drops nothing", () => {
     const saved = { branches: ["fix/a"], pullRequestUrls: ["https://github.com/o/r/pull/1"] };
     expect(mergedAgentWork(saved, { branches: [], pullRequestUrls: [] })).toEqual(saved);
-    expect(mergedAgentWork(saved, { branches: ["fix/b", "fix/a"], pullRequestUrls: [] })?.branches).toEqual(["fix/b", "fix/a"]);
+    expect(mergedAgentWork(saved, { branches: ["fix/b", "fix/a"], pullRequestUrls: [] })?.branches).toEqual(["fix/a", "fix/b"]);
     expect(mergedAgentWork(undefined, { branches: [], pullRequestUrls: [] })).toBeUndefined();
+  });
+
+  it("keeps the saved order after a rewind left only older work in the transcript", () => {
+    const urls = Array.from({ length: 10 }, (_, index) => `https://github.com/o/r/pull/${index + 1}`);
+    const saved = { branches: ["fix/one", "fix/two"], pullRequestUrls: urls };
+    const merged = mergedAgentWork(saved, { branches: ["fix/one"], pullRequestUrls: urls.slice(0, 3) });
+    expect(merged).toEqual(saved);
   });
 
   it("loads only valid values from a saved state", () => {
