@@ -3,6 +3,121 @@ use super::{browser_bounds, execute, Bounds};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
+async fn responsive_smoke(
+    app: &AppHandle,
+    session: &str,
+    base: &url::Url,
+) -> Result<Value, String> {
+    let session = session.to_string();
+    let url = base
+        .join("/responsive")
+        .map_err(|_| "Invalid responsive fixture URL.")?;
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"tabs.open","url":url.as_str()}),
+    )
+    .await?;
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"wait","selector":"#responsive-ready"}),
+    )
+    .await?;
+    let state = execute(app, session.clone(), json!({"operation":"tabs.list"})).await?;
+    let tab = state["activeTabId"]
+        .as_str()
+        .ok_or("No responsive native tab.")?
+        .to_string();
+    execute(app, session.clone(), json!({"operation":"fill","selector":"#responsive-input","value":"preserved across resize"})).await?;
+    let mut samples = vec![];
+    let mut document = None;
+    for width in [360., 560., 900.] {
+        browser_bounds(
+            app.clone(),
+            session.clone(),
+            Some(tab.clone()),
+            Some(Bounds {
+                x: 20.,
+                y: 100.,
+                width,
+                height: 600.,
+            }),
+            true,
+        )
+        .await?;
+        // WebKit applies native bounds asynchronously. Wait for layout in this
+        // document rather than assuming the next IPC has already seen the resize.
+        let mut sample = Value::Null;
+        for _ in 0..20 {
+            sample = execute(app, session.clone(), json!({"operation":"evaluate","expression":"({ua:navigator.userAgent,requestUa:window.responsiveRequest.ua,document:window.responsiveRequest.document,loads:Number(sessionStorage.getItem('responsive-loads')),width:innerWidth,clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth,layout:getComputedStyle(document.body).getPropertyValue('--layout').trim(),input:document.querySelector('#responsive-input').value,bridge:typeof window.__TAURI_INTERNALS__,isolated:typeof window.__zorvoBrowser})"})).await?;
+            if sample["width"]
+                .as_f64()
+                .is_some_and(|actual| (actual - width).abs() <= 1.)
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        let ua = sample["ua"]
+            .as_str()
+            .ok_or("Native user agent is missing.")?;
+        if sample["requestUa"] != sample["ua"]
+            || !ua.contains("AppleWebKit/")
+            || !ua.contains("Safari/605.1.15")
+            || !ua.contains(concat!("Zorvo/", env!("CARGO_PKG_VERSION")))
+        {
+            return Err(format!(
+                "Native first-request browser identity mismatch: {sample}"
+            ));
+        }
+        let actual_width = sample["width"]
+            .as_f64()
+            .ok_or("Native viewport width is missing.")?;
+        let client = sample["clientWidth"]
+            .as_f64()
+            .ok_or("Native client width is missing.")?;
+        let scroll = sample["scrollWidth"]
+            .as_f64()
+            .ok_or("Native document width is missing.")?;
+        if (actual_width - width).abs() > 1.
+            || client <= 0.
+            || client > actual_width
+            || scroll > client + 1.
+        {
+            return Err(format!(
+                "Native viewport did not follow {width}px bounds without overflow: {sample}"
+            ));
+        }
+        let expected_layout = if width <= 600. { "narrow" } else { "wide" };
+        if sample["layout"] != expected_layout
+            || sample["loads"] != 1
+            || sample["input"] != "preserved across resize"
+            || sample["bridge"] != "undefined"
+            || sample["isolated"] != "undefined"
+        {
+            return Err(format!(
+                "Native responsive layout or retained state failed: {sample}"
+            ));
+        }
+        let current_document = sample["document"]
+            .as_str()
+            .ok_or("Responsive document identity is missing.")?;
+        if document
+            .as_deref()
+            .is_some_and(|initial| initial != current_document)
+        {
+            return Err("Native resize reloaded the responsive document.".into());
+        }
+        document = Some(current_document.to_string());
+        samples.push(sample);
+    }
+    execute(app, session, json!({"operation":"tabs.close","tabID":tab})).await?;
+    Ok(
+        json!({"name":"first-request browser identity and native responsive resizing preserve document state","pass":true,"samples":samples}),
+    )
+}
+
 pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
     let url = std::env::var("ZORVO_BROWSER_SMOKE_URL").map_err(|_| "Smoke URL is missing.")?;
     let parsed = url::Url::parse(&url).map_err(|_| "Invalid smoke URL.")?;
@@ -13,6 +128,10 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
     let b = "native-browser-smoke-b".to_string();
     let mut steps = vec![];
     let result=async{
+        steps.push(responsive_smoke(app, &a, &parsed).await?);
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("responsive") {
+            return Ok::<_,String>(());
+        }
         execute(app,a.clone(),json!({"operation":"tabs.open","url":url})).await?;
         execute(app,a.clone(),json!({"operation":"wait","selector":"#increment"})).await?;
         let state=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?;

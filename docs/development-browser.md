@@ -35,6 +35,13 @@ runtime behavior of this integration.
   element selection and its menu. Tab management, engine choices and diagnostic
   views are available from that menu. The main Tauri CSP remains unchanged.
 
+The native browser preserves WebKit's user-agent prefix and appends the standard
+`Safari/605.1.15` compatibility token plus `Zorvo/<version>` before its first
+request. Raw WKWebView identification makes some sites serve a fixed-width
+fallback. This identifies the actual WebKit engine without borrowing a Chromium
+identity or inventing a Safari application version. The retained view still uses
+the panel's logical bounds; no page CSS, viewport meta tag or zoom is overridden.
+
 Site information reads the current native view's TLS properties and its session's
 cookie store; cookie names and values never cross IPC. Clear is a manual action
 bound to the displayed URL. It removes cookies applicable to the host on all
@@ -94,3 +101,8 @@ debug path closes its test sessions and exits. It covers native snapshots, form
 events, hidden interaction, cross-origin frame access, session cookie isolation
 and stale reference rejection. A successful synthetic smoke is not evidence of
 trackpad parity with OpenCode, the full real-site matrix or older-OS behavior.
+
+Set `ZORVO_BROWSER_SMOKE_CASE=responsive` for the focused first-request identity
+and viewport check. It resizes one retained native view to 360, 560 and 900 logical
+pixels and checks that the page reflows without horizontal overflow, navigation
+or lost form state.

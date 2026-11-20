@@ -1,8 +1,19 @@
 // Synthetic native-browser smoke page. No model/provider calls or personal data.
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 const server = http.createServer((request, response) => {
   if (!['127.0.0.1', 'localhost'].includes(request.headers.host?.split(':')[0])) {
     response.writeHead(403).end(); return;
+  }
+  if (request.url.split('?')[0] === '/responsive') {
+    // Header data stays a string literal even if it contains HTML/script syntax.
+    const info = JSON.stringify({ ua: request.headers['user-agent'] ?? '', document: randomUUID() }).replace(/</g, '\\u003c');
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    response.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Responsive browser smoke</title>
+      <style>*{box-sizing:border-box}body{margin:0;font:18px system-ui;--layout:wide}main{padding:16px;max-width:100%}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}article{border:1px solid currentColor;padding:12px;overflow-wrap:anywhere}input{max-width:100%;font:inherit}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:600px){body{--layout:narrow}.cards{grid-template-columns:1fr}}</style>
+      <main><h1>Responsive browser smoke</h1><label>Resize state <input id="responsive-input" value="original"></label><div class="cards"><article>First fluid card</article><article>Second fluid card</article><article>Third fluid card</article></div><pre id="request-ua"></pre><output id="responsive-status">Ready</output></main>
+      <script>window.responsiveRequest=${info};sessionStorage.setItem('responsive-loads',String(Number(sessionStorage.getItem('responsive-loads')||0)+1));document.querySelector('#request-ua').textContent=window.responsiveRequest.ua;document.querySelector('#responsive-status').id='responsive-ready';</script>`);
+    return;
   }
   const frame = request.url.startsWith('/frame');
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

@@ -28,6 +28,9 @@ mod site;
 
 const PAGE: &str = include_str!("page.js");
 const CONSOLE: &str = include_str!("console.js");
+// Preserve WebKit's native UA prefix while identifying a Safari-compatible
+// browser. Raw WKWebView UAs make some sites serve a fixed-width fallback.
+const APPLICATION_NAME: &str = concat!("Safari/605.1.15 Zorvo/", env!("CARGO_PKG_VERSION"));
 const WORLD: &str = "xyz.zorvo.browser.operations";
 const MAX_TABS: usize = 12;
 const MAX_SESSIONS: usize = 8;
@@ -127,6 +130,7 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
         let delegate = policy::BrowserDelegate::new(mtm, app.clone(), sid.into(), id.clone());
         unsafe {
             config.setWebsiteDataStore(&session.store);
+            config.setApplicationNameForUserAgent(Some(&NSString::from_str(APPLICATION_NAME)));
             config
                 .preferences()
                 .setJavaScriptCanOpenWindowsAutomatically(true);
