@@ -79,7 +79,9 @@ export const RESTART_HINT_TEXT =
 
 /** What a screen reader hears when the group's state changes, in few words. */
 export function announcementOf(status: ComputerUseStatus | null, isOn: boolean, isChecking: boolean): string {
-  if (status === null || isChecking) return "Checking computer use.";
+  if (isChecking) return "Checking computer use.";
+  // An answer Zorvo could not read: the app's notice says so, and nothing is still being checked.
+  if (status === null) return "";
   // The sentences on screen say why; the announcement only says that something changed.
   if (blockerOf(status) === "not-in-applications") return "Computer use is not available.";
   if (!isOn) return "Computer use is off.";

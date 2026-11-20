@@ -122,8 +122,10 @@ pub fn open_pane(pane: &str) -> Result<(), String> {
     crate::spawn::command("/usr/bin/open")
         .arg(url)
         .status()
+        .ok()
+        .filter(|status| status.success())
         .map(|_| ())
-        .map_err(|_| "System Settings did not open.".to_string())
+        .ok_or_else(|| "System Settings did not open.".to_string())
 }
 
 /// Forgets macOS's record of both permissions for `bundle_id`, so macOS asks

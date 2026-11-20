@@ -134,13 +134,15 @@ impl Inner {
 
     /// Kills the worker and waits for it, so no zombie is left.
     fn kill(&self) {
-        // Closing stdin alone ends a healthy worker; kill covers a stuck one.
-        *self.stdin.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        // No request is written from here on, whatever the reader does next.
+        self.fail(DriverError::Exited);
+        // The child first: a write stuck on a worker that stopped reading
+        // holds the stdin lock, and only the child's end releases it.
         let mut child = self.child.lock().unwrap_or_else(|e| e.into_inner());
         let _ = child.kill();
         let _ = child.wait();
         drop(child);
-        self.fail(DriverError::Exited);
+        *self.stdin.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     fn on_line(&self, line: &[u8]) {
@@ -215,7 +217,13 @@ fn read_answers(inner: Arc<Inner>, stdout: impl Read) {
     let mut line = Vec::new();
     loop {
         match read_line(&mut reader, &mut line) {
-            Ok(Some(())) => inner.on_line(&line),
+            Ok(Some(())) => {
+                inner.on_line(&line);
+                // A worker that broke the protocol is not left running.
+                if inner.state().dead.is_some() {
+                    return inner.kill();
+                }
+            }
             // `kill` (at the latest when the client is dropped) reaps the worker.
             Ok(None) => return inner.fail(DriverError::Exited),
             Err(error) => {
@@ -438,7 +446,14 @@ impl DriverClient {
             return;
         }
         state.answers.insert(call.0, Err(DriverError::Abandoned));
+        // Dead before the lock is released: if the worker's answer arrives
+        // now, the reader must not go on to write the next queued call to a
+        // worker that is about to be killed for this one.
+        state.dead = Some(DriverError::Exited);
+        state.queue.clear();
+        state.running = None;
         drop(state);
+        self.inner.changed.notify_all();
         self.inner.kill();
     }
 

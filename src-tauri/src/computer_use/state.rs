@@ -95,6 +95,11 @@ impl ComputerUse {
             return Err(NoDriver::Off);
         }
         let mut slot = self.slot();
+        // Again under the lock: `set_enabled(false)` may have run since the
+        // check above and found no driver to stop.
+        if !self.is_enabled() {
+            return Err(NoDriver::Off);
+        }
         if let Some(client) = slot.as_ref().filter(|client| client.is_alive()) {
             return Ok(Arc::clone(client));
         }
