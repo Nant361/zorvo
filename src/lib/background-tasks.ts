@@ -256,7 +256,7 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
  * The command's words as the shell splits them: a space inside quotes or after a backslash does
  * not end a word. Each word keeps its quotes, so joining them gives the text back.
  */
-function shellWords(command: string): string[] {
+export function shellWords(command: string): string[] {
   const words: string[] = [];
   let word = '';
   let quote: string | null = null;
@@ -368,7 +368,7 @@ function withoutHeredocBodies(command: string): string {
 }
 
 /** The commands of a list, split on `&&`, `||`, `;` and line breaks that are not quoted or escaped. */
-function splitList(given: string): string[] {
+export function splitList(given: string): string[] {
   const command = withoutHeredocBodies(given);
   const parts: string[] = [];
   let part = '';

@@ -176,6 +176,16 @@ export interface Session {
   privateMode?: { modelId: string; ownKey?: boolean; sessionCap?: number };
   /** The last total this session used, kept across restarts; records themselves are in memory. */
   privateUsage?: { credits: number; estimated: boolean };
+  /** Branches and pull requests the agent made itself, read from its shell commands; absent when none. */
+  agentWork?: AgentWork;
+}
+
+/** What an agent made in a session that Zorvo did not: newest last, at most ten of each. */
+export interface AgentWork {
+  /** Branches it created, checked out new or pushed with `-u`. */
+  branches: string[];
+  /** Pull request addresses `gh pr create` printed. */
+  pullRequestUrls: string[];
 }
 
 /** What a diff is compared with: the last commit, the base branch, or where the worktree started. */

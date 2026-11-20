@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Fixed
+
+- **A session shows the pull request its agent opened.** When an agent makes its own worktree in your folder (`git worktree add -b …`) and opens a pull request from it, the session's row in the sidebar and its overview card now show that pull request and its checks. Zorvo reads the branch and the address from the agent's own shell commands and keeps them with the session, so they stay after a restart; a session you have not opened since this update shows them once you open it.
+
 ## [0.14.0] - 2026-11-20
 
 ### Changed
