@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import type { ContextUsage } from "../../types";
 import { useDismiss } from "../../hooks/useDismiss";
+import { moneyText, NEARLY_FULL_AT } from "../../lib/context-usage";
 
 const COMPACT_NUMBER = new Intl.NumberFormat("en-US", { notation: "compact" });
-const WARN_AT = 80;
+const WARN_AT = NEARLY_FULL_AT;
 const FULL_AT = 95;
 
 function toneFor(percent: number): string {
@@ -41,15 +42,6 @@ function Ring({ percent }: { percent: number }) {
 
 const tokens = (n: number) => `${n.toLocaleString("en-US")} tokens`;
 
-/** An amount in its currency, e.g. "$0.42"; an unknown currency code is written out. */
-function money({ amount, currency }: NonNullable<ContextUsage["cost"]>): string {
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
-}
-
 /** The ring and percentage, or the tokens in use when the window's size is unknown. */
 function Gauge({ used, size }: ContextUsage) {
   // Without the window's size there is no percentage: show the tokens in use.
@@ -79,8 +71,13 @@ function Gauge({ used, size }: ContextUsage) {
   );
 }
 
-/** How full the agent's context window is; a click shows the numbers behind it. */
-export function ContextMeter({ used, size, cost }: ContextUsage) {
+export interface ContextMeterProps extends ContextUsage {
+  /** Opens the inspector's Context tab; without it (a popout) a click shows the numbers in a popover. */
+  onOpen?: () => void;
+}
+
+/** How full the agent's context window is; a click opens the Context tab, or shows the numbers behind it. */
+export function ContextMeter({ used, size, cost, onOpen }: ContextMeterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   useDismiss(containerRef, isOpen, () => setIsOpen(false));
@@ -95,16 +92,16 @@ export function ContextMeter({ used, size, cost }: ContextUsage) {
           ["Left", tokens(Math.max(0, size - used))],
         ] as [string, string][])
       : []),
-    ...(cost ? ([["Session cost", money(cost)]] as [string, string][]) : []),
+    ...(cost ? ([["Session cost", moneyText(cost)]] as [string, string][]) : []),
   ];
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        aria-label="Context details"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
+        aria-label={onOpen ? "Open the context panel" : "Context details"}
+        aria-expanded={onOpen ? undefined : isOpen}
+        onClick={() => (onOpen ? onOpen() : setIsOpen((open) => !open))}
         className="mr-1.5 rounded px-1 py-0.5 text-caption text-fg-subtle hover:bg-surface-hover focus-ring"
       >
         <Gauge used={used} size={size} />

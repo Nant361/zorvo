@@ -1,0 +1,189 @@
+{
+  "_note": "Recorded from Qwen Code 0.27.2 over a plain --acp launch (qwen/status/session/context_usage, detail: true) before any prompt. Paths and skill names are replaced; the skill list is cut from 398 entries to 8.",
+  "answer": {
+    "v": 1,
+    "sessionId": "26a0901f-27b8-41ee-8ab9-81eea5c12fa7",
+    "workspaceCwd": "/Users/someone/project",
+    "workspaceRoot": "/Users/someone/project",
+    "usage": {
+      "modelName": "qwen4-max",
+      "totalTokens": 0,
+      "contextWindowSize": 1000000,
+      "breakdown": {
+        "systemPrompt": 4494,
+        "builtinTools": 9352,
+        "mcpTools": 0,
+        "instructionFiles": 7006,
+        "memoryFiles": 3566,
+        "skills": 42331,
+        "startupContext": 1104,
+        "messages": 0,
+        "cachedTokens": 0,
+        "freeSpace": 782147,
+        "autocompactBuffer": 150000,
+        "thresholds": {
+          "warn": 830000,
+          "auto": 850000,
+          "hard": 977000,
+          "effectiveWindow": 980000
+        },
+        "currentTier": "safe"
+      },
+      "builtinTools": [
+        {
+          "name": "ask_user_question",
+          "tokens": 751
+        },
+        {
+          "name": "edit",
+          "tokens": 600
+        },
+        {
+          "name": "enter_plan_mode",
+          "tokens": 343
+        },
+        {
+          "name": "exit_plan_mode",
+          "tokens": 592
+        },
+        {
+          "name": "glob",
+          "tokens": 190
+        },
+        {
+          "name": "grep_search",
+          "tokens": 284
+        },
+        {
+          "name": "notebook_edit",
+          "tokens": 289
+        },
+        {
+          "name": "read_file",
+          "tokens": 762
+        },
+        {
+          "name": "run_shell_command",
+          "tokens": 1372
+        },
+        {
+          "name": "task_create",
+          "tokens": 158
+        },
+        {
+          "name": "task_list",
+          "tokens": 115
+        },
+        {
+          "name": "task_update",
+          "tokens": 305
+        },
+        {
+          "name": "team_create",
+          "tokens": 1910
+        },
+        {
+          "name": "team_delete",
+          "tokens": 62
+        },
+        {
+          "name": "team_plan_approval",
+          "tokens": 146
+        },
+        {
+          "name": "todo_write",
+          "tokens": 475
+        },
+        {
+          "name": "tool_call",
+          "tokens": 148
+        },
+        {
+          "name": "tool_search",
+          "tokens": 394
+        },
+        {
+          "name": "write_file",
+          "tokens": 458
+        }
+      ],
+      "mcpTools": [],
+      "instructionFiles": [
+        {
+          "path": "~/.qwen/QWEN.md",
+          "tokens": 808,
+          "absolutePath": "/Users/someone/.qwen/QWEN.md"
+        },
+        {
+          "path": "QWEN.md",
+          "tokens": 14,
+          "absolutePath": "/Users/someone/project/QWEN.md"
+        },
+        {
+          "path": "~/.qwen/AGENTS.md",
+          "tokens": 3348,
+          "absolutePath": "/Users/someone/.qwen/AGENTS.md"
+        },
+        {
+          "path": "Extension: example \u00b7 QWEN.md",
+          "tokens": 2625
+        },
+        {
+          "path": "~/.qwen/output-language.md",
+          "tokens": 211
+        }
+      ],
+      "memoryFiles": [
+        {
+          "path": "auto memory",
+          "tokens": 3566
+        }
+      ],
+      "skills": [
+        {
+          "name": "accessibility",
+          "tokens": 113,
+          "loaded": false
+        },
+        {
+          "name": "code-review",
+          "tokens": 58,
+          "loaded": false
+        },
+        {
+          "name": "debugging",
+          "tokens": 148,
+          "loaded": false
+        },
+        {
+          "name": "frontend-design",
+          "tokens": 94,
+          "loaded": false
+        },
+        {
+          "name": "git-workflow",
+          "tokens": 99,
+          "loaded": false
+        },
+        {
+          "name": "testing",
+          "tokens": 84,
+          "loaded": false
+        },
+        {
+          "name": "writing-plans",
+          "tokens": 86,
+          "loaded": false
+        },
+        {
+          "name": "verification",
+          "tokens": 138,
+          "loaded": false
+        }
+      ],
+      "isEstimated": true,
+      "showDetails": true
+    },
+    "formattedText": "## Context Usage\n\n(cut for the fixture)"
+  }
+}

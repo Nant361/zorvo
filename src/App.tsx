@@ -135,6 +135,8 @@ import { useSessionFork } from "./hooks/useSessionFork";
 import { useSessionRewind } from "./hooks/useSessionRewind";
 import { useUnreadMarks } from "./hooks/useUnreadMarks";
 import { useAcpEngine, type AttentionReason, type FirstMessage } from "./hooks/session-engine/useAcpEngine";
+import { ContextPanel } from "./components/context/ContextPanel";
+import { compactCommandOf } from "./lib/context-usage";
 import type { AcpConfigOption } from "./hooks/useAcpSessions";
 import { attentionBody, notifyIfAway } from "./lib/notify";
 import { pickFiles } from "./lib/file-picker";
@@ -736,12 +738,14 @@ export default function App() {
   });
   const overviewCollapse = useOverviewCollapse();
   const taskTabs = useSessionTaskTabs({ sessionId: activeSessionId ?? null, transcripts, tasks: backgroundTasks.tasks });
+  const activeInfo = activeSession ? acp.info[activeSession.id] : undefined;
   const inspectorTabs = offeredTabs({
     hasFolder: Boolean(filesFolder),
     isRepository,
     hasSession: Boolean(activeSession),
     isPrivate: Boolean(activeSession?.privateMode),
     hasTaskTabs: taskTabs.tabs.length > 0,
+    hasUsage: Boolean(activeInfo?.usage),
   });
   const inspector = useInspector(filesFolder?.path, isRepository, turnsEnded, reportError, {
     isSidebarShown: !isSidebarHidden,
@@ -2137,6 +2141,7 @@ export default function App() {
                       aboveCardSlots={draftBlockerSlots}
                       chipsTarget={isNewSessionDraft && draftWorkspace ? draftChipsSlotElement : null}
                       contextUsage={isActiveRunning ? acp.info[activeSessionId]?.usage : undefined}
+                      onOpenContext={() => inspector.show("context")}
                       mentions={filesFolder ? { root: filesFolder.path, loadFiles: () => shell.loadWorkspaceFiles(filesFolder.path) } : undefined}
                       delegationAgents={delegationAgents}
                       onDelegationMentionChange={setDelegationMention}
@@ -2332,6 +2337,23 @@ export default function App() {
                       ? undefined
                       : (text) => composerRef.current?.insertText(text)
                   }
+                />
+              )}
+              {inspectorTab === "context" && activeSession && activeInfo?.usage && (
+                <ContextPanel
+                  key={activeSession.id}
+                  sessionId={activeSession.id}
+                  agentId={activeSession.profileId}
+                  agentName={activeAgent?.name ?? "The agent"}
+                  cwd={activeSession.cwd}
+                  usage={activeInfo.usage}
+                  turnUsage={activeInfo.turnUsage ?? []}
+                  turnsEnded={activeInfo.turnsEnded ?? 0}
+                  messages={currentMessages}
+                  // An ended session's agent is gone: the command would go to a closed connection.
+                  compactCommand={isActiveRunning ? compactCommandOf(activeInfo.commands) : null}
+                  isBusy={acp.isBusy(activeSession.id)}
+                  onCompact={(command) => sendFromComposer(activeSession.id, { text: `/${command}` })}
                 />
               )}
               {inspectorTab === "artifacts" && activeSession && (

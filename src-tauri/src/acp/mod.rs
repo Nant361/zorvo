@@ -6,6 +6,7 @@
 
 pub mod commands;
 pub mod connection;
+pub mod context_usage;
 pub mod elicitation;
 pub mod jsonrpc;
 pub mod key_env;

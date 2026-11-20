@@ -461,6 +461,36 @@ fn a_model_the_agent_refuses_is_an_error() {
 }
 
 #[test]
+fn reads_what_fills_the_window_from_an_agent_that_reports_it() {
+    let (manager, _rx) = manager();
+    let launch = with_env(fake_agent(), "FAKE_ACP_CONTEXT_USAGE", "1");
+    manager.start("s-1", &cwd(), &launch, json!([])).unwrap();
+
+    let breakdown = manager.context_usage("s-1").expect("breakdown");
+
+    assert_eq!(breakdown.window_size, 1_000_000);
+    let skills = breakdown
+        .categories
+        .iter()
+        .find(|c| c.key == "skills")
+        .unwrap();
+    assert_eq!(skills.tokens, 42_331);
+    manager.stop("s-1");
+}
+
+#[test]
+fn an_agent_without_the_breakdown_is_an_error() {
+    let (manager, _rx) = manager();
+    manager
+        .start("s-1", &cwd(), &fake_agent(), json!([]))
+        .unwrap();
+
+    assert!(manager.context_usage("s-1").is_err());
+    assert!(manager.context_usage("nope").is_err());
+    manager.stop("s-1");
+}
+
+#[test]
 fn probe_reports_the_models_an_agent_offers() {
     let (manager, _rx) = manager();
     let launch = with_env(fake_agent(), "FAKE_ACP_MODELS", "1");

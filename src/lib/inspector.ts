@@ -1,5 +1,5 @@
 /** The inspector's tabs, in the order they show. */
-export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "tasks" | "terminal" | "private";
+export type InspectorTab = "changes" | "activity" | "files" | "artifacts" | "context" | "tasks" | "terminal" | "private";
 
 export const INSPECTOR_WIDTH = { min: 320, max: 720, initial: 380, wide: 560, step: 16 } as const;
 
@@ -62,8 +62,9 @@ export function minInspectorWidth(tab: InspectorTab, isViewingFile = false): num
 
 /**
  * The tabs that apply: Changes in a repository, Activity with a session, Files and Terminal with a folder,
- * Output (the `artifacts` tab) for every session, Tasks while the session has a task tab open
- * (both between Files and Terminal), and Private only while a private session is on screen.
+ * Output (the `artifacts` tab) for every session, Context while the agent has reported its window's use,
+ * Tasks while the session has a task tab open (all three between Files and Terminal), and Private only
+ * while a private session is on screen.
  */
 export function offeredTabs(on: {
   hasFolder: boolean;
@@ -72,6 +73,8 @@ export function offeredTabs(on: {
   isPrivate?: boolean;
   /** A task tab is open for the session on screen: only then is there a Tasks tab. */
   hasTaskTabs?: boolean;
+  /** The agent reported how full its window is: only then is there a Context tab. */
+  hasUsage?: boolean;
 }): InspectorTab[] {
   const tabs: InspectorTab[] = [];
   if (on.hasFolder && on.isRepository) tabs.push("changes");
@@ -79,6 +82,7 @@ export function offeredTabs(on: {
   if (on.hasFolder) tabs.push("files");
   // Output is always offered for a session: empty, it says what will show there.
   if (on.hasSession) tabs.push("artifacts");
+  if (on.hasSession && on.hasUsage) tabs.push("context");
   if (on.hasSession && on.hasTaskTabs) tabs.push("tasks");
   if (on.hasFolder) tabs.push("terminal");
   if (on.hasSession && on.isPrivate) tabs.push("private");
