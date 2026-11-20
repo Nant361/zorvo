@@ -1,7 +1,9 @@
 # Browser: a native view beside the chat
 
 Date: 2026-11-20. Status: design and spike evidence, waiting for review.
-**Not a shipped browser.** The permissions gate and OS coverage remain open.
+The public per-view restriction passes the permission spike on macOS 27.0.1.
+Its compatibility costs and the supported OS matrix need review before the
+engine implementation.
 
 This replaces the CEF implementation in PR #256, following the
 [review](https://github.com/zakyirsyaad/zorvo/pull/256#pullrequestreview-5984396049)
@@ -41,19 +43,34 @@ macOS 27.2 SDK, on 2026-11-20. Other OS versions have not been tested.
 | Session cookie store | Pass. Tabs A1/A2 share a non-persistent store and a server-set HttpOnly cookie. Session B at the same origin receives none. Setting B's cookie does not change A. | Rust integration; storage, service worker and disposal checks. |
 | Script the page cannot replace | Pass. A named `WKContentWorld` keeps the command dispatcher apart from a page's forged same-name global. An injection-shaped fill value remains literal data. No Tauri script or handler is installed. | Hostile frames, redirects and navigation-generation tests. DOM remains shared and page controlled. |
 | Hidden tab remains usable | Pass for navigation, evaluation and filling while `isHidden`. | Integrated Inspector hide/show, menu occlusion, screenshots and process termination. Timers need not run at foreground frequency. |
-| Camera and microphone | Pass. Explicit `WKUIDelegate` denials produce `NotAllowedError`; callbacks ran. | Same checks on every supported OS and nested frames. Do not rely on OS consent being absent. |
-| Location | Pass on this Mac with the public geolocation delegate. That delegate is available from macOS 27, not all older targets. | A reviewed denial strategy and real tests on the minimum supported OS. The harness skips the request there and reports unverified. |
-| Screen capture | **Public-delegate-only gate fails.** A trusted native click left the request pending without an automatic denial. A separate diagnostic SPI run denies it with `NotAllowedError` and a native callback. | Decide whether private WebKit selectors are acceptable and prove behavior on supported WebKit versions, including denial before any prompt. No production SPI decision is implied by this spike. |
+| Camera and microphone | Default delegates deny both with `NotAllowedError`. Restricted mode removes capture APIs in the secure top document and both same-origin and cross-origin iframes. | Same checks on every supported OS. |
+| Location | The public macOS 27 delegate explicitly denies location in the document and both iframe origins, including restricted mode. | A reviewed denial strategy and runtime tests below macOS 27. The harness skips that request there and reports unverified. |
+| Screen capture | Default public delegates leave a trusted request pending. The public per-view restriction removes the capture API in the secure document and both fresh iframe origins, passing this spike on the tested Mac. | Review the restriction's broader compatibility/performance effects and prove behavior on supported OS versions. |
 | Native scrolling | Functional check passes: native input moved the page. | Trackpad/momentum, CPU/RAM and chat-stream comparisons below. A short RAF sample is not a performance certification. |
 
-The public camera/microphone delegate is **not** a screen-capture deny-all.
-WebKit documents the distinction in its
+WebKit handles screen capture separately from camera/microphone permission,
+as described in its
 [display-capture delegate change](https://results.webkit.org/commit?id=279566%40main&repository_id=webkit).
 The screen deny callback tested here lives in
 [`WKUIDelegatePrivate.h`](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/API/Cocoa/WKUIDelegatePrivate.h),
-not the public SDK. Both known selector shapes are confined to the optional
-`--screen-spi` diagnostic. A passing diagnostic on one Mac does not establish
-compatibility or justify shipping it.
+outside the public SDK. Both selector shapes are confined to the optional
+`--screen-spi` diagnostic. The restricted run does not enable them.
+
+The new public-only option sets
+[`WKWebpagePreferences.isLockdownModeEnabled`](https://developer.apple.com/documentation/webkit/wkwebpagepreferences/islockdownmodeenabled)
+before constructing each browser view. It is available from macOS 13. This
+affects the view's web compatibility and JavaScript performance as well as
+capture APIs. The spike confirms that JavaScript works and the context is
+secure before testing API absence. It also repeats session sharing/isolation,
+the isolated command world and hidden-tab commands with the restriction on.
+The option leaves the system setting alone.
+
+The browser page and chat must use separate child views. Restricting a view
+that also renders the chat changes the chat workload and fails to represent
+the proposed application architecture. The renderer fixture provides both
+layouts so this difference can be measured. Its test-only bridge accepts only
+the local page's begin/end workload commands and belongs exclusively to that
+fixture.
 
 **Implementation remains gated.** Do not replace these checks with JavaScript
 stubs: a page can recover native APIs from a fresh frame or realm. Do not
@@ -154,15 +171,34 @@ several times in both orders:
 4. Tab/session switching, repeated open/close, and a page that loops or crashes.
    Check that the main UI remains responsive and resources are reclaimed.
 
-Set the acceptance thresholds with the baseline measurement before claiming
-parity. The small RAF samples in this spike only establish that native scroll
-reaches the page; they provide no CPU/RAM comparison or user-latency result.
+The renderer workload and validation commands are documented in
+[`experiments/browser-wk/scroll/`](../../../experiments/browser-wk/scroll/README.md).
+It uses Zorvo's actual `ChatCanvas` and ACP update reducer, with local chunks
+every 50 ms and four 20-second rounds. The separate-view mode restricts only
+the page and renders chat in its own unrestricted view. Source and compiled
+asset hashes accompany the measurements. The summary tool rejects incomplete
+or hidden runs and verifies scrolling and the rendered chat workload.
+
+These measurements describe scripted `requestAnimationFrame` scroll and
+renderer scheduling. Native trackpad latency, momentum, full ACP integration
+and full-app CPU/RAM still require the integrated checks above. An exploratory
+native-input attempt captured only three wheel events and supplies no
+continuous-scroll benchmark. CPU samples from different process groups and
+time windows are excluded from the comparison.
+
+Set acceptance thresholds from a matching native-input baseline before
+claiming parity with OpenCode. The first styled renderer measurements are in
+[the recorded results](../../../experiments/browser-wk/results/2026-11-20-scroll.json).
+OpenCode 2.3.2 recorded p95 frame intervals of 9.2–9.3 ms. The default WK host
+recorded 19 ms, and the restricted page with a separate chat view recorded
+18 ms in both idle and streaming rounds. These values describe the tested
+layouts and scheduling. They supply no native scroll latency measurement.
 
 ## Review and delivery order
 
 1. Independent Clippy and transport PRs (#257, #258).
-2. This design plus reproducible spikes. Resolve the screen/location strategy,
-   OS matrix and performance criteria in review before engine work.
+2. This design plus reproducible spikes. Review the public per-view restriction,
+   location coverage, OS matrix and performance criteria before engine work.
 3. Engine and native view with the integrated lifetime/permission-denial tests.
 4. Agent operations and session grant with denial, cancellation, stale-ref,
    cross-session and capture-cleanup tests.

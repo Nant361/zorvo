@@ -1,0 +1,120 @@
+{
+  "os": "Version 27.0.1 (Build 26A434)",
+  "results": [
+    {
+      "evidence": {
+        "otherSession": "{\"cookie\":\"\"}",
+        "sameSession": "{\"cookie\":\"session=alpha\"}",
+        "storeA": "alpha",
+        "storeB": ""
+      },
+      "gate": "cookies per session",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "storeA": "alpha",
+        "storeB": "beta"
+      },
+      "gate": "no cookie overwrite across sessions",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "afterLiteralArgument": {
+          "count": 2,
+          "input": "'); globalThis.__zorvoProbe = null; //",
+          "source": "trusted",
+          "title": "WK browser spike"
+        },
+        "page": "forged",
+        "trusted": {
+          "count": 1,
+          "input": "original",
+          "source": "trusted",
+          "title": "WK browser spike"
+        }
+      },
+      "gate": "isolated content world",
+      "status": "pass"
+    },
+    {
+      "evidence": "No Tauri IPC script or page-world message handler installed",
+      "gate": "no app bridge in page world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "count": 1,
+        "input": "filled while hidden",
+        "source": "trusted",
+        "title": "WK browser spike"
+      },
+      "gate": "hidden tab works",
+      "status": "pass"
+    },
+    {
+      "evidence": [
+        {
+          "cameraOrMicrophone": "undefined",
+          "legacy": "undefined",
+          "location": "object",
+          "screen": "undefined",
+          "secure": true
+        },
+        {
+          "cameraOrMicrophone": "undefined",
+          "legacy": "undefined",
+          "location": "object",
+          "screen": "undefined",
+          "secure": true
+        }
+      ],
+      "gate": "restricted capture in top document and subframe",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "result": "1"
+      },
+      "gate": "location denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "result": "1"
+      },
+      "gate": "location denied in frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "undefined",
+        "legacy": "undefined",
+        "origin": "http://localhost:61177",
+        "screen": "undefined",
+        "secure": true
+      },
+      "gate": "restricted capture in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "result": "1"
+      },
+      "gate": "location denied in cross-origin frame",
+      "status": "pass"
+    }
+  ],
+  "harness": {
+    "collectedAt": "2026-11-20T00:26:28.442Z",
+    "arch": "arm64",
+    "sourceSha256": "8977b6e48f1acf3b4c38a173557e95870287fa01bc475340298bf9f95e4962bb",
+    "fixtureSha256": "62ca25ceb24206d690e90f4e126c9b25dd27a3d0a8bf780e70850fd680009d96",
+    "screenSPI": false,
+    "restricted": true
+  }
+}

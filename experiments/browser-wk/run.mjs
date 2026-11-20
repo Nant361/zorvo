@@ -17,7 +17,8 @@ const options={signal:controller.signal,timeout:180_000,maxBuffer:2*1024*1024};
 let fixture;
 try {
   if(process.platform!=='darwin')throw new Error('This spike requires macOS and Xcode.');
-  if(process.argv.slice(2).some(arg=>arg!=='--screen-spi'))throw new Error('Usage: node experiments/browser-wk/run.mjs [--screen-spi]');
+  const flags = process.argv.slice(2);
+  if(flags.length > 1 || flags.some(arg => !['--screen-spi', '--restricted'].includes(arg)))throw new Error('Usage: node experiments/browser-wk/run.mjs [--screen-spi | --restricted]');
   const out=await mkdtemp(path.join(os.tmpdir(),'zorvo-browser-wk-'));
   const app=path.join(out,'Zorvo Browser Spike.app');
   const bin=path.join(app,'Contents','MacOS');
@@ -28,8 +29,13 @@ try {
   await run('codesign',['--force','--sign','-',app],options);
   fixture=await startFixture();
   const result=path.join(out,'results.json');
-  console.log(`Results: ${result}\nClick Request screen. Cancel any screen picker or OS prompt; do not grant access. Scroll the page, then click Finish checks.`);
-  const flags=process.argv.includes('--screen-spi')?['--screen-spi']:[];
+  console.log(`Results: ${result}`);
+  if(flags.includes('--restricted')) {
+    console.log('The restricted permission checks run automatically.');
+  } else {
+    console.log('Click Request screen. Cancel any screen picker or OS prompt; do not grant access. Scroll the page, then click Finish checks.');
+  }
+
   const child=await run(path.join(bin,'probe'),[String(fixture.port),result,...flags],options);
   if(child.stderr)process.stderr.write(child.stderr);
   const report=JSON.parse(await readFile(result,'utf8'));
@@ -38,7 +44,8 @@ try {
     arch:process.arch,
     sourceSha256:createHash('sha256').update(await readFile(path.join(dir,'Probe.swift'))).digest('hex'),
     fixtureSha256:createHash('sha256').update(await readFile(path.join(dir,'fixture.mjs'))).digest('hex'),
-    screenSPI:flags.length>0,
+    screenSPI:flags.includes("--screen-spi"),
+    restricted:flags.includes("--restricted"),
   };
   await writeFile(result,JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));

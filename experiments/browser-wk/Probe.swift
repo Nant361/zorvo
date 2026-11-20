@@ -8,7 +8,9 @@ struct ProbeFailure: Error, CustomStringConvertible {
 }
 
 @MainActor
-final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
+final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
+  WKScriptMessageHandler
+{
   var window: NSWindow!
   var tabs: [WKWebView] = []
   var results: [[String: Any]] = []
@@ -16,6 +18,7 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
   var locationDecisions = 0
   var displayDecisions = 0
   var didFinish = false
+  var childFrames: [(view: WKWebView, frame: WKFrameInfo)] = []
   let world = WKContentWorld.world(name: "zorvo.browser.spike")
   let args = CommandLine.arguments
   let trusted = """
@@ -66,6 +69,14 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
   func makeTab(_ store: WKWebsiteDataStore) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = store
+    if args.contains("--restricted"), #available(macOS 13.0, *) {
+      config.defaultWebpagePreferences.isLockdownModeEnabled = true
+      config.userContentController.add(self, contentWorld: world, name: "probeFrame")
+      config.userContentController.addUserScript(
+        WKUserScript(
+          source: "window.webkit.messageHandlers.probeFrame.postMessage(true)",
+          injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: world))
+    }
     config.userContentController.addUserScript(
       WKUserScript(
         source: trusted, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: world))
@@ -80,10 +91,12 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     return tab
   }
 
-  func js(_ tab: WKWebView, _ source: String, in context: WKContentWorld? = nil) async throws -> Any
-  {
+  func js(
+    _ tab: WKWebView, _ source: String, in context: WKContentWorld? = nil,
+    frame: WKFrameInfo? = nil
+  ) async throws -> Any {
     try await withCheckedThrowingContinuation { continuation in
-      tab.evaluateJavaScript(source, in: nil, in: context ?? .page) {
+      tab.evaluateJavaScript(source, in: frame, in: context ?? .page) {
         continuation.resume(with: $0)
       }
     }
@@ -172,8 +185,8 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       "no app bridge in page world",
       (try await js(
         a1,
-        "[typeof window.__TAURI_INTERNALS__, typeof window.webkit?.messageHandlers?.zorvo].join(',')"
-      ) as? String) == "undefined,undefined",
+        "[typeof window.__TAURI_INTERNALS__, typeof window.webkit?.messageHandlers?.zorvo, typeof window.webkit?.messageHandlers?.probeFrame].join(',')"
+      ) as? String) == "undefined,undefined,undefined",
       "No Tauri IPC script or page-world message handler installed")
 
     try await load(a2, "/")
@@ -187,6 +200,10 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
     b.isHidden = true
     a1.isHidden = false
+    if args.contains("--restricted") {
+      try await checkRestrictedPermissions(a1)
+      return
+    }
     let camera = try await permission(
       a1, "camera",
       "navigator.mediaDevices.getUserMedia({video:true}).then(s=>{s.getTracks().forEach(t=>t.stop());permissionResults.camera='GRANTED'},e=>permissionResults.camera=e.name)"
@@ -256,6 +273,125 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
   }
 
+  func checkRestrictedPermissions(_ tab: WKWebView) async throws {
+    guard #available(macOS 13.0, *) else {
+      throw ProbeFailure("The per-view restriction requires macOS 13 or newer.")
+    }
+    let body = """
+      const frame = document.createElement("iframe");
+      frame.src = "/?nested";
+      const loaded = new Promise(resolve => frame.onload = resolve);
+      document.body.append(frame);
+      await loaded;
+      return [window, frame.contentWindow].map(w => ({
+        secure: w.isSecureContext,
+        cameraOrMicrophone: typeof w.navigator.mediaDevices?.getUserMedia,
+        screen: typeof w.navigator.mediaDevices?.getDisplayMedia,
+        legacy: typeof w.navigator.webkitGetUserMedia,
+        location: typeof w.navigator.geolocation
+      }));
+      """
+    let surfaces: [[String: Any]] = try await withCheckedThrowingContinuation { continuation in
+      tab.callAsyncJavaScript(body, arguments: [:], in: nil, in: .page) { result in
+        continuation.resume(
+          with: result.flatMap { value in
+            guard let frames = value as? [[String: Any]] else {
+              return .failure(ProbeFailure("Missing frame permission observations"))
+            }
+            return .success(frames)
+          })
+      }
+    }
+    let protected =
+      surfaces.count == 2
+      && surfaces.allSatisfy {
+        $0["secure"] as? Bool == true && $0["cameraOrMicrophone"] as? String == "undefined"
+          && $0["screen"] as? String == "undefined" && $0["legacy"] as? String == "undefined"
+      }
+    record("restricted capture in top document and subframe", protected, surfaces)
+    guard #available(macOS 27.0, *) else {
+      record("geolocation denied", nil, "This runtime has no public geolocation deny delegate.")
+      return
+    }
+    for (label, target) in [
+      ("document", "window"), ("frame", "document.querySelector('iframe').contentWindow"),
+    ] {
+      let before = locationDecisions
+      let result = try await permission(
+        tab, "location",
+        "\(target).navigator.geolocation.getCurrentPosition(()=>permissionResults.location='GRANTED',e=>permissionResults.location=String(e.code))"
+      )
+      record(
+        "location denied in " + label, result == "1" && locationDecisions > before,
+        ["result": result, "callbacks": locationDecisions - before])
+    }
+    try await checkCrossOriginFrame(tab)
+  }
+
+  func userContentController(
+    _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
+  ) {
+    if !message.frameInfo.isMainFrame, let view = message.webView {
+      childFrames.append((view, message.frameInfo))
+    }
+  }
+
+  func checkCrossOriginFrame(_ tab: WKWebView) async throws {
+    _ = try await js(
+      tab,
+      """
+      const cross = document.createElement("iframe");
+      cross.allow = "geolocation *; camera *; microphone *; display-capture *";
+      cross.src = "http://localhost:\(args[1])/?cross";
+      document.body.append(cross);
+      true;
+      """)
+    var target: WKFrameInfo?
+    for _ in 0..<200 {
+      target =
+        childFrames.first {
+          $0.view === tab && $0.frame.securityOrigin.host == "localhost"
+        }?.frame
+      if target != nil { break }
+      try await pause(50)
+    }
+    guard let target else { throw ProbeFailure("The cross-origin frame did not load.") }
+    let surface =
+      try await js(
+        tab,
+        """
+        ({secure: isSecureContext, origin: location.origin,
+          cameraOrMicrophone: typeof navigator.mediaDevices?.getUserMedia,
+          screen: typeof navigator.mediaDevices?.getDisplayMedia,
+          legacy: typeof navigator.webkitGetUserMedia})
+        """, frame: target) as? [String: Any] ?? [:]
+    record(
+      "restricted capture in cross-origin frame",
+      surface["secure"] as? Bool == true
+        && surface["origin"] as? String == "http://localhost:\(args[1])"
+        && surface["cameraOrMicrophone"] as? String == "undefined"
+        && surface["screen"] as? String == "undefined"
+        && surface["legacy"] as? String == "undefined", surface)
+    let before = locationDecisions
+    let outcome: Any = try await withCheckedThrowingContinuation { continuation in
+      tab.callAsyncJavaScript(
+        """
+        return await new Promise(resolve => {
+          const deadline = setTimeout(() => resolve("timeout"), 3000);
+          navigator.geolocation.getCurrentPosition(
+            () => { clearTimeout(deadline); resolve("GRANTED"); },
+            error => { clearTimeout(deadline); resolve(String(error.code)); },
+            {timeout: 2000});
+        });
+        """, arguments: [:], in: target, in: .page
+      ) { continuation.resume(with: $0) }
+    }
+    record(
+      "location denied in cross-origin frame",
+      outcome as? String == "1" && locationDecisions > before,
+      ["result": outcome, "callbacks": locationDecisions - before])
+  }
+
   @objc func finishChecks(_ sender: NSButton) { didFinish = true }
 
   override func responds(to selector: Selector!) -> Bool {
@@ -312,9 +448,20 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 @main
 struct Launcher {
   @MainActor static func main() {
-    guard CommandLine.arguments.count >= 3 else {
-      fputs("Usage: probe <fixture port> <result.json> [--screen-spi]\n", stderr)
-      return
+    let arguments = CommandLine.arguments
+    let flags = Array(arguments.dropFirst(3))
+    guard [3, 4].contains(arguments.count), let port = Int(arguments[1]),
+      (1...65535).contains(port),
+      flags.allSatisfy({ ["--screen-spi", "--restricted"].contains($0) })
+    else {
+      fputs("Usage: probe <fixture port> <result.json> [--screen-spi | --restricted]\n", stderr)
+      exit(1)
+    }
+    if flags.contains("--restricted") {
+      guard #available(macOS 13.0, *) else {
+        fputs("The per-view restriction requires macOS 13 or newer.\n", stderr)
+        exit(1)
+      }
     }
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
