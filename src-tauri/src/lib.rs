@@ -8,6 +8,7 @@ pub mod attachments;
 pub mod background_processes;
 pub mod branches;
 pub mod changes;
+pub mod computer_use;
 pub mod data_migration;
 pub mod diff_stats;
 pub mod env_resolver;
