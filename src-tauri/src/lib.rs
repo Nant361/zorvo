@@ -9,6 +9,7 @@ pub mod background_processes;
 pub mod branches;
 pub mod browser;
 pub mod browser_commands;
+pub mod browser_debug;
 pub mod changes;
 pub mod computer_use;
 pub mod data_migration;
@@ -230,6 +231,7 @@ fn end_orphaned_sessions(
     browser::close_all(&app);
     #[cfg(all(target_os = "macos", debug_assertions))]
     browser::frontend_ready(&app);
+    browser_debug::close(&app, None);
     let terminals = pty.session_ids();
     // Agent sessions are taken off the routes here, not just listed: the new UI
     // reopens a saved session under the same app session id, and that one
@@ -307,7 +309,9 @@ fn delete_transcript(
 ) -> Result<(), String> {
     browser_commands::forget(&app, &session_id);
     browser::close_session(&app, session_id.clone());
-    store.delete_transcript(&session_id)
+    store.delete_transcript(&session_id)?;
+    browser_debug::close(&app, Some(&session_id));
+    Ok(())
 }
 
 /// Writes a fork handoff document under the app data dir and returns its absolute path.
@@ -458,6 +462,7 @@ pub fn run() {
                     tools.forget(session_id);
                 }
                 browser_commands::forget(&app, session_id);
+                browser_debug::close(&app, Some(session_id));
             }
             let _ = app.emit(ACP_EVENT, event_payload(&event));
         }
@@ -486,6 +491,7 @@ pub fn run() {
         .manage(manager)
         .manage(acp_manager)
         .manage(app_update::PendingAppUpdate::default())
+        .manage(browser_debug::DebugBrowsers::default())
         .setup(move |app| {
             if let Ok(mut guard) = app_handle_holder.lock() {
                 *guard = Some(app.handle().clone());
@@ -541,6 +547,9 @@ pub fn run() {
                 computer_use_dir,
                 computer_use_on,
             )));
+            // This proposal exposes no tools or IPC commands. Sweep only stale,
+            // owned Chromium worker folders from an earlier development run.
+            browser_debug::sweep(app.handle());
             app.manage(Arc::new(artifacts::store::ArtifactStore::new(
                 app.state::<store::AppStore>().root().join("artifacts"),
             )));
@@ -750,6 +759,7 @@ pub fn run() {
             // Workspace shells go with their whole process tree, so a `nohup`ed
             // job they started does not outlive Zorvo; other sessions are only killed.
             if let tauri::RunEvent::Exit = event {
+                browser_debug::close(app, None);
                 let pty = app.state::<PtySessionManager>();
                 workspace_terminal::end_all_sessions(&pty);
                 app.state::<Arc<agent_tools::AgentTools>>().shutdown();
