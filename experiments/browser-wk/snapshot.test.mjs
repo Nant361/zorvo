@@ -3,7 +3,15 @@ import { mkdtemp, mkdir, readFile, realpath, writeFile, access, symlink, rm } fr
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { appName, launchServices, parseArguments, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
+import { appName, isPreparedSnapshot, launchServices, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
+
+test("only a snapshot that --clean can remove keeps its registration", () => {
+  assert.equal(isPreparedSnapshot(path.join(preparedRoot, "zorvo-browser-wk-abc123")), true);
+  assert.equal(isPreparedSnapshot(path.join(preparedRoot, "zorvo-browser-wk-abc123") + path.sep), true);
+  assert.equal(isPreparedSnapshot(path.join(os.tmpdir(), "zorvo-browser-wk-abc123")), false);
+  assert.equal(isPreparedSnapshot(path.join(preparedRoot, "nested", "zorvo-browser-wk-abc123")), false);
+  assert.equal(isPreparedSnapshot(preparedRoot), false);
+});
 
 test("direct and long-hidden runs can reuse one prepared signed binary", () => {
   const options = parseArguments(["--reuse", "/tmp/example", "--direct", "--long-hidden"]);

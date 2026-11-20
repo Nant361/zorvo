@@ -112,7 +112,6 @@ test("malformed report containers fail before an assessment is returned", () => 
 test("recorded reports validate and identify the source commit without pinning the checkout", async () => {
   const sources = ["Probe.swift", "HiddenProbe.swift", "Fixture.tsx", "fixture.mjs", "Info.plist", "run.mjs", "report.mjs"];
   const names = (await readdir(new URL("./results/", import.meta.url))).filter(name => name.endsWith(".json") && !name.includes("scroll"));
-  assert.ok(names.length >= 4);
   const expected = {
     "2026-11-20-public.json": ["zorvo", 1], "2026-11-20-usage-strings.json": ["usage-strings", 1],
     "2026-11-20-camera-only.json": ["camera-only", 1], "2026-11-20-microphone-only.json": ["microphone-only", 1],

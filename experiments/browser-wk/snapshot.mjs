@@ -36,6 +36,12 @@ export function parseArguments(args) {
   return options;
 }
 
+// --clean removes only a snapshot directly below the prepared root, so only
+// that kind may keep its LaunchServices registration between runs.
+export function isPreparedSnapshot(directory, root = preparedRoot) {
+  return path.dirname(path.resolve(directory)) === root;
+}
+
 export async function unregisterApplication(app, execute) {
   try {
     await execute(launchServices, ["-u", app], { timeout: 10_000 });

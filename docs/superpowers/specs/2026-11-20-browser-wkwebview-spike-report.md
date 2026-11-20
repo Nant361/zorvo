@@ -176,8 +176,8 @@ all six image hashes against the native report.
 The chained 100 ms timeout advances about once a second when hidden or
 minimized. The fetch loop's 200 ms timer, scheduled after an awaited response,
 advances much more often: 19 completed fetches in each approximately
-five-second hidden/minimized interval in this recording. RAF stops in those
-two states. A wait based on self-rearming timer polling, awaited network
+five-second hidden/minimized interval in this recording. The later recordings
+below do not all repeat that ratio. RAF stops in those two states. A wait based on self-rearming timer polling, awaited network
 responses or animation frames therefore has three different progress
 patterns. Where the timer is scheduled may explain the difference, but this
 report does not establish WebKit's cause. The updated fixture also measures a
@@ -201,6 +201,22 @@ The short conditions record these changes after each click:
 | hidden | 5.19 | 3 | 3 | 0 | 5 |
 | covered | 5.25 | 4 | 4 | 5 | 6 |
 | minimized | 5.21 | 3 | 3 | 0 | 6 |
+
+These counts differ from the `f09ca7a3` recording above. For the hidden,
+covered and minimized conditions, in that order, the four recordings give
+these chained-timeout ticks and completed fetches in about five seconds:
+
+| Recording | Timeout ticks | Fetch completions |
+| --- | --- | --- |
+| `f09ca7a3`, independent launch | 5, 8, 5 | 19, 19, 19 |
+| `16a6c47b`, independent launch | 5, 8, 5 | 19, 19, 18 |
+| `16a6c47b`, direct launch | 3, 5, 6 | 7, 7, 8 |
+| `16a6c47b`, long-hidden run | 3, 4, 3 | 5, 6, 6 |
+
+The last three rows are one signed binary. The fetch loop ran well ahead of
+the timers in two recordings and close to them in the other two, and what
+differed between those runs was not measured. A wait must not assume either
+rate. RAF stopped in the hidden and minimized conditions in all four.
 
 Two additional conditions leave the page alone for at least three minutes,
 without native page commands. Bounded page-side history supplies the trailing

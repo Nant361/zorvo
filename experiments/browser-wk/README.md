@@ -145,16 +145,18 @@ hashed in every report, with the source commit, architecture, deployment
 target, Node version and actual bundle plist. Collection requires committed
 probe sources. A reused binary retains its original `sourceCommit` and hashes;
 `collectorCommit` and `collectorSources` identify the runner used for that
-collection. LaunchServices resolution is a boolean and a snapshot-relative
+collection, and from this commit on the checkout's validator beside it. LaunchServices resolution is a boolean and a snapshot-relative
 two-component path; no collector home path is recorded.
 SIGINT/SIGTERM abort the launch and
 terminate only the recorded test PID after verifying its executable path.
 The runner has a three-minute launch deadline, or nine minutes for the
 long-hidden collection. Script replies have a five-second native deadline.
-Fixture connections and listeners close in `finally`. Every collection
-unregisters its app with LaunchServices, including failed and reused runs;
-`--prepare` alone keeps the registration for permission setup. Files remain
-available as evidence until explicitly cleaned.
+Fixture connections and listeners close in `finally`. A temporary collection
+unregisters its app with LaunchServices there, failed runs included, and so
+does a reuse of a directory outside the prepared root. A prepared snapshot
+keeps its registration through permission setup, every reuse and the
+revocation of its grants, until `--clean` removes it. Files remain available
+as evidence until explicitly cleaned.
 
 After exporting results and revoking any test grants, remove a prepared app:
 
