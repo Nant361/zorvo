@@ -38,6 +38,26 @@ describe("browser panel", () => {
     expect(invoke).toHaveBeenCalledWith("browser_execute", { sessionId: "s1", args: { operation: "tabs.open", engine: "webkit", url: "https://www.google.com/search?q=google" } }, undefined);
     expect(invoke.mock.calls.every(([command]) => command.startsWith("browser_") || command.startsWith("plugin:event"))).toBe(true);
   });
+  it("shows and closes the Chromium tab returned for the active session", async () => {
+    let opened = false;
+    const state = { ...empty, engine: "chromium", tabs: [{ id: "cdp1", url: "https://example.com/", title: "Debug example", loading: false, canGoBack: false, canGoForward: false }], activeTabId: "cdp1" };
+    const invoke = vi.spyOn(internals(), "invoke").mockImplementation(async (_command, input) => {
+      const args = (input as { args?: { operation: string; engine: string } })?.args;
+      if (args?.engine !== "chromium") return empty;
+      if (args.operation === "tabs.open") opened = true;
+      if (args.operation === "tabs.close") opened = false;
+      return opened ? state : { ...empty, engine: "chromium" };
+    });
+    render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Browser engine" }), { target: { value: "chromium" } });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("browser_execute", { sessionId: "s1", args: { operation: "tabs.list", engine: "chromium" } }, undefined));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "New browser tab" })); });
+    expect((await screen.findByRole("button", { name: "Debug example" })).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Chromium debugging uses a separate browser window.")).not.toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Close Debug example" })); });
+    expect(screen.queryByRole("button", { name: "Debug example" })).toBeNull();
+    expect(screen.getByText("Enter an address or search to open a page.")).not.toBeNull();
+  });
   it("uses the manual file approval receipt before transferring files", async () => {
     const execute = vi.fn().mockResolvedValue({ requiresFileApproval: { url: "https://example.com/upload", paths: ["/workspace/report.txt"], approvalId: "approval-1" } });
     const invoke = vi.spyOn(internals(), "invoke").mockResolvedValue({ sent: true });

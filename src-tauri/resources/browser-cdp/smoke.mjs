@@ -22,7 +22,7 @@ const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Browse
 <iframe title="Child frame" src="/frame"></iframe><div style="height:1800px"></div>
 <script>console.log('fixture console');fetch('/data',{headers:{'X-API-Key':'secret-key'}});window.samples=[];</script></html>`;
 const server = createServer((req,res) => {
-  if (req.url === '/data') { res.setHeader('Set-Cookie','secret-cookie=1'); res.setHeader('Content-Type','application/json'); res.end('{"fixture":true}'); }
+  if (req.url === '/data') { res.setHeader('Set-Cookie','secret-cookie=1; Secure; HttpOnly; SameSite=Strict'); res.setHeader('Content-Type','application/json'); res.end('{"fixture":true}'); }
   else if (req.url === '/frame') { res.setHeader('Content-Type','text/html'); res.end('<html lang="en"><title>Child</title><button>Child button</button></html>'); }
   else { res.setHeader('Content-Type','text/html'); res.end(html); }
 });

@@ -208,6 +208,14 @@ impl Drop for Worker {
     }
 }
 
+fn session_tab_list(mut value: Value, session: &str) -> Result<Value, String> {
+    let object = value
+        .as_object_mut()
+        .ok_or("The debug browser returned an invalid tab list.")?;
+    object.insert("sessionId".into(), Value::String(session.into()));
+    Ok(value)
+}
+
 pub async fn execute(
     app: AppHandle,
     session: String,
@@ -226,7 +234,10 @@ pub async fn execute(
                 Arc::clone(worker)
             } else {
                 if args["operation"] == "tabs.list" {
-                    return Ok(json!({"tabs":[],"activeTabId":null,"engine":"chromium"}));
+                    return session_tab_list(
+                        json!({"tabs":[],"activeTabId":null,"engine":"chromium"}),
+                        &session,
+                    );
                 }
                 if workers.len() >= 8 {
                     return Err("Close a debug browser session before opening another.".into());
@@ -257,7 +268,14 @@ pub async fn execute(
             object.remove("_zorvoGrant");
         }
         let closing_last = args["operation"] == "tabs.close";
-        let result = worker.execute(args);
+        let listing = args["operation"] == "tabs.list";
+        let result = worker.execute(args).and_then(|value| {
+            if listing {
+                session_tab_list(value, &session)
+            } else {
+                Ok(value)
+            }
+        });
         let idle = closing_last
             && result
                 .as_ref()
@@ -376,6 +394,26 @@ pub async fn browser_runtime_install(app: AppHandle) -> Result<Value, String> {
 mod tests {
     use super::*;
     #[test]
+    fn chromium_tab_lists_use_the_authoritative_session_for_ui_ownership() {
+        let tabs = json!([{"id":"t1","url":"https://example.com/","title":"Example", "loading":false,"canGoBack":false,"canGoForward":false}]);
+        let populated = session_tab_list(
+            json!({"tabs":tabs,"activeTabId":"t1","engine":"chromium","sessionId":"untrusted"}),
+            "owner",
+        )
+        .unwrap();
+        assert_eq!(populated["sessionId"], "owner");
+        assert_eq!(populated["tabs"], tabs);
+        assert_eq!(populated["activeTabId"], "t1");
+        let empty = session_tab_list(
+            json!({"tabs":[],"activeTabId":null,"engine":"chromium"}),
+            "owner",
+        )
+        .unwrap();
+        assert_eq!(empty["sessionId"], "owner");
+        assert_eq!(empty["tabs"], json!([]));
+        assert!(session_tab_list(Value::Null, "owner").is_err());
+    }
+    #[test]
     fn browser_processes_receive_no_login_credentials_or_node_injection_options() {
         let env = HashMap::from([
             ("PATH".into(), "/usr/bin".into()),
@@ -392,7 +430,7 @@ mod tests {
     fn an_exited_worker_leader_does_not_leave_its_owned_descendant_running() {
         let mut command = crate::spawn::command("/bin/sh");
         command
-            .args(["-c", "/usr/bin/sleep 30 & printf '%s\\n' \"$!\""])
+            .args(["-c", "/bin/sleep 30 & printf '%s\\n' \"$!\""])
             .current_dir(std::env::temp_dir())
             .process_group(0)
             .stdin(Stdio::piped())
@@ -406,6 +444,8 @@ mod tests {
             .unwrap();
         let descendant: i32 = line.trim().parse().unwrap();
         assert!(child.wait().unwrap().success());
+        // SAFETY: signal 0 checks the parsed child PID without dereferencing pointers.
+        assert_eq!(unsafe { libc::kill(descendant, 0) }, 0);
         let (_, replies) = mpsc::channel();
         let mut worker = Worker {
             child,
