@@ -70,10 +70,30 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     Task {
-      do { try await run() } catch { record("harness", false, String(describing: error)) }
+      if ProcessInfo.processInfo.environment["ZORVO_BROWSER_SPIKE_REQUEST_PERMISSIONS"] == "1" {
+        if !CGPreflightScreenCaptureAccess() {
+          _ = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+              continuation.resume(returning: CGRequestScreenCaptureAccess())
+            }
+          }
+        }
+        if usesCamera && usesMicrophone {
+          for type in [AVMediaType.video, AVMediaType.audio] {
+            _ = await withCheckedContinuation { continuation in
+              AVCaptureDevice.requestAccess(for: type) { continuation.resume(returning: $0) }
+            }
+          }
+        }
+      } else {
+        do { try await run() } catch { record("harness", false, String(describing: error)) }
+      }
       let output: [String: Any] = [
         "os": ProcessInfo.processInfo.operatingSystemVersionString,
         "mode": args[3],
+        "bundleIdentifier": Bundle.main.bundleIdentifier ?? "missing",
+        "registeredApplication": NSWorkspace.shared.urlForApplication(
+          withBundleIdentifier: Bundle.main.bundleIdentifier ?? "missing")?.path ?? "unresolved",
         "screenRecordingGranted": CGPreflightScreenCaptureAccess(),
         "mediaAuthorization": [
           "camera": self.authorizationName(.video), "microphone": self.authorizationName(.audio),

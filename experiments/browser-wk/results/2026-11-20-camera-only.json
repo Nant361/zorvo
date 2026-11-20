@@ -1,10 +1,12 @@
 {
+  "bundleIdentifier": "xyz.zorvo.browser-spike.camera-only.zorvo-browser-wk-7XNQs0",
   "mediaAuthorization": {
     "camera": "not determined",
     "microphone": "not determined"
   },
   "mode": "camera-only",
   "os": "Version 27.0.1 (Build 26A434)",
+  "registeredApplication": "unresolved",
   "results": [
     {
       "evidence": {
@@ -75,12 +77,12 @@
     {
       "evidence": {
         "cameraOrMicrophone": "function",
-        "documentHasFocus": false,
+        "documentHasFocus": true,
         "documentHidden": false,
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53757",
+        "origin": "http://127.0.0.1:54958",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -105,7 +107,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53757",
+        "origin": "http://127.0.0.1:54958",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -130,7 +132,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://localhost:53757",
+        "origin": "http://localhost:54958",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -154,24 +156,29 @@
     "status": "unverified"
   },
   "harness": {
-    "collectedAt": "2026-11-20T10:27:24.592Z",
+    "collectedAt": "2026-11-20T10:56:56.509Z",
+    "node": "v22.23.5",
+    "mode": "camera-only",
+    "identifier": "xyz.zorvo.browser-spike.camera-only.zorvo-browser-wk-7XNQs0",
     "arch": "arm64",
     "target": "arm64-apple-macosx12.0",
-    "node": "v22.23.5",
     "sources": {
-      "Probe.swift": "bb9d17c07805e4ef41a484cf5a8b00d8a00a77cdcd51e56fdbce6d2a20ff94a7",
+      "Probe.swift": "40260ed3d5efc4da3120905e13f7802a2e0a7caf49d199425a6000de2f4d29f3",
       "HiddenProbe.swift": "bca95d2e9ca5c852e82b3bbdfe005a92839448fc4487f03bbcaa59cbbab531da",
       "Fixture.tsx": "e45952e576b41995fa1eaeaadc293669416d9d951f35ab5b22e1865ede37f447",
       "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
-      "Info.plist": "edf827591f84308543bb149b9342f3617a83a44580742fe9f9b4596fb7d1b4fa",
-      "run.mjs": "faa63e6324ec4186d06322e7bf6e9bbe4ac56725997eb627cadd6e7bc041bf60",
+      "Info.plist": "7a8a948bd4d2913257630a2da02817d40cc346dcb94bbbba704080a5c692191c",
+      "run.mjs": "cef935e05db053ac6c19d9dfb49be2b97e891fc436447d056ad867e0cf467109",
       "report.mjs": "d2175d571acf7f84b352ac476b7bc089a52e7b30457026947bd5fabc1ca84e33",
       "fixture.bundle.js": "9490cecbbfe5a73752a0a878c864139c7d2d6289077c21d5873053cb6f538734"
     },
-    "bundleInfoSha256": "19a21dad5d9923ce30039a88f0b4beea54fb8298b4c631a982ac0ec6d6b5974a",
     "usageStrings": [
       "NSCameraUsageDescription"
     ],
+    "binarySha256": "2394ec837138c3ec3a099f2e74c03e31387f5e2faf346f5da2339d46bb822c47",
+    "bundleInfoSha256": "dc4ef03580126472b1acd352db070809b70c3d3fff6d2ebe8a04c7ec430bea6d",
+    "buildManifestSha256": "a807091066125cf3d2e690f6ea25ca38954fdf394aa33acd3c504e857e91e96e",
+    "reusedBinary": false,
     "launch": "LaunchServices via open -W -n"
   }
 }

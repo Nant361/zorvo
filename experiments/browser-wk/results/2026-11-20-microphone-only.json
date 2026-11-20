@@ -1,10 +1,12 @@
 {
+  "bundleIdentifier": "xyz.zorvo.browser-spike.microphone-only.zorvo-browser-wk-uY4DeG",
   "mediaAuthorization": {
     "camera": "not determined",
     "microphone": "not determined"
   },
   "mode": "microphone-only",
   "os": "Version 27.0.1 (Build 26A434)",
+  "registeredApplication": "unresolved",
   "results": [
     {
       "evidence": {
@@ -75,12 +77,12 @@
     {
       "evidence": {
         "cameraOrMicrophone": "function",
-        "documentHasFocus": false,
+        "documentHasFocus": true,
         "documentHidden": false,
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53762",
+        "origin": "http://127.0.0.1:54963",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -105,7 +107,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53762",
+        "origin": "http://127.0.0.1:54963",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -130,7 +132,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://localhost:53762",
+        "origin": "http://localhost:54963",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -154,24 +156,29 @@
     "status": "unverified"
   },
   "harness": {
-    "collectedAt": "2026-11-20T10:27:28.534Z",
+    "collectedAt": "2026-11-20T10:57:01.799Z",
+    "node": "v22.23.5",
+    "mode": "microphone-only",
+    "identifier": "xyz.zorvo.browser-spike.microphone-only.zorvo-browser-wk-uY4DeG",
     "arch": "arm64",
     "target": "arm64-apple-macosx12.0",
-    "node": "v22.23.5",
     "sources": {
-      "Probe.swift": "bb9d17c07805e4ef41a484cf5a8b00d8a00a77cdcd51e56fdbce6d2a20ff94a7",
+      "Probe.swift": "40260ed3d5efc4da3120905e13f7802a2e0a7caf49d199425a6000de2f4d29f3",
       "HiddenProbe.swift": "bca95d2e9ca5c852e82b3bbdfe005a92839448fc4487f03bbcaa59cbbab531da",
       "Fixture.tsx": "e45952e576b41995fa1eaeaadc293669416d9d951f35ab5b22e1865ede37f447",
       "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
-      "Info.plist": "edf827591f84308543bb149b9342f3617a83a44580742fe9f9b4596fb7d1b4fa",
-      "run.mjs": "faa63e6324ec4186d06322e7bf6e9bbe4ac56725997eb627cadd6e7bc041bf60",
+      "Info.plist": "7a8a948bd4d2913257630a2da02817d40cc346dcb94bbbba704080a5c692191c",
+      "run.mjs": "cef935e05db053ac6c19d9dfb49be2b97e891fc436447d056ad867e0cf467109",
       "report.mjs": "d2175d571acf7f84b352ac476b7bc089a52e7b30457026947bd5fabc1ca84e33",
       "fixture.bundle.js": "9490cecbbfe5a73752a0a878c864139c7d2d6289077c21d5873053cb6f538734"
     },
-    "bundleInfoSha256": "eb1778d900d0e6ab51dd19844fa106ca66c211ef6ecb8cc1f16103850eed7db6",
     "usageStrings": [
       "NSMicrophoneUsageDescription"
     ],
+    "binarySha256": "24d0f856075846b55a3bdb07693d7399b2f5c6987c91adfaeef7cb1e979cd075",
+    "bundleInfoSha256": "dda1511deac8ff543f40d661e1319c13b1be70f899f86792a425416b9cbd4cd1",
+    "buildManifestSha256": "69876433e9a73c4c0735d3226bb5e1d34598e4a58234fdb58a2774389ac9aeb4",
+    "reusedBinary": false,
     "launch": "LaunchServices via open -W -n"
   }
 }

@@ -1,10 +1,12 @@
 {
+  "bundleIdentifier": "xyz.zorvo.browser-spike.usage-strings.zorvo-browser-wk-aZ6KG4",
   "mediaAuthorization": {
-    "camera": "not determined",
-    "microphone": "not determined"
+    "camera": "authorized",
+    "microphone": "authorized"
   },
   "mode": "usage-strings",
   "os": "Version 27.0.1 (Build 26A434)",
+  "registeredApplication": "/Users/ridhorinanta/Library/Application Support/Zorvo Browser Spike/zorvo-browser-wk-aZ6KG4/Zorvo Browser Spike.app",
   "results": [
     {
       "evidence": {
@@ -70,17 +72,17 @@
     {
       "evidence": "Canonical spike 7 also requires the test app's own Screen Recording grant.",
       "gate": "screen recording grant precondition",
-      "status": "unverified"
+      "status": "pass"
     },
     {
       "evidence": {
         "cameraOrMicrophone": "function",
-        "documentHasFocus": false,
+        "documentHasFocus": true,
         "documentHidden": false,
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53743",
+        "origin": "http://127.0.0.1:55734",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -90,19 +92,19 @@
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "camera denied in document",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "microphone denied in document",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
@@ -121,7 +123,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://127.0.0.1:53743",
+        "origin": "http://127.0.0.1:55734",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -131,19 +133,19 @@
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "camera denied in same-origin frame",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "microphone denied in same-origin frame",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
@@ -162,7 +164,7 @@
         "dynamicJavaScript": 42,
         "legacy": "undefined",
         "mediaDevices": "object",
-        "origin": "http://localhost:53743",
+        "origin": "http://localhost:55734",
         "screen": "undefined",
         "secure": true,
         "wasm": "object"
@@ -172,19 +174,19 @@
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "camera denied in cross-origin frame",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
-        "callbacks": 0,
-        "result": "timeout"
+        "callbacks": 1,
+        "result": "NotAllowedError"
       },
       "gate": "microphone denied in cross-origin frame",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "evidence": {
@@ -197,37 +199,42 @@
     },
     {
       "evidence": {
-        "callbacks": 0
+        "callbacks": 6
       },
       "gate": "native media delegate denied",
-      "status": "fail"
+      "status": "pass"
     }
   ],
-  "screenRecordingGranted": false,
+  "screenRecordingGranted": true,
   "assessment": {
     "scope": "Capture hardening with camera and microphone usage declarations",
-    "status": "fail"
+    "status": "pass"
   },
   "harness": {
-    "collectedAt": "2026-11-20T10:27:20.728Z",
+    "collectedAt": "2026-11-20T11:13:51.173Z",
+    "node": "v22.23.5",
+    "mode": "usage-strings",
+    "identifier": "xyz.zorvo.browser-spike.usage-strings.zorvo-browser-wk-aZ6KG4",
     "arch": "arm64",
     "target": "arm64-apple-macosx12.0",
-    "node": "v22.23.5",
     "sources": {
-      "Probe.swift": "bb9d17c07805e4ef41a484cf5a8b00d8a00a77cdcd51e56fdbce6d2a20ff94a7",
+      "Probe.swift": "40260ed3d5efc4da3120905e13f7802a2e0a7caf49d199425a6000de2f4d29f3",
       "HiddenProbe.swift": "bca95d2e9ca5c852e82b3bbdfe005a92839448fc4487f03bbcaa59cbbab531da",
       "Fixture.tsx": "e45952e576b41995fa1eaeaadc293669416d9d951f35ab5b22e1865ede37f447",
       "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
-      "Info.plist": "edf827591f84308543bb149b9342f3617a83a44580742fe9f9b4596fb7d1b4fa",
-      "run.mjs": "faa63e6324ec4186d06322e7bf6e9bbe4ac56725997eb627cadd6e7bc041bf60",
+      "Info.plist": "7a8a948bd4d2913257630a2da02817d40cc346dcb94bbbba704080a5c692191c",
+      "run.mjs": "cef935e05db053ac6c19d9dfb49be2b97e891fc436447d056ad867e0cf467109",
       "report.mjs": "d2175d571acf7f84b352ac476b7bc089a52e7b30457026947bd5fabc1ca84e33",
       "fixture.bundle.js": "9490cecbbfe5a73752a0a878c864139c7d2d6289077c21d5873053cb6f538734"
     },
-    "bundleInfoSha256": "5533195dcac8fb24c506c6ba923a8aa8fa8619a209ce59c321a92a509199c2dc",
     "usageStrings": [
       "NSCameraUsageDescription",
       "NSMicrophoneUsageDescription"
     ],
+    "binarySha256": "b45be1f4c5ace166adca5c0aecfa2574735d36b810c17475d26788c4a7e98a78",
+    "bundleInfoSha256": "631412e9fb20084fbf1f083cfff5fdc3456fd1c1258ccbe662c1deb041915728",
+    "buildManifestSha256": "1bf55b5123a1fc78d5a07c3edf9c4f1a5c0b5c6127c2c32757d072ef7a33497a",
+    "reusedBinary": true,
     "launch": "LaunchServices via open -W -n"
   }
 }

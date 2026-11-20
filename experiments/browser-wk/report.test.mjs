@@ -102,6 +102,10 @@ test("current recorded reports validate and name the exact committed probe sourc
       assert.equal(recorded.harness.sources[source], digest, name + " uses stale " + source);
     }
     assert.match(recorded.harness.sources["fixture.bundle.js"], /^[a-f0-9]{64}$/);
+    assert.match(recorded.harness.binarySha256, /^[a-f0-9]{64}$/);
+    assert.match(recorded.harness.buildManifestSha256, /^[a-f0-9]{64}$/);
+    assert.equal(recorded.bundleIdentifier, recorded.harness.identifier);
+    assert.equal(typeof recorded.harness.reusedBinary, "boolean");
   }
 });
 

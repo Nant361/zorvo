@@ -6,12 +6,13 @@ reference for the engine decision, gate criteria and open questions. This
 report maps the standalone experiment to that note's spikes 1–10; it is
 input to a later feature spec.
 
-**The engine gates are not all certified.** The ordinary Zorvo configuration
-removes the capture API in all three tested realms, and the React interaction
-test passes hidden, covered and minimized. The test app has no Screen
-Recording grant, the supplementary media-delegate test does not complete,
-and the required older-OS run is unavailable. wry/Rust integration, real-page
-snapshots and the other gaps below remain work before feature implementation.
+**The engine gates are not all certified.** With Screen Recording granted to
+each test app, the ordinary Zorvo configuration removes the capture API in all
+three tested realms and the supplementary public media delegate denies every
+camera/microphone request. The React interaction test passes hidden, covered
+and minimized. The required older-OS run is unavailable. wry/Rust integration,
+real-page snapshots and the other gaps below remain work before feature
+implementation.
 
 The branch is rebased on main, including the merged #257, #258 and #259.
 The former CEF implementation is retired. The current change ships no
@@ -28,7 +29,7 @@ version is unchanged; the canonical browser minimum is macOS 12 at runtime.
 | **4. Usable snapshot — not exercised** | The local React fixture and native identities for same-origin and cross-origin frames are available. | The five real pages, accessible control names, open shadow roots, a full tree and references surviving until navigation. The probe's small state object is not that snapshot engine. |
 | **5. Input — partial** | An isolated-world native value setter and input event update a real React controlled input; button clicks trigger a React re-render. | A native `select` and sites that reject script events. These events do not become trusted user input. |
 | **6. Looping page — not exercised** | Normal temporary-app and loopback-fixture teardown is checked. | Five live tabs, `while (true) {}`, responsive Zorvo, ending that tab's WebContent process and memory reclamation. Normal exit does not prove this gate. |
-| **7. No capture — partial, not passed** | Zorvo-matching plist; ordinary JavaScript; guarded screen preference disabled before all three view creations. No `mediaDevices` in the top document or either iframe. Location returns permission error 1 through one public denial callback per realm. | Own Screen Recording grant, successful supplementary public media-denial callbacks, and an actual runtime below macOS 27. Current failed/unverified results stay visible in the reports. |
+| **7. No capture — pass on macOS 27, OS matrix incomplete** | Zorvo-matching plist; ordinary JavaScript; guarded screen preference disabled before all three view creations. With the app's own Screen Recording grant, no `mediaDevices` in the top document or either iframe. Location returns error 1 through one public denial callback per realm. The two-string run keeps screen API absent and denies all six media requests through public callbacks. | An actual runtime below macOS 27 and integration into wry. Compilation for macOS 12 is not runtime coverage. |
 | **8. What loads — partial** | The fixture loads HTTP on both `127.0.0.1` and `localhost`. | The note's public HTTPS, public HTTP and `app.test` cases, under the real app's ATS policy. |
 | **9. Dialogs and file picker — not exercised** | No dialogs or file picker are implemented by this probe. | User and agent clicks, and outcomes for alert, confirm, prompt and file input. |
 | **10. Artifact/browser coexistence — not exercised** | The experiment is a separate native app. | Inspector placement coordination, switching between artifacts and browser, overlays and composer focus. |
@@ -64,24 +65,37 @@ is not part of these diagnostics.
 The current reports all validate their complete, mode-specific check sets:
 
 - [Zorvo configuration](../../../experiments/browser-wk/results/2026-11-20-public.json):
-  21 passing observations and one unverified Screen Recording precondition.
+  all 22 observations pass, including the Screen Recording precondition.
 - [Both descriptions](../../../experiments/browser-wk/results/2026-11-20-usage-strings.json):
-  the display API remains absent, but all six media requests time out after
-  three seconds with zero media-delegate callbacks. The report correctly
-  fails; a timeout is not a denial.
+  all 21 observations pass with Screen Recording, camera and microphone OS
+  authorization active. The display API remains absent. All six media
+  requests return `NotAllowedError`, with one denying native callback each.
 - [Camera only](../../../experiments/browser-wk/results/2026-11-20-camera-only.json)
   and [microphone only](../../../experiments/browser-wk/results/2026-11-20-microphone-only.json):
   13 passing API/isolation/location observations each and the unverified
   Screen Recording precondition. No media requests or public media-denial
   claim in these modes.
 
-All four bundles report `screenRecordingGranted: false`; camera and
-microphone OS authorization remains `not determined`. The both-description
-run has visible documents and a focused top document, so this is not
-presented as a successful hidden-request test. The reason that those media
-requests do not reach the delegate still needs isolation; the missing OS
-grants are a relevant precondition, not proof of its cause. No privacy grant
-was changed and no captured stream was obtained.
+The two primary bundles report `screenRecordingGranted: true`. The ordinary
+bundle has no camera/microphone authorization; the supplementary bundle has
+both, approved for this test. No captured stream was obtained. The
+single-description diagnostics were collected without Screen Recording
+authorization and keep that precondition unverified.
+
+Earlier supplementary attempts timed out before the media delegate while
+OS authorization was undetermined. TCC logs also reported that LaunchServices
+could not resolve the test bundle identifier. The runner now registers each
+unique bundle identity, and `--prepare` keeps a signed binary in Application
+Support for reuse. Its explicit permission-setup step loads no page or
+capture stream. After the user approved the OS grants for that exact binary,
+the normal collection reached all six public media-denial callbacks. This
+separates OS setup from a page's denied request. A timeout still cannot pass
+the validator.
+
+The temporary probes' Screen Recording, camera and microphone grants were
+revoked after collection. System Settings no longer lists the probe under
+Screen & System Audio Recording. The recorded results describe the granted
+test condition, not a permission left enabled on the developer's Mac.
 
 The tests launch via LaunchServices as independent applications. A direct
 child launch earlier in diagnosis inherited the launching app's privacy
@@ -106,13 +120,13 @@ actual recorded interval, not a promised background frequency.
 
 | View/window state | Seconds | Timeouts | RAF | Fetch completions | Click to updated native snapshot | Host + main WebContent CPU, one core | Resident MiB at end |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Visible | 5.14 | 49 | 308 | 25 | 5.5 ms | 0.43% | 154.7 |
-| View hidden | 5.33 | 5 | 0 | 17 | 9.4 ms | 0.08% | 148.5 |
-| Native window fully covering it | 5.33 | 8 | 6 | 17 | 4.6 ms | 0.09% | 149.2 |
-| Window minimized | 5.34 | 5 | 0 | 16 | 45.9 ms | 0.06% | 146.3 |
-| View at zero alpha | 5.04 | 48 | 302 | 25 | 3.9 ms | 0.39% | 139.3 |
-| View offscreen inside the window | 5.32 | 51 | 319 | 26 | 4.3 ms | 0.39% | 148.1 |
-| Opaque sibling view covering it | 5.33 | 52 | 320 | 26 | 4.2 ms | 0.37% | 157.8 |
+| Visible | 5.11 | 50 | 307 | 25 | 5.1 ms | 0.40% | 155.6 |
+| View hidden | 5.33 | 5 | 0 | 19 | 5.6 ms | 0.11% | 138.7 |
+| Native window fully covering it | 5.25 | 8 | 3 | 19 | 4.4 ms | 0.11% | 143.2 |
+| Window minimized | 5.32 | 5 | 0 | 19 | 11.3 ms | 0.09% | 139.1 |
+| View at zero alpha | 5.03 | 48 | 303 | 25 | 4.7 ms | 0.38% | 141.3 |
+| View offscreen inside the window | 5.33 | 51 | 320 | 26 | 5.5 ms | 0.45% | 150.0 |
+| Opaque sibling view covering it | 5.33 | 51 | 318 | 27 | 4.1 ms | 0.39% | 125.4 |
 
 The minimized flag is true in that row, and the fully covered window has no
 visible occlusion state. Native before/after crops show the counter changing
@@ -254,7 +268,7 @@ focused changes, after their own tests.
 
 ## Validation and next work
 
-Local checks: `pnpm lint`, the full `pnpm test` (344 files, 4,941 tests),
+Local checks: `pnpm lint`, the full `pnpm test` (344 files, 4,948 tests),
 `pnpm build`, and 18 Node regression tests pass. Swift compiles with
 warnings as errors for arm64 and x86_64, both targeting macOS 12.
 No Rust runtime source changed, so no Rust check was rerun locally.
@@ -266,7 +280,7 @@ Vitest's default file discovery. Current-report source hashes and native
 PNG hashes are checked in CI as well as the validator and fixture behavior.
 
 The next work is completion and review of the canonical gate evidence,
-particularly the OS-permission run and older-OS coverage, then the feature
+particularly older-OS coverage and the remaining wry paths, then the feature
 spec. Engine/view, agent operations with session grants, and the ordinary
 Inspector panel remain focused later PRs. The address-bar search provider
 remains undecided.

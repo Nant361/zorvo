@@ -11,7 +11,8 @@ standalone assessment does not certify those complete gates.
 Requires macOS, the repository's Node dependencies and Xcode with the macOS
 27 SDK for the public location callback. Both architectures compile with a
 macOS 12 deployment target. Older macOS and Intel runtime remain untested;
-the app's deployment target is unchanged.
+the app's deployment target is unchanged. Reusing a prepared binary does
+not require compiling it with the SDK again.
 
 ```sh
 node experiments/browser-wk/run.mjs
@@ -23,9 +24,36 @@ node experiments/browser-wk/run.mjs --microphone-only
 The default `zorvo` bundle has no camera, microphone or location usage
 description, matching `src-tauri/Info.plist`. The supplementary modes insert
 the named camera/microphone strings into the temporary test bundle only.
-Each mode has its own bundle identifier. The test launches with
+Each snapshot has its own bundle identifier. The test launches with
 `open -W -n` so it runs as its own application, instead of inheriting the
 launching terminal or Codex app's privacy identity.
+
+Prepare an app once, approve its OS permissions, then reuse the exact
+signed binary for the canonical Screen Recording precondition:
+
+```sh
+node experiments/browser-wk/run.mjs --prepare
+node experiments/browser-wk/run.mjs --prepare --usage-strings
+# Use each printed snapshot directory separately:
+node experiments/browser-wk/run.mjs --reuse '<snapshot directory>' --request-permissions
+node experiments/browser-wk/run.mjs --reuse '<snapshot directory>'
+```
+
+Preparation uses a separate directory under
+`~/Library/Application Support/Zorvo Browser Spike/`, with a build manifest
+and LaunchServices registration. A rebuild gets a fresh identity. Reuse
+checks the current and snapshotted sources, binary, plist, compiled fixture
+and code signature before launch. It refuses a snapshot whose native
+process is already running, without ending that process.
+
+`--request-permissions` is an explicit setup step, with no page loaded and
+no capture stream. It requests Screen Recording authorization and, in the
+two-string mode only, camera/microphone OS authorization. The user approves
+the OS dialogs; the script does not approve them. Setup writes
+`permission-setup.json`, which is not an assessed result. Relaunch without
+that flag to collect the page-denial tests. Reuse clears an older
+`results.json` before collection so an interrupted run cannot retain stale
+evidence. Revoke the temporary app's grants after collection.
 
 Every view has ordinary JavaScript settings and a guarded
 `WKPreferences._screenCaptureEnabled` setter/getter check before creation.
@@ -51,8 +79,9 @@ to be absent. A failure to reach the media delegate stays a failed check.
 
 The report records `CGPreflightScreenCaptureAccess()`. A false value creates
 an unverified precondition check for canonical spike 7, which also requires
-testing with Screen Recording granted. The harness never changes system
-privacy grants or approves a device prompt.
+testing with Screen Recording granted. Regular collection never requests
+system privacy grants. Only the explicit setup flag requests authorization,
+separately from the tests.
 
 ## Background React test
 
