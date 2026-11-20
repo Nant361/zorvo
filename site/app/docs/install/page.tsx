@@ -48,14 +48,20 @@ export default function InstallPage() {
       <OL>
         <li>Download <DocLink href={LINKS.download}>the latest <Chip isCode>.dmg</Chip></DocLink>.</li>
         <li>Drag <B>Zorvo</B> into Applications.</li>
-        <li>Open it. The welcome screen lists the agents, lets you tick the ones you&apos;ll use and asks for a project folder.</li>
+        <li>
+          Open it. macOS asks once whether to open an app you downloaded from the internet: click <B>Open</B>. The
+          welcome screen lists the agents, lets you tick the ones you&apos;ll use and asks for a project folder.
+        </li>
       </OL>
-      <Callout tone="attention">
-        <B>macOS blocks it the first time.</B> The build is not signed yet. Open it once,
-        then go to System Settings, Privacy and Security, and click <B>Open Anyway</B> next
-        to the Zorvo message.
+      <Callout>
+        <B>Signed and notarized from 0.14.1.</B> Zorvo is signed with a Developer ID and notarized by Apple, so macOS
+        opens it like any other app you download.
       </Callout>
-      <P>Or remove the quarantine flag in a terminal:</P>
+      <P>
+        Versions before 0.14.1 are not signed, and macOS blocks them the first time. Open one once, then go to System
+        Settings, Privacy and Security, and click <B>Open Anyway</B> next to the Zorvo message. Or remove the
+        quarantine flag in a terminal:
+      </P>
       <CodeBlock label="Terminal">{'xattr -dr com.apple.quarantine "/Applications/Zorvo.app"'}</CodeBlock>
 
       <H2 id="first-agent">Install your first agent</H2>
@@ -133,6 +139,11 @@ export default function InstallPage() {
         <li><B>Update &amp; restart</B> downloads the update, checks its signature against the key built into Zorvo, installs it and opens Zorvo again.</li>
         <li><B>Later</B> hides the card until you next start Zorvo. Settings, General, About still shows the update, says when Zorvo last checked, and has <B>Check now</B>.</li>
         <li>Agents that are working stop, and open terminals end, when Zorvo restarts. Your sessions are kept, since they are stored outside the app.</li>
+        <li>
+          Updating from 0.14.0 or earlier to 0.14.1 or later changes how Zorvo is signed, so macOS treats it as a new
+          app once. It may ask again for access to your folders, and Private mode may ask once to use its items in your
+          Keychain: choose <B>Always Allow</B>.
+        </li>
       </UL>
       <Callout>
         <B>Older copies update once by hand.</B> A copy older than 0.6.0 cannot update itself: download the newest{" "}
