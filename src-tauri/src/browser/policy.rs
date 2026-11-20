@@ -132,7 +132,8 @@ define_class!(
                 return std::ptr::null_mut();
             }
             let url=unsafe{action.request().URL().and_then(|u|u.absoluteString()).map(|s|s.to_string())};
-            if let Some(url)=url.filter(|url|super::navigation_url(url).is_ok()) {
+            // The click's address was stored in this normal form; compare like with like.
+            if let Some(url)=url.and_then(|url|super::navigation_url(&url).ok()) {
                 let app=self.ivars().app.clone(); let session=self.ivars().session.clone(); let tab=self.ivars().tab.clone();
                 let app2=app.clone();
                 let _=app.run_on_main_thread(move||{

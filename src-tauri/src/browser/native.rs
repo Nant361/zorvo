@@ -445,6 +445,7 @@ pub async fn execute(app: &AppHandle, sid: String, args: Value) -> Result<Value,
 /// outside the UI thread, pin the original tab, and never retry an interaction.
 /// The caller's single operation timeout also bounds this readiness wait.
 async fn await_helper(app: &AppHandle, sid: &str, args: &mut Value) -> Result<(), String> {
+    let mut idle_polls = 0;
     loop {
         let (send, receive) = oneshot::channel();
         let handle = app.clone();
@@ -471,7 +472,9 @@ async fn await_helper(app: &AppHandle, sid: &str, args: &mut Value) -> Result<()
                     // The document-start message follows helper installation.
                     // Images and frames may still be loading; they must not hold
                     // usable DOM interactions behind the complete-load event.
-                    tab.document.is_some()
+                    // SAFETY: a public property of the retained view, read on its main thread.
+                    let is_loading = unsafe { tab.view.webview().isLoading() };
+                    (tab.document.is_some(), is_loading)
                 })
                 .ok_or("The browser tab is closed or belongs to another session.")?;
                 Ok::<_, String>((tab_id, ready))
@@ -479,15 +482,41 @@ async fn await_helper(app: &AppHandle, sid: &str, args: &mut Value) -> Result<()
             let _ = send.send(result);
         })
         .map_err(|_| "The browser main thread is unavailable.")?;
-        let (tab_id, ready) = receive
+        let (tab_id, (has_document, is_loading)) = receive
             .await
             .map_err(|_| "The browser readiness check was cancelled.")??;
         args["tabId"] = json!(tab_id);
-        if ready {
-            return Ok(());
+        match helper_wait(has_document, is_loading, idle_polls)? {
+            None => return Ok(()),
+            Some(polls) => idle_polls = polls,
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        tokio::time::sleep(HELPER_POLL).await;
     }
+}
+
+const HELPER_POLL: Duration = Duration::from_millis(25);
+/// Polls in a row a tab may sit with nothing loading and no helper: 300 ms.
+const IDLE_HELPER_POLLS: u32 = 12;
+
+/// What one readiness poll means: `None` when the helper is there, else the
+/// idle polls counted so far. A tab that loads nothing and has announced no
+/// document will not announce one, so the wait ends with the reason instead of
+/// running out the operation's timeout.
+fn helper_wait(
+    has_document: bool,
+    is_loading: bool,
+    idle_polls: u32,
+) -> Result<Option<u32>, String> {
+    if has_document {
+        return Ok(None);
+    }
+    if is_loading {
+        return Ok(Some(0));
+    }
+    if idle_polls + 1 >= IDLE_HELPER_POLLS {
+        return Err("This tab has no page to read: it is blank, its load failed, or it shows a file the browser displays itself. Open a web page first.".into());
+    }
+    Ok(Some(idle_polls + 1))
 }
 
 fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
@@ -721,7 +750,11 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                             None
                         }
                     };
-                    if navigation.is_some() {
+                    // Only a reload is sure to load a new document. Back and
+                    // forward may land on a cached page or on an entry of the
+                    // same document, and no load event follows there to undo
+                    // this. A real load clears the document when it starts.
+                    if operation == "reload" && navigation.is_some() {
                         tab.document = None;
                         tab.frames.clear();
                         tab.popup_link = None;
@@ -1079,6 +1112,20 @@ pub fn close_all(app: &AppHandle) {
 #[cfg(test)]
 mod reply_tests {
     use super::*;
+
+    #[test]
+    fn a_tab_with_nothing_loading_and_no_helper_ends_the_wait_with_a_reason() {
+        assert_eq!(helper_wait(true, false, 5), Ok(None));
+        // A load in progress may still bring the helper, however long it takes.
+        assert_eq!(helper_wait(false, true, 11), Ok(Some(0)));
+        assert_eq!(helper_wait(false, false, 0), Ok(Some(1)));
+        assert_eq!(
+            helper_wait(false, false, IDLE_HELPER_POLLS - 2),
+            Ok(Some(IDLE_HELPER_POLLS - 1))
+        );
+        let error = helper_wait(false, false, IDLE_HELPER_POLLS - 1).unwrap_err();
+        assert!(error.contains("no page to read"), "{error}");
+    }
 
     #[test]
     fn navigation_cancels_a_pending_reply_before_a_late_webkit_completion() {

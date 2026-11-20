@@ -92,10 +92,14 @@
     .some(token => ['current-password', 'new-password', 'one-time-code'].includes(token) || token.startsWith('cc-'));
   // Textarea defaults also appear inside wrapping labels. Exclude sensitive
   // control subtrees from both generated names and the default page text.
+  // Text nodes include what the page hides, which innerText left out. Where
+  // WebKit can say so (Safari 17.4), an element that is not rendered is skipped.
+  const rendered = el => typeof el.checkVisibility !== 'function' || el.checkVisibility({checkVisibilityCSS:true, visibilityProperty:true});
   function readableText(root, limit = 1000) {
     if (!root || sensitiveValue(root)) return '';
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
+        if (node.parentElement && !rendered(node.parentElement)) return NodeFilter.FILTER_REJECT;
         for (let parent = node.parentElement; parent; parent = parent.parentElement) {
           if (sensitiveValue(parent) || ['SCRIPT','STYLE','NOSCRIPT','TEMPLATE'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
           if (parent === root) break;
@@ -210,4 +214,7 @@
     }
   })});
   post({kind:'frame',document:prefix});
+  // A page restored from the back-forward cache keeps this helper and runs no
+  // document-start script, so it has to say again which document is showing.
+  window.addEventListener('pageshow', event => { if (event.persisted) post({kind:'frame',document:prefix}); });
 })();

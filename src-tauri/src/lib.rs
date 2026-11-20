@@ -194,7 +194,6 @@ fn start_agent_tools(app: &AppHandle, data_dir: &std::path::Path) -> Arc<agent_t
                     let _ = calls.emit(AGENT_TOOL_CALL_EVENT, call);
                 },
                 move |call_id| {
-                    browser_commands::call_ended(&ended, &call_id);
                     let _ = ended.emit(
                         AGENT_TOOL_CALL_ENDED_EVENT,
                         serde_json::json!({ "callId": call_id }),
