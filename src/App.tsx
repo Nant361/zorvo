@@ -2348,8 +2348,10 @@ export default function App() {
                   cwd={activeSession.cwd}
                   usage={activeInfo.usage}
                   turnUsage={activeInfo.turnUsage ?? []}
+                  turnsEnded={activeInfo.turnsEnded ?? 0}
                   messages={currentMessages}
-                  compactCommand={compactCommandOf(activeInfo.commands)}
+                  // An ended session's agent is gone: the command would go to a closed connection.
+                  compactCommand={isActiveRunning ? compactCommandOf(activeInfo.commands) : null}
                   isBusy={acp.isBusy(activeSession.id)}
                   onCompact={(command) => sendFromComposer(activeSession.id, { text: `/${command}` })}
                 />

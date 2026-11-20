@@ -26,20 +26,24 @@ function answer(byCommand: Record<string, unknown>) {
   );
 }
 
-function renderPanel(overrides: Partial<ContextPanelProps> = {}) {
-  const props: ContextPanelProps = {
+function baseProps(): ContextPanelProps {
+  return {
     sessionId: "s1",
     agentId: "qwen-code",
     agentName: "Qwen Code",
     cwd: "/w/project",
     usage: { used: 577_000, size: 1_000_000 },
     turnUsage: [],
+    turnsEnded: 0,
     messages: [],
     compactCommand: null,
     isBusy: false,
     onCompact: vi.fn(),
-    ...overrides,
   };
+}
+
+function renderPanel(overrides: Partial<ContextPanelProps> = {}) {
+  const props: ContextPanelProps = { ...baseProps(), ...overrides };
   render(<ContextPanel {...props} />);
   return props;
 }
@@ -80,6 +84,18 @@ describe("ContextPanel with Qwen Code's own breakdown", () => {
     await screen.findByText("Estimated by Qwen Code");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await vi.waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "acp_context_usage")).toHaveLength(2));
+  });
+
+  it("asks again at every turn end, after the turn history stopped growing", async () => {
+    const invoke = answer({ acp_context_usage: QWEN_BREAKDOWN });
+    const full = Array.from({ length: 24 }, (_, i) => (i + 1) * 1000);
+    const props = { ...baseProps(), turnUsage: full, turnsEnded: 30 };
+    const { rerender } = render(<ContextPanel {...props} />);
+    await screen.findByText("Estimated by Qwen Code");
+
+    rerender(<ContextPanel {...props} turnUsage={[...full.slice(1), 25_000]} turnsEnded={31} />);
 
     await vi.waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "acp_context_usage")).toHaveLength(2));
   });

@@ -1799,6 +1799,25 @@ describe("ACP sessions in the app", () => {
     expect(screen.getByRole("img", { name: /oldest first: 2k, 5k tokens/ })).toBeDefined();
   });
 
+  it("offers Compact context only while the session runs", async () => {
+    const spy = await renderWithQwen();
+    const sessionId = await startQwenSession(spy);
+    await acpEvent({
+      sessionId,
+      kind: "update",
+      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "compress", description: "Compress" }] },
+    });
+    await acpEvent({ sessionId, kind: "update", update: { sessionUpdate: "usage_update", used: 2_000, size: 10_000 } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open the context panel" }));
+    });
+    expect(screen.getByRole("button", { name: "Compress context" })).toBeDefined();
+
+    await acpEvent({ sessionId, kind: "exit", code: 0 });
+
+    expect(screen.queryByRole("button", { name: "Compress context" })).toBeNull();
+  });
+
   it("shows the context the agent has used, as it reports it", async () => {
     const spy = await renderWithQwen();
     const sessionId = await startQwenSession(spy);

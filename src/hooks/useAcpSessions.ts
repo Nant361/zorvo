@@ -60,6 +60,8 @@ export interface AcpSessionInfo {
   usage?: ContextUsage;
   /** `usage.used` at each turn end, oldest first, at most `MAX_TURN_POINTS`; memory only, for the run. */
   turnUsage?: number[];
+  /** How many turns have ended in this run; it changes at every turn end, which `turnUsage` stops doing once full. */
+  turnsEnded?: number;
   canFork: boolean;
   /** The agent can reopen a session of its own (session/resume or session/load). */
   canReopen: boolean;
@@ -273,7 +275,11 @@ export function useAcpSessions(handlers: AcpHandlers) {
           break;
         case 'turn-end':
           setBusy(sessionId, false);
-          patch(sessionId, (c) => (c.usage ? { ...c, turnUsage: withTurnPoint(c.turnUsage, c.usage.used) } : c));
+          patch(sessionId, (c) => ({
+            ...c,
+            turnsEnded: (c.turnsEnded ?? 0) + 1,
+            ...(c.usage ? { turnUsage: withTurnPoint(c.turnUsage, c.usage.used) } : {}),
+          }));
           h.onTurnEnd(
             sessionId,
             isString(payload.error)

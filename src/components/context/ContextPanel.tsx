@@ -28,8 +28,10 @@ export interface ContextPanelProps {
   usage: ContextUsage;
   /** `usage.used` at each turn end. */
   turnUsage: readonly number[];
+  /** Changes at every turn end, so the breakdown is asked again then. */
+  turnsEnded: number;
   messages: readonly ChatMessage[];
-  /** The agent's `compact` or `compress` command; null when it has neither. */
+  /** The agent's `compact` or `compress` command; null when it has neither, or when its session is not running. */
   compactCommand: string | null;
   /** A turn runs: Compact waits for it to end. */
   isBusy: boolean;
@@ -144,8 +146,8 @@ function TurnChart({ points }: { points: readonly number[] }) {
 
 /** The inspector's Context tab: how full the window is, what fills it, and how it grew turn by turn. */
 export function ContextPanel(props: ContextPanelProps) {
-  const { sessionId, agentId, agentName, cwd, usage, turnUsage, messages, compactCommand, isBusy, onCompact } = props;
-  const { breakdown, files, isLoading, refresh } = useContextBreakdown(sessionId, agentId, cwd, turnUsage.length);
+  const { sessionId, agentId, agentName, cwd, usage, turnUsage, turnsEnded, messages, compactCommand, isBusy, onCompact } = props;
+  const { breakdown, files, isLoading, refresh } = useContextBreakdown(sessionId, agentId, cwd, turnsEnded);
   const totals = contextTotals(usage);
   const bar = barParts(totals, bufferOf(breakdown));
   const fills = breakdown ? agentFills(breakdown) : totals.size > 0 ? zorvoFills(totals.used, transcriptChars(messages), files) : [];
