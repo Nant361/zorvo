@@ -4,9 +4,9 @@
   "version": "0.14.1",
   "identifier": "xyz.zorvo.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm cua-driver:fetch && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm cua-driver:fetch && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -48,7 +48,10 @@
     ],
     "macOS": {
       "signingIdentity": "-",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "files": {
+        "MacOS/cua-driver": "binaries/cua-driver"
+      }
     },
     "icon": [
       "icons/32x32.png",
