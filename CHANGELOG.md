@@ -4,6 +4,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+### Added
+
+- **A browser beside the chat.** Open links or addresses in the Browser inspector tab, with session-isolated WebKit pages, navigation, console, snapshots and agent interactions. Browser tools ask for a session grant; sending files asks separately. Chromium debug opens an isolated installed Chrome or Brave window for full network, file, trace, CPU, heap and optional Lighthouse tools.
+
 ### Changed
 
 - **One card to start a session.** The new-session screen is a single card in the middle of the window: the agents as chips at its top, each picked agent with its model beside it, then the task, and the folder, branch and Private · TEE at its bottom with Start. The screen's own title is gone (the top bar says New session), and the sessions you can continue are plain rows. Turning Private · TEE on now picks Qwen Code for you, and the other agents wait until you turn it off.

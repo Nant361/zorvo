@@ -1,10 +1,10 @@
-//! The seven tools an agent can call, their JSON schemas, and the checks on
+//! The tools an agent can call, their JSON schemas, and the checks on
 //! their arguments. Only shapes are checked here; what a folder or an agent
 //! name means is decided later, with the webview and the store.
 
 use serde_json::{json, Map, Value};
 
-pub const TOOL_NAMES: [&str; 7] = [
+pub const TOOL_NAMES: [&str; 9] = [
     "list_agents",
     "delegate",
     "start_session",
@@ -12,6 +12,8 @@ pub const TOOL_NAMES: [&str; 7] = [
     "stop_session",
     "show_artifact",
     "artifact_guide",
+    "browser",
+    "browser_guide",
 ];
 pub const MAX_TEXT_CHARS: usize = 20_000;
 pub const MAX_TITLE_CHARS: usize = 60;
@@ -21,7 +23,7 @@ const MAX_PATH_CHARS: usize = 4096;
 
 /// The `tools` array for `tools/list`.
 pub fn tool_list() -> Value {
-    json!([
+    let mut tools = json!([
         {
             "name": "list_agents",
             "description": "List the coding agents you can hand work to, the sessions you have opened, and the folders a new session may be opened in.",
@@ -107,7 +109,13 @@ pub fn tool_list() -> Value {
                 "additionalProperties": false
             }
         }
-    ])
+    ]);
+    tools.as_array_mut().unwrap().extend([
+        json!({"name":"browser", "description":"Operate Zorvo's browser. Read browser_guide first. WebKit is the native in-app view; engine chromium opens an isolated installed Chromium window for advanced diagnostics. Requires the user's session browser grant. File transfers need separate approval.",
+            "inputSchema":{"type":"object","properties":{"operation":{"type":"string"},"engine":{"type":"string","enum":["webkit","chromium"]}},"required":["operation"],"additionalProperties":true}}),
+        json!({"name":"browser_guide","description":"List browser operations, parameters, engine limits and permission rules.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+    ]);
+    tools
 }
 
 /// Checks `args` for `tool` and returns them cleaned (strings trimmed), or a
@@ -116,8 +124,11 @@ pub fn validate(tool: &str, args: &Value) -> Result<Value, String> {
     let object = args
         .as_object()
         .ok_or_else(|| "The arguments must be a JSON object.".to_string())?;
+    if tool == "browser" {
+        return crate::browser_commands::validate_args(args);
+    }
     let allowed: &[&str] = match tool {
-        "list_agents" | "artifact_guide" => &[],
+        "list_agents" | "artifact_guide" | "browser_guide" => &[],
         "show_artifact" => &["path", "title"],
         "delegate" => &["agent", "task"],
         "start_session" => &["agent", "brief", "title", "worktree", "folder"],
@@ -404,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_exactly_the_seven_tools() {
+    fn lists_exactly_the_registered_tools() {
         let list = tool_list();
         let tools = list.as_array().unwrap();
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
@@ -418,12 +429,17 @@ mod tests {
                 "read_session",
                 "stop_session",
                 "show_artifact",
-                "artifact_guide"
+                "artifact_guide",
+                "browser",
+                "browser_guide"
             ]
         );
         for tool in tools {
             assert_eq!(tool["inputSchema"]["type"], "object");
-            assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+            assert_eq!(
+                tool["inputSchema"]["additionalProperties"],
+                tool["name"] == "browser"
+            );
             assert!(!tool["description"].as_str().unwrap().is_empty());
         }
     }

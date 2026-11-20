@@ -310,9 +310,12 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_the_seven_tools() {
+    fn tools_list_returns_the_registered_tools() {
         let got = reply(r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#);
-        assert_eq!(got["result"]["tools"].as_array().unwrap().len(), 7);
+        assert_eq!(
+            got["result"]["tools"].as_array().unwrap().len(),
+            TOOL_NAMES.len()
+        );
         assert_eq!(
             reply(r#"{"jsonrpc":"2.0","id":4,"method":"ping"}"#)["result"],
             json!({})
