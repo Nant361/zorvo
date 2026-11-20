@@ -45,14 +45,10 @@
   <img src="docs/assets/zorvo-reel.gif" alt="A short tour of Zorvo: one prompt sent to four agents, keeping the best result, handing a task to another agent, and reviewing a diff line by line." width="600">
 </p>
 
-> [!NOTE]
-> Zorvo is not signed by Apple yet, so macOS blocks it the first time you open
-> it. [Opening it the first time](#open-zorvo-the-first-time) takes one extra
-> step.
-
 **New in 0.14:** a calmer look. A new session starts from one card, a card
 beside the chat says what the session is doing and what it changed, and a
-Context tab shows what fills the agent's context. The
+Context tab shows what fills the agent's context. From 0.14.1, Zorvo is signed
+and notarized by Apple, so macOS opens it like any other app you download. The
 [changelog](CHANGELOG.md) has the rest.
 
 ## Contents
@@ -74,8 +70,8 @@ Context tab shows what fills the agent's context. The
 
 1. [Download **Zorvo-mac.dmg**](https://github.com/zakyirsyaad/zorvo/releases/latest/download/Zorvo-mac.dmg),
    open it, and drag Zorvo into **Applications**.
-2. Open Zorvo, then allow it once in **System Settings → Privacy & Security →
-   Open Anyway** ([details](#open-zorvo-the-first-time)).
+2. Open Zorvo. macOS asks once whether to open an app you downloaded from the
+   internet: click **Open** ([details](#open-zorvo-the-first-time)).
 3. On the welcome screen, tick the agents you'll use, press **Install** next to
    any that are not on your Mac (Zorvo brings Node.js or `uv` when an agent
    needs them), pick a project folder and press **Start**.
@@ -287,7 +283,12 @@ Open it and drag **Zorvo** into **Applications**.
 
 ### Open Zorvo the first time
 
-Zorvo is not signed by Apple yet, so macOS blocks it the first time:
+From 0.14.1, Zorvo is signed with a Developer ID and notarized by Apple. The
+first time you open it from Applications, macOS asks whether to open an app you
+downloaded from the internet. Click **Open**; from then on it opens without
+asking.
+
+Versions before 0.14.1 are not signed, and macOS blocks them the first time:
 
 1. Open Zorvo from Applications. macOS says it cannot be opened; click **Done**.
 2. Open **System Settings → Privacy & Security**, scroll down, and click
@@ -295,7 +296,7 @@ Zorvo is not signed by Apple yet, so macOS blocks it the first time:
 3. Confirm, and Zorvo opens. From then on it opens normally.
 
 macOS 15 and later no longer offer right-click → Open for this. If you prefer
-the terminal, this does the same:
+the terminal, this does the same for an older version:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Zorvo.app"
@@ -328,6 +329,11 @@ Zorvo last checked, with **Check now**.
 A copy that runs from the disk image, or from any other read-only place, cannot
 update itself there: drag Zorvo into Applications, open it from there, and
 update again.
+
+Updating from 0.14.0 or earlier to 0.14.1 or later changes how Zorvo is signed,
+so macOS treats it as a new app once. It may ask again for access to your
+folders, and Private mode may ask once to use its items in your Keychain:
+choose **Always Allow**. After that, updates keep your permissions.
 
 Copies older than 0.6.0 cannot update themselves. Update those once by hand:
 download the newest DMG and replace Zorvo in Applications. The same works if an
@@ -471,7 +477,7 @@ before it edits files or runs commands. Pick another mode in the composer.
 
 | Problem | What to try |
 |---|---|
-| macOS blocks Zorvo on first open | See [Open Zorvo the first time](#open-zorvo-the-first-time). |
+| macOS blocks Zorvo on first open | Zorvo 0.14.1 and later only asks once, with **Open**. A copy macOS still blocks is an older version, or one that did not come from this repository's [releases](https://github.com/zakyirsyaad/zorvo/releases); see [Open Zorvo the first time](#open-zorvo-the-first-time). |
 | An agent shows as not installed | Click **Install** next to it in Settings → Agents, or pick it in a new session's agent list and click **Install**. Zorvo brings Node.js or `uv` when the agent needs them. Then click **Check again**. |
 | "Sign in to *agent*" | Use a sign-in method the panel offers, or sign in once in a terminal (see [Requirements](#requirements)). If you set a key outside Zorvo (for example in `~/.zshrc`), click **Check again** in the panel: Zorvo reads your shell's settings again, then asks the agent. Your refused message waits in the box and is sent once you are signed in. |
 | **Update & restart** fails with a read-only message | A copy that runs from the disk image cannot update itself: drag it into Applications and open it from there. Or download the newest DMG from [releases](https://github.com/zakyirsyaad/zorvo/releases) and replace Zorvo in Applications. |
