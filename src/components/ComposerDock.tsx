@@ -9,7 +9,8 @@ import { OptionDropdown } from "./composer/OptionDropdown";
 import { MoreControls } from "./composer/MoreControls";
 import { splitControls } from "../lib/composer-overflow";
 import { useAfter } from "../hooks/useAfter";
-import { AgentChipRow, JOINED_MODEL_CHIP, type AgentChipRowProps } from "./composer/AgentChipRow";
+import { AgentChipRow, type AgentChipRowProps } from "./composer/AgentChipRow";
+import { JOINED_MODEL_CHIP } from "./composer/chip-style";
 import type { FolderControl } from "./composer/FolderPicker";
 import { DraftChips } from "./composer/DraftChips";
 import { PrivateChip } from "./private/PrivateChip";
@@ -186,7 +187,7 @@ export interface ComposerDockProps {
    * joined to Qwen Code's chip, the session limit chip, and the credits left under the card. The parent drops the
    * agent's own model chip meanwhile.
    */
-  privateDraft?: Pick<PrivateDraft, "chip" | "modelMenu" | "creditsLine" | "paymentLine" | "paymentKey" | "sessionLimit">;
+  privateDraft?: Pick<PrivateDraft, "isOn" | "chip" | "modelMenu" | "creditsLine" | "paymentLine" | "paymentKey" | "sessionLimit">;
   /** "34 of 200 credits this session", left of Send while a capped private session runs. */
   privateSessionLine?: string;
   /** In a compare draft: one model picker per ticked agent, joined to its chip. */
@@ -302,6 +303,8 @@ export function ComposerDock({
     onTextChangeRef.current?.(text);
   }, [text, onTextChangeRef]);
 
+  /** Closes `name`'s menu if it is the one open; Escape or a click outside another menu leaves that one be. */
+  const closeDropdown = (name: string) => setOpenDropdown((current) => (current === name ? null : current));
   const toggle = (name: Exclude<OpenDropdown, null>) =>
     setOpenDropdown((current) => (current === name ? null : name));
   const dropdownProps = (name: Exclude<OpenDropdown, null>, control: ComposerControl) => ({
@@ -310,7 +313,7 @@ export function ComposerDock({
     isOpen: openDropdown === name,
     onToggle: () => toggle(name),
     // A close, not a toggle: this composer's own dismiss runs on the same click or Escape.
-    onClose: () => setOpenDropdown((current) => (current === name ? null : current)),
+    onClose: () => closeDropdown(name),
     onSelect: (value: string | undefined) => {
       control.onChange(value);
       setOpenDropdown(null);
@@ -570,7 +573,6 @@ export function ComposerDock({
   // A draft's composer sits near the top of its column with room below; a session's sits at the window's bottom.
   const isDraft = Boolean(folder || agents);
   const menuSide = isDraft ? "bottom" : "top";
-  const closeDropdown = (name: string) => setOpenDropdown((current) => (current === name ? null : current));
 
   /** A compare agent's model picker; while its models are unknown, opening it asks the agent. */
   const compareModelPicker = (entry: CompareModelControl) => {
@@ -785,7 +787,7 @@ export function ComposerDock({
                 controls={overflowControls}
                 isOpen={openDropdown === "more"}
                 onToggle={() => toggle("more")}
-                onClose={() => setOpenDropdown((current) => (current === "more" ? null : current))}
+                onClose={() => closeDropdown("more")}
                 onPicked={() => setOpenDropdown(null)}
               />
             )}
@@ -843,7 +845,7 @@ export function ComposerDock({
         <p id={noteId} data-note-below="" className="mt-2 w-full px-1 text-caption text-fg-subtle">
           {shownNote}
         </p>
-      ) : privateDraft?.modelMenu ? (
+      ) : privateDraft?.isOn ? (
         // Under a private draft's card: where the prompts go, and the credits left.
         <div data-private-line="" className="mt-2 flex w-full items-start gap-4 px-1 text-caption text-fg-subtle">
           <span className="min-w-0 flex-1">
