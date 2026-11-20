@@ -253,6 +253,24 @@ pub struct SessionRecord {
         skip_serializing_if = "Option::is_none"
     )]
     pub title_source: Option<String>,
+    /// Branches and pull request addresses the agent made itself, which the
+    /// UI reads from its shell commands.
+    #[serde(
+        deserialize_with = "lenient_agent_work",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub agent_work: Option<AgentWorkRecord>,
+}
+
+/// What an agent made in a session that Zorvo did not. The UI checks the
+/// values and the limits; here only the shape matters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentWorkRecord {
+    #[serde(default)]
+    pub branches: Vec<String>,
+    #[serde(default)]
+    pub pull_request_urls: Vec<String>,
 }
 
 /// What a saved Zorvo Private session remembers about its privacy mode.
@@ -464,6 +482,13 @@ fn lenient_private_usage<'de, D: Deserializer<'de>>(
 fn lenient_opened_by<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<OpenedByRecord>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+fn lenient_agent_work<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<AgentWorkRecord>, D::Error> {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     Ok(value.and_then(|value| serde_json::from_value(value).ok()))
 }

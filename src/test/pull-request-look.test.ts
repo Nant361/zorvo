@@ -6,8 +6,10 @@ import {
   pullRequestLabel,
   pullRequestLine,
   pullRequestLook,
+  pullRequestOfWork,
   pullRequestOnBranch,
   sessionBranchOf,
+  sessionPullRequestOf,
   type FolderPullRequests,
 } from "../lib/pull-request-look";
 import type { Session } from "../types";
@@ -93,5 +95,31 @@ describe("which pull request a session shows", () => {
 
   it("has no pull request for a branch gh did not list", () => {
     expect(pullRequestOnBranch(folder, "feat/unknown")).toBeNull();
+  });
+
+  it("shows the pull request a session's agent made from a worktree of its own", () => {
+    const listed: FolderPullRequests = {
+      branch: "main",
+      pullRequests: [pr({ branch: "fix/notice", number: 259, url: "https://github.com/O/R/pull/259" }), pr({ branch: "fix/drip", number: 257 })],
+    };
+    const byUrl = session("a", { agentWork: { branches: [], pullRequestUrls: ["https://github.com/o/r/pull/259"] } });
+    const byBranch = session("b", { agentWork: { branches: ["fix/drip", "fix/unlisted"], pullRequestUrls: [] } });
+    expect(pullRequestOfWork(listed, byUrl.agentWork)?.number).toBe(259);
+    expect(pullRequestOfWork(listed, byBranch.agentWork)?.number).toBe(257);
+    expect(pullRequestOfWork(listed, undefined)).toBeNull();
+    const newest = newestSessionInFolder([byUrl, byBranch]);
+    expect(sessionPullRequestOf(byUrl, listed, newest)?.number).toBe(259);
+    expect(sessionPullRequestOf(byBranch, listed, newest)?.number).toBe(257);
+  });
+
+  it("prefers a worktree session's own branch, and falls back to the folder's branch", () => {
+    const inWorktree = session("w", {
+      worktree: { repoPath: "/w/zorvo", path: "/data/wt/row", branch: "feat/row" },
+      agentWork: { branches: ["fix/main-checkout"], pullRequestUrls: [] },
+    });
+    const plain = session("p", { createdAt: 5 });
+    const newest = newestSessionInFolder([inWorktree, plain]);
+    expect(sessionPullRequestOf(inWorktree, folder, newest)?.number).toBe(250);
+    expect(sessionPullRequestOf(plain, folder, newest)?.number).toBe(9);
   });
 });
