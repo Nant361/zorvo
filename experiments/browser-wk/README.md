@@ -1,101 +1,121 @@
 # WKWebView browser spike
 
-Standalone evidence for [the browser design](../../docs/superpowers/specs/2026-11-20-browser-wkwebview-design.md).
+Standalone measurements for the [canonical engine note](../../docs/superpowers/specs/2026-11-20-browser-engine-design.md)
+and [spike report](../../docs/superpowers/specs/2026-11-20-browser-wkwebview-spike-report.md).
 Not built by Tauri, not installed in `/Applications`, and not shipped.
-Requires macOS, Node and Xcode with the macOS 27 SDK to compile the public
-geolocation callback. The binary targets macOS 12; requests to the geolocation
-API are skipped below 27 and recorded as unverified.
+The report maps coverage and gaps to the note's spikes 1–10; a passing
+standalone assessment does not certify those complete gates.
+
+## Run
+
+Requires macOS, the repository's Node dependencies and Xcode with the macOS
+27 SDK for the public location callback. Both architectures compile with a
+macOS 12 deployment target. Older macOS and Intel runtime remain untested;
+the app's deployment target is unchanged.
 
 ```sh
 node experiments/browser-wk/run.mjs
-node experiments/browser-wk/run.mjs --screen-spi
-node experiments/browser-wk/run.mjs --restricted
+node experiments/browser-wk/run.mjs --usage-strings
+node experiments/browser-wk/run.mjs --camera-only
+node experiments/browser-wk/run.mjs --microphone-only
 ```
 
-The default run uses public permission delegates. On the tested OS it leaves
-screen capture pending after a trusted click. The second run enables private
-display-capture delegate selectors for diagnosis. The third uses the public
-per-view Lockdown Mode preference and runs automatically. The modes are
-mutually exclusive. Restricted mode requires macOS 13 or newer and fails
-before opening a view on an older runtime.
+The default `zorvo` bundle has no camera, microphone or location usage
+description, matching `src-tauri/Info.plist`. The supplementary modes insert
+the named camera/microphone strings into the temporary test bundle only.
+Each mode has its own bundle identifier. The test launches with
+`open -W -n` so it runs as its own application, instead of inheriting the
+launching terminal or Codex app's privacy identity.
 
-With the per-view restriction active on this Mac, capture APIs are absent in
-the secure top document and newly loaded same-origin and cross-origin iframes.
-The public geolocation callback explicitly denies location in all three. Navigation,
-hidden-tab commands, isolated scripts and session cookies still pass. This
-setting applies only to the test views. It does not change system Lockdown Mode.
+Every view has ordinary JavaScript settings and a guarded
+`WKPreferences._screenCaptureEnabled` setter/getter check before creation.
+Missing selectors or a readback other than false fail the probe. The public
+camera/microphone delegate denies on macOS 12+, and the public location
+delegate denies on macOS 27+. Below 27 the same location request is still
+made, and its actual result is recorded with the absence of that callback.
+No Lockdown configuration or private display-capture permission delegate is
+used. No capture stream is requested when the API is absent.
 
-Apple documents performance and compatibility costs for
-[the per-view preference](https://developer.apple.com/documentation/webkit/wkwebpagepreferences/islockdownmodeenabled).
-Its effects extend beyond capture, including JavaScript execution. It needs
-review as a browser policy and tests on older supported OS versions before
-production integration.
+All modes check the secure top document plus fresh same-origin and
+cross-origin frames. They record the actual API surface, WebAssembly and
+dynamic JavaScript availability, and location error codes and callback
+counts. The default and two-string modes also request camera/microphone
+access and record the outcomes and native denial callback counts.
+A request that times out never counts as a denial. The default expects
+`navigator.mediaDevices` to be absent; the two-string mode expects
+`getUserMedia` to exist and reach the denying delegate. The individual-string
+modes observe which surface returns, without making media requests: the
+undeclared device is not a supported capture configuration and can terminate
+the process in TCC before the delegate. All modes require `getDisplayMedia`
+to be absent. A failure to reach the media delegate stays a failed check.
 
-A temporary app opens after compilation. For the first two modes, click **Request screen**, cancel any
-picker or system prompt without granting access, scroll the page, then click
-**Finish checks**. The fixture records whether the click was trusted and had
-user activation. A prompt or a user cancellation never counts as an automatic
-denial. The test does not select a capture surface or record a screen stream.
-Camera, microphone and location requests are denied by the test delegates.
+The report records `CGPreflightScreenCaptureAccess()`. A false value creates
+an unverified precondition check for canonical spike 7, which also requires
+testing with Screen Recording granted. The harness never changes system
+privacy grants or approves a device prompt.
 
-The runner prints the JSON report path under the OS temporary directory.
-It validates the complete set of checks for the selected mode before assessing
-the report. Empty, partial, duplicate or malformed results fail validation.
-The report records its assessment scope. It returns 2 if a recorded check fails
-or remains unverified. The interactive
-modes include an unverified scroll-performance gate. Restricted mode tests
-only permissions and isolation and can return 0 for those checks on macOS 27.
-The [separate renderer workload](scroll/README.md) measures scripted scrolling
-and chat updates. Trackpad parity and full-app performance require integration
-tests. It returns 1 for a runner error. The app waits for interaction for at most two minutes; the
-runner has a three-minute subprocess deadline. SIGINT/SIGTERM abort the child
-and close the fixture. App and report files remain as inspection artifacts.
+## Background React test
 
-The server binds only `127.0.0.1` on an OS-selected port and serves only a
-synthetic page and synthetic cookies. It is intentionally temporary test
-infrastructure; regular browser navigation needs no HTTP server. The runner
-closes it in `finally`, including compilation, startup or test failures.
-Active fixture connections are closed during teardown as well. The fixture
-accepts only GET requests for its declared routes with the selected loopback
-port and either the `127.0.0.1` or `localhost` host.
+The default mode also clicks a real React button in seven sequential states:
+visible, view hidden, a fully covering native window, minimized, zero alpha,
+offscreen within the window, and covered by an opaque sibling view. The
+window is miniaturizable, and its actual minimized and occlusion states are
+recorded.
 
-The runner copies the Swift source, fixture, plist and runner modules into its
-temporary output directory before compilation. It compiles that Swift snapshot
-and loads that fixture and validator snapshot. Report hashes identify the
-snapshots, so editing the checkout during a long test cannot change the sources
-the report attributes to the run. Node version and compilation target are recorded.
+Each condition records about five seconds of completed 100 ms timers,
+animation callbacks and completed fetches from a 200 ms retry loop. Each
+counter is rendered by React. A command snapshot must read the incremented
+button state, and a native `takeSnapshot` must change within one second
+of the click. Cropped before/after PNGs isolate the React counter from the
+activity counters; their hashes and capture times are recorded.
+The report distinguishes direct hidden/covered results from the same-window
+cover fallback. It records CPU time and resident bytes for the host and main
+view's WebContent PID, excluding GPU and other WebContent processes. These
+are short local samples, not full-app memory or scrolling benchmarks.
+Another Space and a fully integrated browser remain untested.
 
-Run the regression checks for report validation and fixture request handling.
+## Evidence and cleanup
+
+The runner prints its temporary directory, saves native stdout/stderr, and
+validates the complete selected check set. Empty, partial, duplicate,
+malformed or mode-mismatched reports fail. Exit 0 means the named
+observations passed, 2 means failed/unverified checks, and 1 means a harness
+error. A failed canonical precondition or uncovered gate remains stated in
+the spike report even when the narrower observation set passes.
+
+Source files are copied into an immutable snapshot before compilation. The
+compiled React fixture, native sources, plist, runner and validator are
+hashed in every report, together with the architecture, deployment target,
+Node version and actual bundle plist. SIGINT/SIGTERM abort the launch and
+terminate only the recorded test PID after verifying its executable path.
+The runner has a three-minute subprocess deadline. Its fixture connections
+and listener close in `finally`; temporary source, app, PNGs and reports
+remain available for inspection.
+
+The loopback server serves only synthetic fixture routes and cookies on
+`127.0.0.1`, at an OS-selected port, accepting that host and `localhost`.
+It is temporary test infrastructure; ordinary browser navigation needs no
+HTTP server and no background terminal task.
 
 ```sh
-node --test experiments/browser-wk/report.test.mjs experiments/browser-wk/fixture.test.mjs
+node --test experiments/browser-wk/report.test.mjs experiments/browser-wk/fixture.test.mjs experiments/browser-wk/scroll/timing.test.mjs
+pnpm test
 ```
 
-The named content world is a JavaScript-variable boundary. The DOM is shared
-and still controlled by the page. The example dispatcher and its two operations
-are probes, not a production snapshot engine or ref implementation.
+CI runs the Node suites separately. Vitest excludes `experiments/**`
+because these suites use `node:test`. A Vitest guard keeps device usage
+strings out of the real app and ordinary probe plist.
 
-Recorded runs on macOS 27.0.1, arm64:
+The named content world separates script globals; the DOM remains shared
+and page controlled. Typed fill data and a hostile page's replacement of
+globals, `document.querySelector`, `Element.prototype.matches` and
+`JSON.stringify` exercise that boundary. The frame-identity handler lives
+only in that world. This Swift probe does not prove wry's IPC wiring,
+production element references or Rust message validation.
 
-- [Public delegates](results/2026-11-20-public.json): screen denial failed; scroll performance unverified.
-- [Diagnostic screen SPI](results/2026-11-20-screen-spi.json): screen denial passed; scroll performance unverified.
-- [Public per-view restriction](results/2026-11-20-restricted.json) passes ten permission and isolation checks on macOS 27.0.1. It uses no display-capture SPI.
-
-Reports include hashes of the exact Swift source and fixture. The default
-report was collected from commit `4aa6cc8c`. The restricted and SPI reports use
-the snapshotted source in this change. The renderer comparison was collected
-from `01d6063b`, as verified by its manifest. Their small frame samples do not measure trackpad
-parity with OpenCode. Intel compilation passes, while Intel runtime and older
-macOS runtime coverage remain open.
-
-The restricted probe records native frame identities through a diagnostic
-handler in the isolated content world. The page-world check verifies that
-this handler remains inaccessible there. This permits native evaluation in a
-cross-origin frame without trusting page messages about its capabilities.
-
-The current SPI run repeats a trusted native screen-request click with ordinary
-JavaScript settings. Camera, microphone and screen each require their own
-native denial callback to count as passing. Location is explicitly denied as
-well. Its native scroll smoke check passes and its separate performance check
-remains unverified, so the runner correctly exits with status 2. CI runs the
-report-validation and loopback-fixture regression tests on Linux.
+Current reports belong in `results/2026-11-20-*.json`. Earlier public,
+screen-SPI and restricted-mode results remain in
+[`results/historical/`](results/historical/) with their original source
+hashes. They are superseded evidence and are not assessments of the
+selected policy. The [renderer workload](scroll/README.md) separately
+measures scripted animation; native trackpad parity is still unmeasured.

@@ -1,48 +1,54 @@
-import http from 'node:http';
+import http from "node:http";
 
-// A loopback fixture, never a proxy for real browsing. Cookies are synthetic.
-const page = `<!doctype html><meta charset="utf-8"><title>WK browser spike</title>
-<style>body{font:16px system-ui;margin:0}button{font:inherit;padding:12px}section{height:120px;padding:12px}</style>
-<button id="screen">Request screen</button><input id="input" value="original">
-<script>
-globalThis.__zorvoProbe = { dispatch: () => 'forged' };
-globalThis.permissionResults = {};
-document.querySelector('#screen').onclick = async (e) => {
-  permissionResults.screen='pending';
-  permissionResults.screenGesture={trusted:e.isTrusted,active:navigator.userActivation.isActive};
-  try {
-    const stream=await navigator.mediaDevices.getDisplayMedia({video:true});
-    stream.getTracks().forEach(t=>t.stop());permissionResults.screen='GRANTED';
-  } catch(e) {permissionResults.screen=e.name;}
-};
-</script>
-${Array.from({length:200},(_,i)=>`<section>Row ${i}</section>`).join('')}`;
-
-export async function startFixture() {
-  const server=http.createServer((req,res)=>{
-    const port=server.address().port;
-    if(![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) {
-      res.writeHead(403).end();return;
+export async function startFixture({ script = "" } = {}) {
+  const page = cookie => [
+    '<!doctype html><html lang="en"><meta charset="utf-8"><title>WK browser spike</title>',
+    '<style>body{font:16px system-ui;margin:0}main{padding:12px}button,input{font:inherit}',
+    '#interaction{height:78px;display:flex;gap:20px;align-items:center}',
+    '#react-value{font-size:40px;font-variant-numeric:tabular-nums}',
+    '#activity{margin-top:60px}iframe{height:200px}</style>',
+    '<body data-cookie="' + cookie.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;") + '">',
+    '<div id="root"></div><script src="/fixture.js"></script></body></html>',
+  ].join("");
+  let ticks = 0;
+  const server = http.createServer((request, response) => {
+    const port = server.address().port;
+    if (!["127.0.0.1:" + port, "localhost:" + port].includes(request.headers.host)) {
+      response.writeHead(403).end();
+      return;
     }
-    if(req.method!=='GET') {res.writeHead(405,{'Allow':'GET'}).end();return;}
-    const url=new URL(req.url,'http://localhost');
-    if(!['/','/seed','/who'].includes(url.pathname)) {res.writeHead(404).end();return;}
-    res.setHeader('Cache-Control','no-store');
-    if(url.pathname==='/seed') {
-      const value=url.searchParams.get('value');
-      if(!['alpha','beta'].includes(value)){res.writeHead(400);res.end();return;}
-      res.setHeader('Set-Cookie',`session=${value}; HttpOnly; Path=/; SameSite=Lax`);
+    if (request.method !== "GET") {
+      response.writeHead(405, { Allow: "GET" }).end();
+      return;
     }
-    if(url.pathname==='/who'){
-      res.setHeader('Content-Type','application/json');
-      res.end(JSON.stringify({cookie:req.headers.cookie||''}));
-    } else {
-      res.setHeader('Content-Type','text/html; charset=utf-8');res.end(page);
+    const url = new URL(request.url, "http://localhost");
+    response.setHeader("Cache-Control", "no-store");
+    if (url.pathname === "/fixture.js") {
+      response.writeHead(200, { "Content-Type": "text/javascript" }).end(script);
+      return;
     }
+    if (url.pathname === "/tick") {
+      response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ tick: ++ticks }));
+      return;
+    }
+    if (!["/", "/seed", "/who"].includes(url.pathname)) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (url.pathname === "/seed") {
+      const value = url.searchParams.get("value");
+      if (!["alpha", "beta"].includes(value)) {
+        response.writeHead(400).end();
+        return;
+      }
+      response.setHeader("Set-Cookie", "session=" + value + "; HttpOnly; Path=/; SameSite=Lax");
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(page(request.headers.cookie ?? ""));
   });
-  await new Promise((resolve,reject)=>{
-    server.once('error',reject);
-    server.listen(0,'127.0.0.1',resolve);
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
   });
-  return {server,port:server.address().port};
+  return { server, port: server.address().port };
 }

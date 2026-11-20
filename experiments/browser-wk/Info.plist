@@ -5,7 +5,4 @@
 <key>CFBundleIdentifier</key><string>xyz.zorvo.browser-spike</string>
 <key>CFBundleName</key><string>Zorvo Browser Spike</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>NSCameraUsageDescription</key><string>The spike verifies that pages cannot access the camera.</string>
-<key>NSMicrophoneUsageDescription</key><string>The spike verifies that pages cannot access the microphone.</string>
-<key>NSLocationUsageDescription</key><string>The spike verifies that pages cannot access location.</string>
 </dict></plist>

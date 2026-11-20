@@ -64,8 +64,9 @@ Once the selected runs finish, validate and summarize them.
 node experiments/browser-wk/scroll/summarize.mjs '<results directory>' opencode wk wk-split
 ```
 
-The summary includes raw-file hashes, per-round frame-interval counts, nearest
-rank p95/p99 values and counts above 33.34 ms. It rejects hidden, interrupted or
+The summary includes raw-file hashes, per-round frame-interval counts, the median,
+nearest-rank p95/p99 values, counts above 33.34 ms, and counts and percentages
+above 1.5 times each round's own median. It rejects hidden, interrupted or
 incomplete runs, missing scrolling, incorrect layout labels and streaming
 rounds without enough chunks or rendered reply text. Preserve the result
 directory for full ordered frame samples. Stop the server with Ctrl+C when
@@ -87,11 +88,24 @@ with incomplete CSS or interrupted native wheel input are excluded.
 The [recorded summary](../results/2026-11-20-scroll.json) includes all twelve
 rounds with their full frame-interval distributions.
 
-| Configuration | Idle p95 | Streaming p95 | Streaming chunks per round |
-| --- | --- | --- | --- |
-| OpenCode 2.3.2 | 9.2–9.3 ms | 9.2–9.3 ms | 399–400 |
-| Default WK view | 19 ms | 19 ms | 382–383 |
-| Restricted page with separate chat | 18 ms | 18 ms | 384 |
+| Configuration | RAF rate | Median interval | Idle / streaming p95 | Intervals >1.5× median, rounds 1–4 | Total / samples |
+| --- | --- | --- | --- | --- | --- |
+| OpenCode 2.3.2 | about 120/s | 8.3 ms | 9.2–9.3 / 9.2–9.3 ms | 0, 1, 0, 4 | 5 / 9,596 (0.052%) |
+| Default WK view | about 60/s | 17 ms | 19 / 19 ms | 3, 0, 2, 1 | 6 / 4,796 (0.125%) |
+| Restricted page with separate chat | about 60/s | 17 ms | 18 / 18 ms | 0, 1, 5, 0 | 6 / 4,796 (0.125%) |
+
+The p95 intervals mainly show different callback scheduling rates, not the
+amount of work per frame or a browser running twice as slowly. All three
+hosts have few long intervals relative to their own median. These counts
+are delayed callbacks, not a precise number of missed display refreshes.
+WebKit's default script animation ran near 60 frames/s on this 120 Hz
+display; raising that default has no known public API. Native scrolling is
+a separate path and remains unmeasured.
+
+The split run used the earlier per-view Lockdown configuration. It is
+historical renderer evidence, not a benchmark of the now selected capture
+policy. That policy uses ordinary JavaScript settings and disables only
+screen capture before view creation.
 
 Each round moved 24,000 CSS pixels. Every streaming round rendered reply text.
 The difference in chunk counts reflects timer scheduling in these hosts.

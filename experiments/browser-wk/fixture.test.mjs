@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { startFixture } from "./fixture.mjs";
 
 test("the loopback fixture serves only its declared hosts, methods and synthetic values", async context => {
-  const { server, port } = await startFixture();
+  const { server, port } = await startFixture({ script: "globalThis.fixtureLoaded = true;" });
   context.after(async () => {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
@@ -18,7 +18,13 @@ test("the loopback fixture serves only its declared hosts, methods and synthetic
   const seeded = await fetch(address + "/seed?value=alpha");
   assert.match(seeded.headers.get("set-cookie"), /^session=alpha; HttpOnly;/);
   const observed = await fetch(address + "/who", { headers: { cookie: "session=alpha" } });
-  assert.deepEqual(await observed.json(), { cookie: "session=alpha" });
+  assert.match(await observed.text(), /data-cookie="session=alpha"/);
+  const script = await fetch(address + "/fixture.js");
+  assert.equal(await script.text(), "globalThis.fixtureLoaded = true;");
+  const firstTick = await fetch(address + "/tick");
+  const nextTick = await fetch(address + "/tick");
+  assert.deepEqual(await firstTick.json(), { tick: 1 });
+  assert.deepEqual(await nextTick.json(), { tick: 2 });
   const invalid = await fetch(address + "/seed?value=other");
   assert.equal(invalid.status, 400);
   assert.equal(invalid.headers.get("set-cookie"), null);

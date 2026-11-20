@@ -1,0 +1,177 @@
+{
+  "mediaAuthorization": {
+    "camera": "not determined",
+    "microphone": "not determined"
+  },
+  "mode": "microphone-only",
+  "os": "Version 27.0.1 (Build 26A434)",
+  "results": [
+    {
+      "evidence": {
+        "otherSession": "",
+        "sameSession": "session=alpha"
+      },
+      "gate": "cookies per session",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "storeA": "alpha",
+        "storeB": "beta"
+      },
+      "gate": "no cookie overwrite across sessions",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "count": 1,
+        "input": "'); globalThis.__zorvoProbe = null; //",
+        "proof": "{\"isInput\":true}",
+        "source": "trusted",
+        "state": "0",
+        "title": "WK browser spike"
+      },
+      "gate": "isolated content world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "renderedValue": "'); globalThis.__zorvoProbe = null; //"
+      },
+      "gate": "React controlled input",
+      "status": "pass"
+    },
+    {
+      "evidence": "undefined,undefined",
+      "gate": "no app bridge in page world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "checkedConfigurations": 3,
+        "enabled": [
+          false,
+          false,
+          false
+        ]
+      },
+      "gate": "screen capture preference disabled",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "camera": false,
+        "location": false,
+        "microphone": true
+      },
+      "gate": "bundle usage declarations",
+      "status": "pass"
+    },
+    {
+      "evidence": "Canonical spike 7 also requires the test app's own Screen Recording grant.",
+      "gate": "screen recording grant precondition",
+      "status": "unverified"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://127.0.0.1:53762",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://127.0.0.1:53762",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://localhost:53762",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in cross-origin frame",
+      "status": "pass"
+    }
+  ],
+  "screenRecordingGranted": false,
+  "assessment": {
+    "scope": "API surface and location with only the microphone declaration; media requests not attempted",
+    "status": "unverified"
+  },
+  "harness": {
+    "collectedAt": "2026-11-20T10:27:28.534Z",
+    "arch": "arm64",
+    "target": "arm64-apple-macosx12.0",
+    "node": "v22.23.5",
+    "sources": {
+      "Probe.swift": "bb9d17c07805e4ef41a484cf5a8b00d8a00a77cdcd51e56fdbce6d2a20ff94a7",
+      "HiddenProbe.swift": "bca95d2e9ca5c852e82b3bbdfe005a92839448fc4487f03bbcaa59cbbab531da",
+      "Fixture.tsx": "e45952e576b41995fa1eaeaadc293669416d9d951f35ab5b22e1865ede37f447",
+      "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
+      "Info.plist": "edf827591f84308543bb149b9342f3617a83a44580742fe9f9b4596fb7d1b4fa",
+      "run.mjs": "faa63e6324ec4186d06322e7bf6e9bbe4ac56725997eb627cadd6e7bc041bf60",
+      "report.mjs": "d2175d571acf7f84b352ac476b7bc089a52e7b30457026947bd5fabc1ca84e33",
+      "fixture.bundle.js": "9490cecbbfe5a73752a0a878c864139c7d2d6289077c21d5873053cb6f538734"
+    },
+    "bundleInfoSha256": "eb1778d900d0e6ab51dd19844fa106ca66c211ef6ecb8cc1f16103850eed7db6",
+    "usageStrings": [
+      "NSMicrophoneUsageDescription"
+    ],
+    "launch": "LaunchServices via open -W -n"
+  }
+}

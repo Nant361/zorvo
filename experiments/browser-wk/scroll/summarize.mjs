@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { frameSummary } from "./timing.mjs";
 
 const [directory, ...names] = process.argv.slice(2);
 const allowed = ["opencode", "wk", "restricted", "wk-split"];
@@ -38,8 +40,8 @@ for (const name of names) {
       round: sample.round, stream: sample.stream, chunks: sample.chunks,
       chatView: sample.chatView, viewport: sample.viewport, elapsedMs: sample.elapsedMs,
       distance: sample.distance, frames: timings.length,
-      p95Ms: sorted[Math.ceil(sorted.length * 0.95) - 1],
-      p99Ms: sorted[Math.ceil(sorted.length * 0.99) - 1],
+      ...frameSummary(timings),
+      averageFramesPerSecond: 1000 * timings.length / sample.elapsedMs,
       intervalsOver33Ms: timings.filter(interval => interval > 33.34).length,
       intervalCountsMs: [...counts],
     };
@@ -49,6 +51,10 @@ for (const name of names) {
 }
 const report = {
   measurement: "Scripted requestAnimationFrame scroll with local React chat updates",
+  interpretation: "Callback cadence reflects each host's scheduling rate. Long intervals are compared with 1.5 times that round's median; native scroll latency is unmeasured.",
+  summarySources: Object.fromEntries(await Promise.all(["summarize.mjs", "timing.mjs"].map(async name => [
+    name, createHash("sha256").update(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), name))).digest("hex"),
+  ]))),
   manifest,
   runs,
 };
