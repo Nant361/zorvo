@@ -476,7 +476,7 @@ describe("ACP sessions in the app", () => {
     expect(screen.getByRole("menuitem", { name: "Rename" })).toBeDefined();
   });
 
-  it("stops an agent waiting for approval from the background tasks menu through the interrupt path", async () => {
+  it("stops an agent waiting for approval through the interrupt path", async () => {
     const spy = await renderWithQwen();
     const sessionId = await startQwenSession(spy);
     await send("clean up");
@@ -489,11 +489,7 @@ describe("ACP sessions in the app", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^\d+ background tasks?$/ }));
-    });
-    const list = screen.getByRole("list", { name: "Running tasks" });
-    await act(async () => {
-      fireEvent.click(within(list).getByRole("button", { name: /^Stop / }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop agent" }));
     });
 
     expect(callsTo(spy, "acp_respond_permission").map(([, a]) => a)).toContainEqual({

@@ -7,9 +7,8 @@ import { MessageActionBar } from "../MessageActionBar";
 import { UserMessageBar } from "./UserMessageBar";
 import { AttachmentChips } from "../composer/AttachmentChips";
 import { ToolsPart } from "./ToolsPart";
-import { TaskRow } from "./TaskRow";
 import { ToolDetails } from "./ToolDetails";
-import { secondLine, shownTools, stepsOf, subagentTaskOf } from "../../lib/task-view";
+import { shownTools, stepsOf } from "../../lib/task-view";
 import { PlanUpdatedRow, ThinkingBlock } from "./ReplyExtras";
 import { VerificationBadge } from "../private/VerificationBadge";
 import type { ModelPrice } from "../../lib/private-credits";
@@ -59,29 +58,12 @@ export interface MessageRowProps {
   privateModelId?: string;
   /** That model's listed price, for a reply's credits. */
   privateModel?: ModelPrice | null;
-  /** Opens a subagent's task beside the chat; without it a task row is not a button. */
-  onOpenTask?: (messageId: string, toolId: string) => void;
-  /** The subagent whose task tab is on screen. */
-  openTaskId?: string;
-  /** The tool calls the turn's open permission requests are for, wherever in the turn they sit. */
-  waitingToolCallIds?: readonly string[];
+  /** A window with no overview card (a popout) shows a subagent's steps under the reply's tools. */
+  showSubagentSteps?: boolean;
   /** True when the message arrived while its chat was on screen: it fades in once. */
   appears?: boolean;
   /** True when its permission or input card arrived on screen after the message itself: the card fades in once. */
   cardAppears?: boolean;
-}
-
-type CallSegment = { kind: "tools"; tools: ToolExecution[] } | { kind: "task"; tool: ToolExecution };
-
-/** A run of tool calls as plain tool lists and subagent rows, in the order they were made. */
-function inCallOrder(tools: readonly ToolExecution[]): CallSegment[] {
-  return tools.reduce<CallSegment[]>((segments, tool) => {
-    if (tool.steps !== undefined) return [...segments, { kind: "task", tool }];
-    const last = segments[segments.length - 1];
-    return last?.kind === "tools"
-      ? [...segments.slice(0, -1), { kind: "tools", tools: [...last.tools, tool] }]
-      : [...segments, { kind: "tools", tools: [tool] }];
-  }, []);
 }
 
 /** A subagent's steps in the reply itself, for a window that has no inspector to open them in. */
@@ -131,9 +113,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenUrl,
   privateModelId,
   privateModel,
-  onOpenTask,
-  openTaskId,
-  waitingToolCallIds,
+  showSubagentSteps = false,
   appears = false,
   cardAppears = false,
 }: MessageRowProps) {
@@ -174,30 +154,16 @@ export const MessageRow = memo(function MessageRow({
             if (part.kind === "text") return <MarkdownRenderer key={index} content={part.text} />;
             const listed = shownTools(part.toolIds.flatMap((id) => toolsById.get(id) ?? []));
             if (listed.length === 0) return null;
-            // A subagent whose steps are known is one row that opens its task. One the agent does not
-            // mark stays a plain tool, so what it returned can still be read.
-            // Both keep the order the agent made the calls in: plain tools between two subagents stay between them.
+            // Every tool, a subagent included, is a plain row here, so what it returned can still be read in
+            // place; the overview card lists the subagents and opens their tabs. A popout has no card, so a
+            // subagent's steps show under the list.
+            const subagents = showSubagentSteps ? listed.filter((tool) => tool.steps !== undefined) : [];
             return (
               <div key={index} className="flex flex-col gap-2">
-                {inCallOrder(listed).map((segment) => {
-                  if (segment.kind === "tools") {
-                    return <ToolsPart key={segment.tools[0].id} tools={segment.tools} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />;
-                  }
-                  const tool = segment.tool;
-                  const task = subagentTaskOf(tool, message, { isTurnOver: showActions, waitingToolCallIds });
-                  return (
-                    <div key={tool.id} className="flex flex-col gap-2">
-                      <TaskRow
-                        task={task}
-                        secondLine={secondLine(task)}
-                        isOpen={openTaskId === tool.id}
-                        onOpen={onOpenTask && (() => onOpenTask(message.id, tool.id))}
-                      />
-                      {/* Where no tab can open (a popout), the steps show here. */}
-                      {!onOpenTask && <SubagentSteps tool={tool} message={message} isTurnOver={showActions} />}
-                    </div>
-                  );
-                })}
+                <ToolsPart tools={listed} isCurrentTurn={isCurrentTurn} isTurnOver={showActions} />
+                {subagents.map((tool) => (
+                  <SubagentSteps key={tool.id} tool={tool} message={message} isTurnOver={showActions} />
+                ))}
               </div>
             );
           })}

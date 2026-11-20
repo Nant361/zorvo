@@ -60,7 +60,11 @@ async function sessionWithSubagent() {
   return { sessionId, spy };
 }
 
-const taskRow = () => screen.getByRole("button", { name: /^Open Agent: read the notes\. Done, 2 steps\.$/ });
+/** The subagent's row in the session's overview card, which opens its tab. */
+const taskRow = () =>
+  within(screen.getByRole("region", { name: "Session overview" })).getByRole("button", {
+    name: /^Open Agent: read the notes\. Subagent, done\.$/,
+  });
 const inspector = () => screen.queryByRole("region", { name: "Inspector" });
 
 describe("task tabs in the app", () => {
@@ -69,10 +73,12 @@ describe("task tabs in the app", () => {
     listeners.clear();
   });
 
-  it("shows a subagent as one row, with its text kept out of the reply", async () => {
+  it("lists a subagent in the overview card, not in the top bar, with its text kept out of the reply", async () => {
     await sessionWithSubagent();
 
     expect(taskRow()).toBeDefined();
+    expect(within(taskRow()).getByText("Subagent · general-purpose · 2 steps")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /background task/ })).toBeNull();
     expect(within(screen.getByTestId("chat-canvas-container")).queryByText("notes.txt starts with alpha line.")).toBeNull();
   });
 
@@ -87,7 +93,6 @@ describe("task tabs in the app", () => {
     expect(panel.getByRole("tab", { name: /^Tasks/ }).getAttribute("aria-selected")).toBe("true");
     expect(panel.getByRole("heading", { name: "Agent: read the notes" })).toBeDefined();
     expect(panel.getByText("notes.txt starts with alpha line.")).toBeDefined();
-    expect(taskRow().getAttribute("aria-pressed")).toBe("true");
   });
 
   it("takes the Tasks tab away when its last task tab closes", async () => {
@@ -101,7 +106,8 @@ describe("task tabs in the app", () => {
     });
 
     expect(screen.queryByRole("tab", { name: /^Tasks/ })).toBeNull();
-    expect(taskRow().getAttribute("aria-pressed")).toBe("false");
+    // The card still lists it, to open again.
+    expect(taskRow()).toBeDefined();
   });
 
   it("closes a subagent's tab when a rewind removes its message", async () => {

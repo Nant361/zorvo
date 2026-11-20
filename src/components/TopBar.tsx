@@ -19,10 +19,7 @@ import { IconButton } from "./ui/IconButton";
 import { Popover, PopoverOption } from "./ui/Popover";
 import { RenameField } from "./ui/RenameField";
 import { DiffStatChip } from "./changes/DiffStatChip";
-import { BackgroundTasksMenu, type BackgroundTasksMenuProps } from "./topbar/BackgroundTasksMenu";
 import { PlanMenu } from "./topbar/PlanMenu";
-import { PullRequestChip } from "./topbar/PullRequestChip";
-import type { PullRequestStatus } from "../hooks/usePullRequest";
 import type { PlanEntry } from "../types";
 
 /**
@@ -193,11 +190,8 @@ export interface TopBarProps {
   runAgentCount?: number;
   /** A new-session draft: the title reads "New session" and no branch chip shows. */
   isDraft?: boolean;
-  /** The workspace's git branch, shown as a chip when it is a repository. */
+  /** The workspace's git branch, shown as a chip when it is a repository; a session's is in its overview card. */
   branch?: string;
-  /** The branch's pull request, with a chip that opens it; none when absent. */
-  pullRequest?: PullRequestStatus | null;
-  onOpenPullRequest?: (url: string) => void;
   /** Set while the sidebar is hidden: its show button, then Back and Forward, lead the bar. */
   onShowSidebar?: () => void;
   /**
@@ -243,8 +237,6 @@ export interface TopBarProps {
   diffCommentCount?: number;
   /** Opens the diff view; the chip opens it. */
   onOpenDiff?: () => void;
-  /** What is running in the background; the menu is hidden when absent. */
-  backgroundTasks?: BackgroundTasksMenuProps;
   /** The session's current plan; the menu is hidden when it has none. */
   plan?: readonly PlanEntry[];
   /** The agent the plan comes from ("Plan from Claude Code"). */
@@ -261,8 +253,6 @@ export function TopBar({
   runAgentCount,
   isDraft = false,
   branch,
-  pullRequest,
-  onOpenPullRequest,
   onShowSidebar,
   hasTrafficLights = false,
   canGoBack = false,
@@ -285,7 +275,6 @@ export function TopBar({
   isDiffAlwaysShown = false,
   diffCommentCount,
   onOpenDiff,
-  backgroundTasks,
   plan,
   planSource,
 }: TopBarProps) {
@@ -375,16 +364,11 @@ export function TopBar({
             <span className="min-w-0 max-w-40 truncate">{branch}</span>
           </Chip>
         )}
-        {title && branch && !isDraft && pullRequest && onOpenPullRequest && (
-          <PullRequestChip pullRequest={pullRequest} onOpen={onOpenPullRequest} />
-        )}
       </div>
 
       {/* Right: the chips that have something to say, the inspector, the session's menu. */}
       <div className="flex shrink-0 items-center gap-3 text-fg-muted">
         {plan && plan.length > 0 && <PlanMenu plan={plan} source={planSource} />}
-
-        {backgroundTasks && <BackgroundTasksMenu {...backgroundTasks} />}
 
         {diffStats && onOpenDiff && (
           <DiffStatChip
