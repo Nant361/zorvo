@@ -6,7 +6,10 @@
   },
   "mode": "zorvo",
   "os": "Version 27.0.1 (Build 26A434)",
-  "registeredApplication": "/Users/ridhorinanta/Library/Application Support/Zorvo Browser Spike/zorvo-browser-wk-r27i9Y/Zorvo Browser Spike.app",
+  "registeredApplication": {
+    "resolved": true,
+    "snapshotRelativePath": "zorvo-browser-wk-r27i9Y/Zorvo Browser Spike.app"
+  },
   "results": [
     {
       "evidence": {
@@ -638,6 +641,7 @@
     "bundleInfoSha256": "8ea49a9ad2d17eb61dbec7edddef49651aa16dd089374ab30eb59a4b03277390",
     "buildManifestSha256": "aa2082a4e92aa647b4bbe547419da880ce8805ca1bb4dff670cf99a7449626de",
     "reusedBinary": true,
-    "launch": "LaunchServices via open -W -n"
+    "launch": "LaunchServices via open -W -n",
+    "sourceCommit": "f09ca7a3f245fe4c71b2925980336ca65e9a179c"
   }
 }

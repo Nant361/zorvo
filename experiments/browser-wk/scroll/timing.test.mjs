@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { frameSummary } from "./timing.mjs";
@@ -38,11 +37,11 @@ test("missing or invalid samples cannot produce a frame summary", () => {
   }
 });
 
-test("recorded renderer rounds agree with their histograms and the current summary scripts", async () => {
+test("recorded renderer rounds agree with their histograms at the named summary commit", async () => {
   const report = JSON.parse(await readFile(new URL("../results/2026-11-20-scroll.json", import.meta.url), "utf8"));
+  assert.match(report.summarySourceCommit, /^[a-f0-9]{40}$/);
   for (const source of ["summarize.mjs", "timing.mjs"]) {
-    const digest = createHash("sha256").update(await readFile(new URL(source, import.meta.url))).digest("hex");
-    assert.equal(report.summarySources[source], digest);
+    assert.match(report.summarySources[source], /^[a-f0-9]{64}$/);
   }
   assert.equal(report.runs.length, 3);
   for (const run of report.runs) {

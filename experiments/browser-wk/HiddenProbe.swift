@@ -6,7 +6,7 @@ import WebKit
 extension Probe {
   func activity(_ view: WKWebView) async throws -> [String: Double] {
     let values = try await js(view, "({...globalThis.probeActivity})") as? [String: NSNumber] ?? [:]
-    guard values.count == 3 else {
+    guard values.count == 4 else {
       throw ProbeFailure("The activity fixture returned incomplete counters.")
     }
     return values.mapValues(\.doubleValue)
@@ -86,9 +86,11 @@ extension Probe {
       window.makeKeyAndOrderFront(nil)
     }
 
-    for mode in [
+    var modes = [
       "visible", "hidden", "covered", "minimized", "zero-alpha", "offscreen", "same-window-cover",
-    ] {
+    ]
+    if longHidden { modes += ["hidden-after-idle", "minimized-after-idle"] }
+    for mode in modes {
       coverWindow?.close()
       coverWindow = nil
       coverView?.removeFromSuperview()
@@ -100,7 +102,7 @@ extension Probe {
       view.frame = originalFrame
       try await pause(200)
       switch mode {
-      case "hidden": view.isHidden = true
+      case "hidden", "hidden-after-idle": view.isHidden = true
       case "covered":
         let cover = NSWindow(
           contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -108,7 +110,7 @@ extension Probe {
         cover.backgroundColor = .windowBackgroundColor
         cover.order(.above, relativeTo: window.windowNumber)
         coverWindow = cover
-      case "minimized": window.miniaturize(nil)
+      case "minimized", "minimized-after-idle": window.miniaturize(nil)
       case "zero-alpha": view.alphaValue = 0
       case "offscreen": view.frame.origin.x = -1600
       case "same-window-cover":
@@ -122,9 +124,20 @@ extension Probe {
       }
       try await pause(300)
       let beforeImage = await capture(view, name: mode + "-before")
-      let before = try await activity(view)
       let beforeState = try await command(view, ["operation": "snapshot"]) as? [String: Any] ?? [:]
       let expected = String((Int(beforeState["state"] as? String ?? "") ?? -1) + 1)
+      var quietWindow: [String: Any] = [:]
+      var quietDuration: Double = 0
+      if mode.hasSuffix("-after-idle") {
+        let quietStarted = ProcessInfo.processInfo.systemUptime
+        print("QUIET \(mode): 180 seconds without page commands")
+        fflush(stdout)
+        try await pause(180_000)
+        quietDuration = (ProcessInfo.processInfo.systemUptime - quietStarted) * 1000
+        quietWindow =
+          try await js(view, "globalThis.probeRecentActivity()") as? [String: Any] ?? [:]
+      }
+      let before = try await activity(view)
       let resourcesBefore = processSamples(view)
       let started = ProcessInfo.processInfo.systemUptime
       _ = try await command(view, ["operation": "click", "selector": "#react-click"])
@@ -159,9 +172,11 @@ extension Probe {
       let documentHidden = try await js(view, "document.hidden") as? Bool ?? true
       measurements.append([
         "mode": mode, "elapsedMs": elapsed * 1000, "documentHidden": documentHidden,
+        "quietDurationMs": quietDuration, "lastFiveSecondsOfQuiet": quietWindow,
         "windowVisible": window.occlusionState.contains(.visible),
         "windowMiniaturized": window.isMiniaturized,
         "timeouts": (after["timeouts"] ?? 0) - (before["timeouts"] ?? 0),
+        "intervals": (after["intervals"] ?? 0) - (before["intervals"] ?? 0),
         "animationFrames": (after["animationFrames"] ?? 0) - (before["animationFrames"] ?? 0),
         "fetches": (after["fetches"] ?? 0) - (before["fetches"] ?? 0),
         "expectedState": expected, "snapshotState": observed, "stateLatencyMs": stateLatency,
@@ -177,17 +192,34 @@ extension Probe {
       fflush(stdout)
     }
     let hidden = measurements.filter {
-      ["hidden", "covered"].contains($0["mode"] as? String ?? "")
+      ["hidden", "covered", "minimized"].contains($0["mode"] as? String ?? "")
     }
     let direct =
-      hidden.count == 2
-      && hidden.allSatisfy { $0["reactAndSnapshotWithinOneSecond"] as? Bool == true }
+      hidden.count == 3
+      && hidden.allSatisfy {
+        $0["reactAndSnapshotWithinOneSecond"] as? Bool == true
+          && $0["documentHidden"] as? Bool == true
+          && ($0["mode"] as? String != "minimized" || $0["windowMiniaturized"] as? Bool == true)
+          && ($0["mode"] as? String != "covered" || $0["windowVisible"] as? Bool == false)
+      }
     let fallback =
       measurements.first { $0["mode"] as? String == "same-window-cover" }?[
         "reactAndSnapshotWithinOneSecond"] as? Bool == true
-    record("hidden lifecycle measurements", measurements.count == 7, measurements)
-    record(
-      "hidden React interaction", direct || fallback,
-      ["hiddenAndCoveredPass": direct, "sameWindowCoverFallbackPass": fallback])
+    record("hidden lifecycle measurements", measurements.count == modes.count, measurements)
+    record("hidden React interaction", direct, ["hiddenCoveredAndMinimizedPass": direct])
+    record("visible-window fallback interaction", fallback, ["sameWindowCoverPass": fallback])
+    if longHidden {
+      let delayed = measurements.filter { ($0["mode"] as? String ?? "").hasSuffix("-after-idle") }
+      let passed =
+        delayed.count == 2
+        && delayed.allSatisfy {
+          $0["reactAndSnapshotWithinOneSecond"] as? Bool == true
+            && $0["documentHidden"] as? Bool == true
+            && ($0["quietDurationMs"] as? Double ?? 0) >= 180_000
+            && ($0["mode"] as? String != "minimized-after-idle"
+              || $0["windowMiniaturized"] as? Bool == true)
+        }
+      record("long hidden React interaction", passed, delayed)
+    }
   }
 }

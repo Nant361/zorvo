@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { frameSummary } from "./timing.mjs";
 
 const [directory, ...names] = process.argv.slice(2);
@@ -11,6 +13,10 @@ if (!directory || names.length === 0 || names.some(name => !allowed.includes(nam
 }
 
 const manifest = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8"));
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const run = promisify(execFile);
+await run("git", ["diff", "--quiet", "HEAD", "--", "summarize.mjs", "timing.mjs"], { cwd: scriptDirectory });
+const { stdout: commit } = await run("git", ["rev-parse", "HEAD"], { cwd: scriptDirectory });
 const runs = [];
 for (const name of names) {
   const raw = await readFile(path.join(directory, name + ".json"));
@@ -51,6 +57,7 @@ for (const name of names) {
 }
 const report = {
   measurement: "Scripted requestAnimationFrame scroll with local React chat updates",
+  summarySourceCommit: commit.trim(),
   interpretation: "Callback cadence reflects each host's scheduling rate. Long intervals are compared with 1.5 times that round's median; native scroll latency is unmeasured.",
   summarySources: Object.fromEntries(await Promise.all(["summarize.mjs", "timing.mjs"].map(async name => [
     name, createHash("sha256").update(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), name))).digest("hex"),

@@ -6,7 +6,10 @@
   },
   "mode": "microphone-only",
   "os": "Version 27.0.1 (Build 26A434)",
-  "registeredApplication": "unresolved",
+  "registeredApplication": {
+    "resolved": false,
+    "snapshotRelativePath": "unresolved"
+  },
   "results": [
     {
       "evidence": {
@@ -179,6 +182,7 @@
     "bundleInfoSha256": "dda1511deac8ff543f40d661e1319c13b1be70f899f86792a425416b9cbd4cd1",
     "buildManifestSha256": "69876433e9a73c4c0735d3226bb5e1d34598e4a58234fdb58a2774389ac9aeb4",
     "reusedBinary": false,
-    "launch": "LaunchServices via open -W -n"
+    "launch": "LaunchServices via open -W -n",
+    "sourceCommit": "f09ca7a3f245fe4c71b2925980336ca65e9a179c"
   }
 }

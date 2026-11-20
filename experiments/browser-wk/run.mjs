@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
+import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot } from "./snapshot.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const run = promisify(execFile);
@@ -15,44 +16,47 @@ process.once("SIGINT", () => controller.abort());
 process.once("SIGTERM", () => controller.abort());
 const options = { signal: controller.signal, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 };
 const hash = content => createHash("sha256").update(content).digest("hex");
-const sourceNames = ["Probe.swift", "HiddenProbe.swift", "Fixture.tsx", "fixture.mjs", "Info.plist", "run.mjs", "report.mjs"];
-const modes = ["zorvo", "usage-strings", "camera-only", "microphone-only"];
+const sourceNames = ["Probe.swift", "HiddenProbe.swift", "Fixture.tsx", "fixture.mjs", "Info.plist", "run.mjs", "report.mjs", "snapshot.mjs"];
+
 let fixture;
 let outputDirectory;
 let executable;
 let launched = false;
+let registered = false;
+let keepRegistration = false;
 
-async function recordedProcess() {
+async function recordedProcess(root = outputDirectory) {
   try {
-    const pid = Number(await readFile(path.join(outputDirectory, "probe.pid"), "utf8"));
+    const pid = Number(await readFile(path.join(root, "probe.pid"), "utf8"));
     if (!Number.isInteger(pid) || pid <= 1) return null;
     const command = await run("ps", ["-ww", "-p", String(pid), "-o", "args="], { timeout: 3000 });
-    return command.stdout.trim().startsWith(await realpath(executable) + " ") ? pid : null;
+    const expected = path.join(root, appName, "Contents", "MacOS", "probe");
+    const commands = [expected, await realpath(expected)];
+    return commands.some(value => command.stdout.trim().startsWith(value + " ")) ? pid : null;
   } catch (error) {
     if (["ENOENT", "ESRCH"].includes(error.code) || error.code === 1) return null;
     throw error;
   }
 }
 
-try {
+async function main() {
   if (process.platform !== "darwin") throw new Error("This spike requires macOS and Xcode.");
-  const arguments_ = process.argv.slice(2);
-  const requestPermissions = arguments_.includes("--request-permissions");
-  const flags = arguments_.filter(argument => argument !== "--request-permissions");
-  const reuse = flags[0] === "--reuse" && flags.length === 2;
-  const prepare = flags.includes("--prepare");
-  const selected = flags.filter(argument => argument !== "--prepare");
-  const invalidSetup = requestPermissions && (!reuse || arguments_.filter(argument => argument === "--request-permissions").length !== 1);
-  const invalidMode = !reuse && (flags.length !== new Set(flags).size || selected.length > 1 ||
-    flags.some(argument => !["--prepare", "--usage-strings", "--camera-only", "--microphone-only"].includes(argument)));
-  if (invalidSetup || invalidMode) {
-    throw new Error("Usage: node experiments/browser-wk/run.mjs [--prepare] [--usage-strings | --camera-only | --microphone-only], or --reuse <snapshot directory> [--request-permissions]");
+  const cli = parseArguments(process.argv.slice(2));
+  const { prepare, requestPermissions, direct, longHidden } = cli;
+  const reuse = cli.reuse !== null;
+  keepRegistration = prepare;
+  if (cli.clean) {
+    const result = await removePreparedSnapshot(cli.clean, {
+      isRunning: async root => (await recordedProcess(root)) !== null,
+      unregister: async app => { await run(launchServices, ["-u", app], options); },
+    });
+    console.log(JSON.stringify(result));
+    return;
   }
-  const preparedRoot = path.join(os.homedir(), "Library", "Application Support", "Zorvo Browser Spike");
   if (prepare) await mkdir(preparedRoot, { recursive: true });
-  outputDirectory = reuse ? path.resolve(flags[1])
+  outputDirectory = reuse ? cli.reuse
     : await mkdtemp(path.join(prepare ? preparedRoot : os.tmpdir(), "zorvo-browser-wk-"));
-  const app = path.join(outputDirectory, "Zorvo Browser Spike.app");
+  const app = path.join(outputDirectory, appName);
   const bin = path.join(app, "Contents", "MacOS");
   const bundleInfo = path.join(app, "Contents", "Info.plist");
   const manifestPath = path.join(outputDirectory, "build.json");
@@ -61,11 +65,10 @@ try {
 
   if (reuse) {
     manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    if (!modes.includes(manifest.mode) || manifest.arch !== process.arch) throw new Error("Invalid snapshot mode or architecture.");
+    if (!modes.includes(manifest.mode) || manifest.arch !== process.arch || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit ?? "")) throw new Error("Invalid snapshot mode or architecture.");
     for (const name of sourceNames) {
       const expected = manifest.sources[name];
-      if (hash(await readFile(path.join(directory, name))) !== expected ||
-        hash(await readFile(path.join(outputDirectory, name))) !== expected) {
+      if (hash(await readFile(path.join(outputDirectory, name))) !== expected) {
         throw new Error("Snapshot source is stale or modified: " + name);
       }
     }
@@ -76,7 +79,12 @@ try {
     }
     await run("codesign", ["--verify", "--strict", app], options);
   } else {
-    const mode = selected[0]?.slice(2) ?? "zorvo";
+    const mode = cli.mode;
+    const { stdout: commit } = await run("git", ["rev-parse", "HEAD"], { ...options, cwd: directory });
+    try {
+      await run("git", ["ls-files", "--error-unmatch", ...sourceNames], { ...options, cwd: directory });
+      await run("git", ["diff", "--quiet", "HEAD", "--", ...sourceNames], { ...options, cwd: directory });
+    } catch { throw new Error("Commit the probe sources before collecting evidence."); }
     await mkdir(bin, { recursive: true });
     const sources = {};
     for (const name of sourceNames) {
@@ -120,13 +128,15 @@ try {
     ], options);
     await run("codesign", ["--force", "--sign", "-", app], options);
     manifest = {
-      mode, identifier, arch: process.arch, target, sources, usageStrings,
+      mode, identifier, sourceCommit: commit.trim(), arch: process.arch, target, sources, usageStrings,
       binarySha256: hash(await readFile(executable)), bundleInfoSha256: hash(await readFile(bundleInfo)),
     };
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   }
 
-  await run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", app], options);
+  if (longHidden && manifest.mode !== "zorvo") throw new Error("Long hidden measurements require the ordinary mode.");
+  await run(launchServices, ["-f", app], options);
+  registered = true;
 
   if (prepare) {
     console.log("Prepared app: " + app);
@@ -145,15 +155,24 @@ try {
       const { startFixture } = await import(pathToFileURL(path.join(outputDirectory, "fixture.mjs")).href);
       const { assessReport } = await import(pathToFileURL(path.join(outputDirectory, "report.mjs")).href);
       fixture = await startFixture({ script: await readFile(path.join(outputDirectory, "fixture.bundle.js"), "utf8") });
-      const resultPath = path.join(outputDirectory, "results.json");
+      const resultPath = path.join(outputDirectory, direct ? "results-direct.json" : longHidden ? "results-long-hidden.json" : "results.json");
       // A reused app must not leave an earlier result looking like a new collection.
       await rm(resultPath, { force: true });
       console.log("Results: " + resultPath);
       console.log("Mode: " + manifest.mode + ". Permission and background-React measurements run automatically.");
       launched = true;
-      const child = await run("open", ["-W", "-n", "--stdout", path.join(outputDirectory, "stdout.log"),
-        "--stderr", path.join(outputDirectory, "stderr.log"), app,
-        "--args", String(fixture.port), resultPath, manifest.mode], options);
+      const environment = {
+        ZORVO_BROWSER_SPIKE_LAUNCH: direct ? "direct" : "launchservices",
+        ZORVO_BROWSER_SPIKE_LONG_HIDDEN: longHidden ? "1" : "0",
+        ZORVO_BROWSER_SPIKE_REQUEST_PERMISSIONS: "0",
+      };
+      const runtimeOptions = { ...options, timeout: longHidden ? 540_000 : 180_000 };
+      const child = direct
+        ? await run(executable, [String(fixture.port), resultPath, manifest.mode],
+          { ...runtimeOptions, env: { ...process.env, ...environment } })
+        : await run("open", ["-W", "-n", ...Object.entries(environment).flatMap(([key, value]) => ["--env", key + "=" + value]),
+          "--stdout", path.join(outputDirectory, "stdout.log"), "--stderr", path.join(outputDirectory, "stderr.log"), app,
+          "--args", String(fixture.port), resultPath, manifest.mode], runtimeOptions);
       if (child.stdout) process.stdout.write(child.stdout);
       if (child.stderr) process.stderr.write(child.stderr);
       const report = JSON.parse(await readFile(resultPath, "utf8"));
@@ -161,13 +180,17 @@ try {
       report.harness = {
         collectedAt: new Date().toISOString(), node: process.version, ...manifest,
         buildManifestSha256: hash(await readFile(manifestPath)),
-        reusedBinary: reuse, launch: "LaunchServices via open -W -n",
+        reusedBinary: reuse, launch: direct ? "Direct child of Node runner" : "LaunchServices via open -W -n",
       };
       await writeFile(resultPath, JSON.stringify(report, null, 2) + "\n");
       console.log("Assessment: " + report.assessment.status);
       if (report.assessment.status !== "pass") process.exitCode = 2;
     }
   }
+}
+
+try {
+  await main();
 } catch (error) {
   if (error.stdout) process.stdout.write(error.stdout);
   console.error(error.message);
@@ -178,6 +201,10 @@ try {
       const pid = await recordedProcess();
       if (pid) process.kill(pid, "SIGTERM");
     } catch (error) { console.error("Test process cleanup failed. " + error.message); }
+  }
+  if (registered && !keepRegistration) {
+    try { await run(launchServices, ["-u", path.join(outputDirectory, appName)], { timeout: 10_000 }); }
+    catch (error) { console.error("LaunchServices cleanup failed. " + error.message); process.exitCode = 1; }
   }
   if (fixture) {
     fixture.server.closeAllConnections();

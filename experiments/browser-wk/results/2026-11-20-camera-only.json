@@ -6,7 +6,10 @@
   },
   "mode": "camera-only",
   "os": "Version 27.0.1 (Build 26A434)",
-  "registeredApplication": "unresolved",
+  "registeredApplication": {
+    "resolved": false,
+    "snapshotRelativePath": "unresolved"
+  },
   "results": [
     {
       "evidence": {
@@ -179,6 +182,7 @@
     "bundleInfoSha256": "dc4ef03580126472b1acd352db070809b70c3d3fff6d2ebe8a04c7ec430bea6d",
     "buildManifestSha256": "a807091066125cf3d2e690f6ea25ca38954fdf394aa33acd3c504e857e91e96e",
     "reusedBinary": false,
-    "launch": "LaunchServices via open -W -n"
+    "launch": "LaunchServices via open -W -n",
+    "sourceCommit": "f09ca7a3f245fe4c71b2925980336ca65e9a179c"
   }
 }

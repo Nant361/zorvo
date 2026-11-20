@@ -25,6 +25,33 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
   let args = CommandLine.arguments
   var usesCamera: Bool { ["usage-strings", "camera-only"].contains(args[3]) }
   var usesMicrophone: Bool { ["usage-strings", "microphone-only"].contains(args[3]) }
+  var longHidden: Bool {
+    ProcessInfo.processInfo.environment["ZORVO_BROWSER_SPIKE_LONG_HIDDEN"] == "1"
+  }
+
+  func applicationIdentity(_ pid: pid_t) -> [String: Any] {
+    let app = NSRunningApplication(processIdentifier: pid)
+    return [
+      "pid": pid, "name": app?.localizedName ?? "unresolved",
+      "bundleIdentifier": app?.bundleIdentifier ?? "unresolved",
+    ]
+  }
+
+  func launchContext() -> [String: Any] {
+    var responsible: pid_t = 0
+    if let library = dlopen(nil, RTLD_LAZY) {
+      defer { dlclose(library) }
+      if let symbol = dlsym(library, "responsibility_get_pid_responsible_for_pid") {
+        typealias ResponsiblePID = @convention(c) (pid_t) -> pid_t
+        responsible = unsafeBitCast(symbol, to: ResponsiblePID.self)(getpid())
+      }
+    }
+    return [
+      "launch": ProcessInfo.processInfo.environment["ZORVO_BROWSER_SPIKE_LAUNCH"] ?? "unknown",
+      "application": applicationIdentity(getpid()), "parent": applicationIdentity(getppid()),
+      "responsibleApplication": applicationIdentity(responsible),
+    ]
+  }
 
   let trusted = """
     (() => {
@@ -88,12 +115,19 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       } else {
         do { try await run() } catch { record("harness", false, String(describing: error)) }
       }
+      let registered = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: Bundle.main.bundleIdentifier ?? "missing")
       let output: [String: Any] = [
+        "schemaVersion": 2, "longHidden": longHidden, "launchContext": launchContext(),
         "os": ProcessInfo.processInfo.operatingSystemVersionString,
         "mode": args[3],
         "bundleIdentifier": Bundle.main.bundleIdentifier ?? "missing",
-        "registeredApplication": NSWorkspace.shared.urlForApplication(
-          withBundleIdentifier: Bundle.main.bundleIdentifier ?? "missing")?.path ?? "unresolved",
+        "registeredApplication": [
+          "resolved": registered != nil,
+          "snapshotRelativePath": registered.map {
+            $0.deletingLastPathComponent().lastPathComponent + "/" + $0.lastPathComponent
+          } ?? "unresolved",
+        ],
         "screenRecordingGranted": CGPreflightScreenCaptureAccess(),
         "mediaAuthorization": [
           "camera": self.authorizationName(.video), "microphone": self.authorizationName(.audio),
@@ -171,19 +205,38 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     _ view: WKWebView, _ source: String, in context: WKContentWorld? = nil,
     frame: WKFrameInfo? = nil
   ) async throws -> Any {
-    try await withCheckedThrowingContinuation { continuation in
+    try await scriptReply { reply in
       view.evaluateJavaScript(source, in: frame, in: context ?? .page) {
-        continuation.resume(with: $0)
+        reply($0)
       }
     }
   }
 
   func command(_ view: WKWebView, _ arguments: [String: Any]) async throws -> Any {
-    try await withCheckedThrowingContinuation { continuation in
+    try await scriptReply { reply in
       view.callAsyncJavaScript(
         "return globalThis.__zorvoProbe.dispatch(args)", arguments: ["args": arguments], in: nil,
         in: world
-      ) { continuation.resume(with: $0) }
+      ) { reply($0) }
+    }
+  }
+
+  func scriptReply(_ start: (@escaping (Result<Any, Error>) -> Void) -> Void) async throws -> Any {
+    try await withCheckedThrowingContinuation { continuation in
+      var settled = false
+      let timeout = DispatchWorkItem {
+        guard !settled else { return }
+        settled = true
+        continuation.resume(
+          throwing: ProbeFailure("Script reply exceeded its five-second deadline."))
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
+      start { result in
+        guard !settled else { return }
+        settled = true
+        timeout.cancel()
+        continuation.resume(with: result)
+      }
     }
   }
 
@@ -423,19 +476,22 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
           {timeout: 2000});
       });
       """, frame: frame)
+    let publicDelegateAvailable = ProcessInfo.processInfo.isOperatingSystemAtLeast(
+      OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+    let callbacks = locationDecisions - beforeLocation
     record(
-      "location denied in " + label, location as? String == "1",
+      "location denied in " + label,
+      location as? String == "1" && callbacks == (publicDelegateAvailable ? 1 : 0),
       [
-        "result": location, "callbacks": locationDecisions - beforeLocation,
-        "publicDelegateAvailable": ProcessInfo.processInfo.isOperatingSystemAtLeast(
-          OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)),
+        "result": location, "callbacks": callbacks,
+        "publicDelegateAvailable": publicDelegateAvailable,
       ])
   }
 
   func asyncJS(_ view: WKWebView, _ source: String, frame: WKFrameInfo? = nil) async throws -> Any {
-    try await withCheckedThrowingContinuation { continuation in
+    try await scriptReply { reply in
       view.callAsyncJavaScript(source, arguments: [:], in: frame, in: .page) {
-        continuation.resume(with: $0)
+        reply($0)
       }
     }
   }
