@@ -3,6 +3,8 @@
 use serde_json::Value;
 use tauri::AppHandle;
 
+pub mod history;
+
 #[cfg(target_os = "macos")]
 mod native;
 #[cfg(all(target_os = "macos", debug_assertions))]
@@ -97,6 +99,76 @@ fn site_target(session: &str, tab: &str) -> Result<(), String> {
         return Err("Invalid browser site request.".into());
     }
     Ok(())
+}
+
+/// Manual browser chrome can create an initial blank document without making
+/// about: URLs available to the agent's navigation allowlist.
+pub async fn new_tab(app: &AppHandle, session: String) -> Result<Value, String> {
+    if !crate::artifacts::store::is_session_id(&session) {
+        return Err("Invalid browser session.".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        native::execute(
+            app,
+            session,
+            serde_json::json!({"operation":"__manual_tabs_new_blank"}),
+        )
+        .await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, session);
+        Err("The embedded browser requires macOS.".into())
+    }
+}
+
+pub async fn zoom(
+    app: &AppHandle,
+    session: String,
+    tab: String,
+    action: String,
+) -> Result<Value, String> {
+    site_target(&session, &tab)?;
+    next_zoom(1., &action)?;
+    #[cfg(target_os = "macos")]
+    {
+        native::execute(
+            app,
+            session,
+            serde_json::json!({"operation":"__manual_zoom","tabId":tab,"action":action}),
+        )
+        .await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, session, tab, action);
+        Err("The embedded browser requires macOS.".into())
+    }
+}
+
+fn next_zoom(current: f64, action: &str) -> Result<f64, String> {
+    const LEVELS: &[f64] = &[
+        0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1., 1.1, 1.25, 1.5, 1.75, 2., 2.5, 3., 4., 5.,
+    ];
+    if !current.is_finite() {
+        return Err("Browser zoom is unavailable.".into());
+    }
+    match action {
+        "in" => Ok(LEVELS
+            .iter()
+            .copied()
+            .find(|level| *level > current + 0.0001)
+            .unwrap_or(5.)),
+        "out" => Ok(LEVELS
+            .iter()
+            .rev()
+            .copied()
+            .find(|level| *level < current - 0.0001)
+            .unwrap_or(0.25)),
+        "reset" => Ok(1.),
+        _ => Err("Unknown browser zoom action.".into()),
+    }
 }
 
 /// Site controls are manual UI commands, outside the agent operation allowlist.
@@ -237,6 +309,18 @@ pub fn close_all(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_zoom_uses_bounded_browser_steps_and_reset() {
+        assert_eq!(next_zoom(1., "in").unwrap(), 1.1);
+        assert_eq!(next_zoom(1.1, "out").unwrap(), 1.);
+        assert_eq!(next_zoom(1., "out").unwrap(), 0.9);
+        assert_eq!(next_zoom(5., "in").unwrap(), 5.);
+        assert_eq!(next_zoom(0.25, "out").unwrap(), 0.25);
+        assert_eq!(next_zoom(5., "reset").unwrap(), 1.);
+        assert!(next_zoom(1., "unknown").is_err());
+        assert!(next_zoom(f64::NAN, "in").is_err());
+    }
 
     #[test]
     fn only_http_pages_without_credentials_are_navigable() {

@@ -7,6 +7,13 @@ export interface BrowserTab {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  zoomFactor?: number;
+}
+
+export interface BrowserVisit {
+  url: string;
+  title: string;
+  visitedAt: number;
 }
 
 export interface BrowserSessionState {
@@ -47,6 +54,7 @@ export function readBrowserState(value: unknown, sessionId: string): BrowserSess
     !(state.activeTabId === null || typeof state.activeTabId === "string")) return null;
   const valid = state.tabs.every(tab => tab && typeof tab.id === "string" && typeof tab.url === "string" &&
     typeof tab.title === "string" && typeof tab.loading === "boolean" &&
-    typeof tab.canGoBack === "boolean" && typeof tab.canGoForward === "boolean");
+    typeof tab.canGoBack === "boolean" && typeof tab.canGoForward === "boolean" &&
+    (tab.zoomFactor === undefined || (typeof tab.zoomFactor === "number" && Number.isFinite(tab.zoomFactor) && tab.zoomFactor > 0)));
   return valid ? state as BrowserSessionState : null;
 }

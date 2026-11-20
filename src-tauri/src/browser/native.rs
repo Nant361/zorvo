@@ -83,7 +83,7 @@ fn metadata(id: &str, tab: &Tab) -> Value {
     unsafe {
         json!({"id":id,"engine":"WebKit","url":view.URL().and_then(|u|u.absoluteString()).map(|s|s.to_string()).unwrap_or_else(||tab.initial_url.clone()),
         "title":view.title().map(|v|v.to_string()).unwrap_or_else(||"New tab".into()),"loading":tab.loading,
-        "canGoBack":view.canGoBack(),"canGoForward":view.canGoForward()})
+        "canGoBack":view.canGoBack(),"canGoForward":view.canGoForward(),"zoomFactor":view.pageZoom()})
     }
 }
 fn state(session_id: &str) -> Value {
@@ -203,6 +203,11 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                             if let Some(d) = tab.dialog.take() {
                                 d.dismiss();
                             }
+                        } else {
+                            let meta = metadata(&tid, tab);
+                            if let (Some(url), Some(title)) = (meta["url"].as_str(), meta["title"].as_str()) {
+                                super::history::record(&app, url.into(), title.into());
+                            }
                         }
                     });
                     changed(&app, &sid);
@@ -216,8 +221,10 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
         }
         // First untrusted load starts only after capture denial and the isolated
         // data handler are installed. wry's default delegate never sees a page.
-        view.load_url(url)
-            .map_err(|e| format!("Could not load the browser page: {e}"))?;
+        if url != "about:blank" {
+            view.load_url(url)
+                .map_err(|e| format!("Could not load the browser page: {e}"))?;
+        }
         // No app initialization script or invoke key exists in this view. Only our isolated data handler is installed.
         for (_, tab) in &session.tabs {
             let _ = tab.view.set_visible(false);
@@ -228,7 +235,7 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 view,
                 _delegate: delegate,
                 frames: vec![],
-                loading: true,
+                loading: url != "about:blank",
                 initial_url: url.into(),
                 dialog: None,
                 document: None,
@@ -299,6 +306,14 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     let operation = args.get("operation").and_then(Value::as_str).unwrap_or("");
     if operation == "tabs.list" {
         let _ = reply.send(Ok(state(sid)));
+        return;
+    }
+    if operation == "__manual_tabs_new_blank" {
+        let answer = create(app, sid, "about:blank");
+        if answer.is_ok() {
+            changed(app, sid);
+        }
+        let _ = reply.send(answer.map(|id| json!({"tabId":id,"state":state(sid)})));
         return;
     }
     if operation == "tabs.open" {
@@ -372,6 +387,19 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     let found = with_tab(sid, &tid, |tab| {
         let reply = reply.take().expect("one native operation");
         match operation {
+            "__manual_zoom" => {
+                // SAFETY: this public WebKit property belongs to the retained
+                // session-owned view on its main thread, not to page script.
+                let result = unsafe {
+                    let view = tab.view.webview();
+                    super::next_zoom(view.pageZoom(), args["action"].as_str().unwrap_or_default())
+                        .map(|factor| {
+                            view.setPageZoom(factor);
+                            json!({"zoomFactor":view.pageZoom()})
+                        })
+                };
+                let _ = reply.send(result);
+            }
             "__manual_site_info" => {
                 site::read(Retained::into_super(tab.view.webview()), sid, &tid, reply)
             }
@@ -564,7 +592,7 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     }
     if matches!(
         operation,
-        "dialog" | "navigate" | "back" | "forward" | "reload" | "stop"
+        "dialog" | "navigate" | "back" | "forward" | "reload" | "stop" | "__manual_zoom"
     ) {
         changed(app, sid);
     }

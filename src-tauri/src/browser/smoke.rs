@@ -3,6 +3,88 @@ use super::{browser_bounds, execute, Bounds};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
+async fn chrome_smoke(app: &AppHandle, session: &str, url: &str) -> Result<Value, String> {
+    let session = session.to_string();
+    let blank = super::new_tab(app, session.clone()).await?;
+    let tab = blank["tabId"]
+        .as_str()
+        .ok_or("No new native blank tab.")?
+        .to_string();
+    let tabs = blank["state"]["tabs"]
+        .as_array()
+        .ok_or("Missing native blank tab state.")?;
+    if tabs.len() != 1
+        || tabs[0]["url"] != "about:blank"
+        || tabs[0]["loading"] != false
+        || tabs[0]["zoomFactor"] != 1.
+    {
+        return Err(format!("Native new tab did not stay blank: {blank}"));
+    }
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"navigate","tabId":tab,"url":url}),
+    )
+    .await?;
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"wait","selector":"#increment"}),
+    )
+    .await?;
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"fill","selector":"#input","value":"retained zoom state"}),
+    )
+    .await?;
+    let zoomed = super::zoom(app, session.clone(), tab.clone(), "in".into()).await?;
+    let first = execute(app, session.clone(), json!({"operation":"tabs.list"})).await?;
+    if zoomed["zoomFactor"] != 1.1 || first["tabs"][0]["zoomFactor"] != 1.1 {
+        return Err(format!(
+            "Native page zoom was not applied: {zoomed}; {first}"
+        ));
+    }
+    let second = super::new_tab(app, session.clone()).await?;
+    let second_id = second["tabId"]
+        .as_str()
+        .ok_or("No second blank native tab.")?
+        .to_string();
+    let second_tab = second["state"]["tabs"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["id"] == second_id))
+        .ok_or("Missing second native tab.")?;
+    if second_tab["zoomFactor"] != 1. {
+        return Err("Page zoom leaked to another tab.".into());
+    }
+    execute(
+        app,
+        session.clone(),
+        json!({"operation":"tabs.close","tabId":second_id}),
+    )
+    .await?;
+    let reset = super::zoom(app, session.clone(), tab.clone(), "reset".into()).await?;
+    let input = execute(
+        app,
+        session.clone(),
+        json!({"operation":"evaluate","expression":"document.querySelector('#input').value"}),
+    )
+    .await?;
+    if reset["zoomFactor"] != 1. || input != "retained zoom state" {
+        return Err("Reset zoom lost the open page or input state.".into());
+    }
+    if super::zoom(app, session.clone(), tab.clone(), "unknown".into())
+        .await
+        .is_ok()
+    {
+        return Err("Unknown native zoom action was accepted.".into());
+    }
+    execute(app, session, json!({"operation":"tabs.close","tabId":tab})).await?;
+    Ok(
+        json!({"name":"native blank tabs and per-tab zoom/reset preserve form state","pass":true,"zoomed":zoomed,"reset":reset}),
+    )
+}
+
 async fn responsive_smoke(
     app: &AppHandle,
     session: &str,
@@ -128,10 +210,15 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
     let b = "native-browser-smoke-b".to_string();
     let mut steps = vec![];
     let result=async{
+        if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("chrome") {
+            steps.push(chrome_smoke(app, &a, &url).await?);
+            return Ok::<_,String>(());
+        }
         steps.push(responsive_smoke(app, &a, &parsed).await?);
         if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("responsive") {
             return Ok::<_,String>(());
         }
+        steps.push(chrome_smoke(app, &a, &url).await?);
         execute(app,a.clone(),json!({"operation":"tabs.open","url":url})).await?;
         execute(app,a.clone(),json!({"operation":"wait","selector":"#increment"})).await?;
         let state=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?;

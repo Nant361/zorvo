@@ -56,13 +56,13 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
     };
   }, [sessionId, engine, refresh]);
 
-  const execute = useCallback(async (args: Record<string, unknown>) => {
+  const perform = useCallback(async (run: () => Promise<unknown>) => {
     const epoch = generation.current;
     executions.current.set(epoch, (executions.current.get(epoch) ?? 0) + 1);
     setBusy(true);
     setError(null);
     try {
-      const result = await invoke("browser_execute", { sessionId, args: { ...args, engine } });
+      const result = await run();
       if (epoch !== generation.current) return null;
       await refresh();
       return result;
@@ -75,7 +75,14 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
       else executions.current.delete(epoch);
       if (epoch === generation.current) setBusy(remaining > 0);
     }
-  }, [sessionId, engine, refresh]);
+  }, [refresh]);
 
-  return { state, error, busy, execute };
+  const execute = useCallback((args: Record<string, unknown>) => perform(() =>
+    invoke("browser_execute", { sessionId, args: { ...args, engine } })), [perform, sessionId, engine]);
+  const newTab = useCallback(() => perform(() =>
+    invoke("browser_new_tab", { sessionId })), [perform, sessionId]);
+  const zoom = useCallback((tabId: string, action: "in" | "out" | "reset") => perform(() =>
+    invoke("browser_zoom", { sessionId, tabId, action })), [perform, sessionId]);
+
+  return { state, error, busy, execute, newTab, zoom };
 }

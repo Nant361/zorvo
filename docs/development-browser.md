@@ -32,8 +32,21 @@ runtime behavior of this integration.
   placement, overlay hiding, address normalization, tools and permission dialogs.
   Navigation from UI never starts an ACP agent or a loopback HTTP server. Address
   search submits to Google. The compact toolbar shows navigation, the address,
-  element selection and its menu. Tab management, engine choices and diagnostic
-  views are available from that menu. The main Tauri CSP remains unchanged.
+  element selection and its menu. A closable tab strip and blank new-tab action
+  sit above it. The page menu offers zoom, copy link, open in the system browser
+  and Clear history; the separate tools menu contains engine choices, diagnostic
+  views and browser-access revocation. The main Tauri CSP remains unchanged.
+
+Native page zoom uses WebKit's public page-zoom API and stays with its tab. Its
+percentage in the address field resets to 100%. These controls are manual UI
+commands, separate from the agent operation catalog. Chromium debug uses its
+external window's own zoom controls.
+
+Recent native pages are a device-local, deduplicated list of at most 30 entries
+in a private `browser-visits.json` file. Known credential-query URLs are excluded
+and fragments are omitted. Blank tabs show these visits as links. Clear history
+empties that list; open tabs, their back/forward stacks and site data are kept.
+Older browser-history files are not imported or changed.
 
 The native browser preserves WebKit's user-agent prefix and appends the standard
 `Safari/605.1.15` compatibility token plus `Zorvo/<version>` before its first
@@ -106,3 +119,6 @@ Set `ZORVO_BROWSER_SMOKE_CASE=responsive` for the focused first-request identity
 and viewport check. It resizes one retained native view to 360, 560 and 900 logical
 pixels and checks that the page reflows without horizontal overflow, navigation
 or lost form state.
+
+Set `ZORVO_BROWSER_SMOKE_CASE=chrome` to exercise native blank tabs and per-tab
+zoom/reset while checking that form state survives and another tab stays at 100%.

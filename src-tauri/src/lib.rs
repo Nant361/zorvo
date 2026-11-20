@@ -518,6 +518,9 @@ pub fn run() {
             let (store, migration) = data_migration::open_store(data_dir);
             app.manage(store);
             app.manage(browser_commands::BrowserPermissions::default());
+            app.manage(Arc::new(browser::history::BrowserHistory::new(
+                app.state::<store::AppStore>().root(),
+            )));
             app.manage(browser_debug::DebugBrowsers::default());
             app.manage(Arc::new(artifacts::store::ArtifactStore::new(
                 app.state::<store::AppStore>().root().join("artifacts"),
@@ -586,6 +589,10 @@ pub fn run() {
             browser_commands::browser_pick,
             browser_commands::browser_site_info,
             browser_commands::browser_site_clear,
+            browser_commands::browser_new_tab,
+            browser_commands::browser_zoom,
+            browser_commands::browser_history,
+            browser_commands::browser_history_clear,
             browser_commands::browser_agent_execute,
             browser_commands::browser_permission,
             browser_commands::browser_file_permission,

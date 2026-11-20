@@ -226,6 +226,45 @@ pub async fn browser_site_info(
 }
 
 #[tauri::command]
+pub async fn browser_new_tab(app: AppHandle, session_id: String) -> Result<Value, String> {
+    workspace(&app, &session_id)?;
+    crate::browser::new_tab(&app, session_id).await
+}
+
+#[tauri::command]
+pub async fn browser_zoom(
+    app: AppHandle,
+    session_id: String,
+    tab_id: String,
+    action: String,
+) -> Result<Value, String> {
+    workspace(&app, &session_id)?;
+    crate::browser::zoom(&app, session_id, tab_id, action).await
+}
+
+#[tauri::command]
+pub async fn browser_history(
+    app: AppHandle,
+) -> Result<Vec<crate::browser::history::Visit>, String> {
+    let history = Arc::clone(&app.state::<Arc<crate::browser::history::BrowserHistory>>());
+    tauri::async_runtime::spawn_blocking(move || history.list())
+        .await
+        .map_err(|_| "Browser history could not be read.")?
+}
+
+#[tauri::command]
+pub async fn browser_history_clear(
+    app: AppHandle,
+) -> Result<Vec<crate::browser::history::Visit>, String> {
+    let history = Arc::clone(&app.state::<Arc<crate::browser::history::BrowserHistory>>());
+    tauri::async_runtime::spawn_blocking(move || history.clear())
+        .await
+        .map_err(|_| "Browser history could not be cleared.")??;
+    let _ = app.emit("browser-history-changed", ());
+    Ok(vec![])
+}
+
+#[tauri::command]
 pub async fn browser_site_clear(
     app: AppHandle,
     session_id: String,
@@ -523,6 +562,8 @@ mod tests {
             json!({"operation":"__manual_site_info"}),
             json!({"operation":"__manual_site_clear"}),
             json!({"operation":"__manual_site_cookies_clear"}),
+            json!({"operation":"__manual_tabs_new_blank"}),
+            json!({"operation":"__manual_zoom","action":"in"}),
             json!({"operation":"tabs.open","engine":"cef"}),
         ] {
             assert!(validate_args(&args).is_err());

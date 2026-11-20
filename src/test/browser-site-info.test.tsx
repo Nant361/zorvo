@@ -11,6 +11,7 @@ function props(overrides: Partial<ComponentProps<typeof BrowserToolbar>> = {}): 
   return {
     tabs: [active], active, engine: "webkit", panel: "page", busy: false, overlay: "site",
     onOverlay: vi.fn(), onNavigate: vi.fn(), onAction: vi.fn(), onEngine: vi.fn(), onPanel: vi.fn(), onRevoke: vi.fn(),
+    onNewTab: vi.fn(), zoomFactor: 1, onZoom: vi.fn(), onCopyLink: vi.fn(), onOpenExternal: vi.fn(), onClearHistory: vi.fn(), hasHistory: false,
     site, siteBusy: false, onClearSite: vi.fn(), ...overrides,
   };
 }

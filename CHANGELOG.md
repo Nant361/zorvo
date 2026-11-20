@@ -15,6 +15,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ### Fixed
 
+- **Browser tabs and page controls.** A tab strip, blank new tabs and the page menu now follow the compact browser layout, with native page zoom, copying/opening links and a clearable list of recent pages. Diagnostic tools have their own menu.
 - **Responsive pages in the browser.** WebKit now includes its Safari compatibility token and Zorvo identity, so sites such as Google serve a layout that follows the panel width.
 - **Clearer browser commands for agents.** Browser tools now describe URLs, tab IDs and scroll distances directly, so agents can open and scroll a page without guessing the arguments.
 - **OpenCode retry errors in the chat.** Failed model requests now show the agent's retry status and error instead of leaving only a working indicator.
