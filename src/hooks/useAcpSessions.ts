@@ -7,6 +7,7 @@ import { toElicitationCard } from '../lib/acp-elicitation';
 import { toListedSessions, type ListedSessions } from '../lib/session-list';
 import { unavailableChoiceReason } from '../lib/qwen-workflow-mode';
 import type { ContextUsage, ElicitationAnswer, ElicitationCard, SlashCommand } from '../types';
+import { withTurnPoint } from '../lib/context-usage';
 
 /** The one event channel the backend emits ACP traffic on. */
 export const ACP_EVENT = 'acp-event';
@@ -57,6 +58,8 @@ export interface AcpSessionInfo {
   commands: SlashCommand[];
   /** Context window use, from the agent's latest usage_update. */
   usage?: ContextUsage;
+  /** `usage.used` at each turn end, oldest first, at most `MAX_TURN_POINTS`; memory only, for the run. */
+  turnUsage?: number[];
   canFork: boolean;
   /** The agent can reopen a session of its own (session/resume or session/load). */
   canReopen: boolean;
@@ -270,6 +273,7 @@ export function useAcpSessions(handlers: AcpHandlers) {
           break;
         case 'turn-end':
           setBusy(sessionId, false);
+          patch(sessionId, (c) => (c.usage ? { ...c, turnUsage: withTurnPoint(c.turnUsage, c.usage.used) } : c));
           h.onTurnEnd(
             sessionId,
             isString(payload.error)

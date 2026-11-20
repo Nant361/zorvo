@@ -228,12 +228,25 @@ function privateRefusal() {
   return details ? { code: -32603, message: "Internal error", data: { details } } : null;
 }
 
+// FAKE_ACP_USAGE: each prompt reports 30,000 more tokens of a 200,000-token window, and 25 cents more cost.
+let promptsTaken = 0;
+function reportUsage(sessionId) {
+  promptsTaken += 1;
+  update(sessionId, {
+    sessionUpdate: "usage_update",
+    used: Math.min(200_000, promptsTaken * 30_000),
+    size: 200_000,
+    cost: { amount: promptsTaken * 0.25, currency: "USD" },
+  });
+}
+
 function handlePrompt(id, params) {
   const privateError = privateRefusal();
   if (privateError) {
     send({ id, error: privateError });
     return;
   }
+  if (process.env.FAKE_ACP_USAGE) reportUsage(params.sessionId);
   const text = params.prompt.map((block) => block.text ?? "").join("");
   if (elicitations[text]) {
     elicit(id, params.sessionId, elicitations[text](params.sessionId));
@@ -615,7 +628,11 @@ const handlers = {
     // Like real agents, lists its slash commands just after the session opens.
     if (!process.env.FAKE_ACP_NO_COMMANDS) update(sessionId, {
       sessionUpdate: "available_commands_update",
-      availableCommands: [{ name: "review", description: "Review the changes" }],
+      availableCommands: [
+        { name: "review", description: "Review the changes" },
+        // FAKE_ACP_USAGE: also offers /compact, which the Context tab's button sends.
+        ...(process.env.FAKE_ACP_USAGE ? [{ name: "compact", description: "Compact the context" }] : []),
+      ],
     });
   },
   // FAKE_ACP_SLOW_DELETE: takes three seconds to delete a session.
@@ -627,6 +644,15 @@ const handlers = {
     askAfterOpen(sessionId);
   },
   "session/prompt": handlePrompt,
+  // FAKE_ACP_CONTEXT_USAGE: answers Qwen Code's context breakdown with the answer recorded from it.
+  "qwen/status/session/context_usage": (id, params) => {
+    if (!process.env.FAKE_ACP_CONTEXT_USAGE) {
+      send({ id, error: { code: -32601, message: "Method not found" } });
+      return;
+    }
+    const recorded = JSON.parse(readFileSync(new URL("./qwen-context-usage.json", import.meta.url), "utf8")).answer;
+    reply(id, { ...recorded, sessionId: params.sessionId });
+  },
   "session/set_model": (id, params) => {
     if (!process.env.FAKE_ACP_MODELS || !MODEL_IDS.includes(params.modelId)) {
       send({ id, error: { code: -32602, message: `Unknown model ${params.modelId}` } });

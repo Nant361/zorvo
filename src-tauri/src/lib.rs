@@ -17,6 +17,7 @@ pub mod fork_handoff;
 pub mod git_info;
 pub mod github;
 pub mod installer;
+pub mod instruction_files;
 pub mod navigation_guard;
 pub mod pasted_images;
 pub mod private_mode;
@@ -633,6 +634,8 @@ pub fn run() {
             acp::commands::acp_set_model,
             acp::commands::acp_set_config_option,
             acp::commands::acp_qwen_last_api_error,
+            acp::commands::acp_context_usage,
+            instruction_files::instruction_files,
             acp::commands::acp_stop_session,
             agent_tools::commands::agent_tool_respond,
             installer::commands::install_agent,

@@ -155,6 +155,8 @@ export interface ComposerDockProps {
   attachAsFiles?: boolean;
   /** How much of the agent's context window is used; the meter shows once the agent reports it. */
   contextUsage?: ContextUsage;
+  /** Opens the inspector's Context tab from the meter; a popout passes none and gets the popover. */
+  onOpenContext?: () => void;
   /**
    * A short line under the prompt, e.g. why Send is blocked; a slash command's hint wins, except while
    * `sendDisabled`: then the note says why and the Send button points to it.
@@ -235,6 +237,7 @@ export function ComposerDock({
   agentName,
   attachAsFiles = false,
   contextUsage,
+  onOpenContext,
   note,
   noteInRow = false,
   isLoadingControls = false,
@@ -780,7 +783,7 @@ export function ComposerDock({
           </div>
 
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {contextUsage && <ContextMeter {...contextUsage} />}
+            {contextUsage && <ContextMeter {...contextUsage} onOpen={onOpenContext} />}
             {privateSessionLine && (
               <span className="text-caption text-fg-subtle">{privateSessionLine}</span>
             )}

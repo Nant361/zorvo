@@ -1764,9 +1764,10 @@ describe("ACP sessions in the app", () => {
     await waitFor(() => expect(reads()).toBeGreaterThan(before));
   });
 
-  it("shows the session's cost in the context details when the agent reports it", async () => {
+  it("opens the Context tab from the meter, with the session's cost when the agent reports it", async () => {
     const spy = await renderWithQwen();
     const sessionId = await startQwenSession(spy);
+    expect(screen.queryByRole("tab", { name: "Context" })).toBeNull();
 
     await acpEvent({
       sessionId,
@@ -1774,10 +1775,28 @@ describe("ACP sessions in the app", () => {
       update: { sessionUpdate: "usage_update", used: 1_000, size: 10_000, cost: { amount: 1.5, currency: "USD" } },
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Context details" }));
+      fireEvent.click(screen.getByRole("button", { name: "Open the context panel" }));
     });
 
-    expect(within(screen.getByRole("dialog", { name: "Context usage" })).getByText("$1.50")).toBeDefined();
+    expect(screen.getByRole("tab", { name: "Context" }).getAttribute("aria-selected")).toBe("true");
+    const panel = screen.getByRole("complementary", { name: "Context panel" });
+    expect(within(panel).getByText("$1.50")).toBeDefined();
+    expect(within(panel).getByText("1k / 10k tokens")).toBeDefined();
+  });
+
+  it("records the context used at each turn end for the Context tab's chart", async () => {
+    const spy = await renderWithQwen();
+    const sessionId = await startQwenSession(spy);
+
+    await acpEvent({ sessionId, kind: "update", update: { sessionUpdate: "usage_update", used: 2_000, size: 10_000 } });
+    await acpEvent({ sessionId, kind: "turn-end", stopReason: "end_turn" });
+    await acpEvent({ sessionId, kind: "update", update: { sessionUpdate: "usage_update", used: 5_000, size: 10_000 } });
+    await acpEvent({ sessionId, kind: "turn-end", stopReason: "end_turn" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open the context panel" }));
+    });
+
+    expect(screen.getByRole("img", { name: /oldest first: 2k, 5k tokens/ })).toBeDefined();
   });
 
   it("shows the context the agent has used, as it reports it", async () => {

@@ -13,6 +13,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::connection::{error_message, AcpConnection, EventSink};
+use super::context_usage;
 use super::elicitation::{Pending, PendingElicitations};
 use super::permission_response::permission_response;
 use super::prompt_blocks::prompt_blocks;
@@ -46,6 +47,8 @@ pub const PROTOCOL_VERSION: u64 = 1;
 /// is installed beforehand and downloads nothing here.)
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(180);
 pub(super) const SESSION_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// Qwen Code answers the context breakdown in milliseconds; the panel waits no longer than this.
+const CONTEXT_USAGE_TIMEOUT: Duration = Duration::from_secs(5);
 /// JSON-RPC "method not found", returned for client methods we do not offer.
 const METHOD_NOT_FOUND: i64 = -32601;
 /// Signing in may wait for the user to finish in a browser.
@@ -563,6 +566,22 @@ impl AcpManager {
                 SESSION_REQUEST_TIMEOUT,
             )
             .map(|_| ())
+    }
+
+    /// What fills the session's context window, as Qwen Code reports it
+    /// (`qwen/status/session/context_usage`, with each item). Another agent
+    /// answers that it has no such method, which is an error here.
+    pub fn context_usage(
+        &self,
+        app_session_id: &str,
+    ) -> Result<context_usage::ContextBreakdown, String> {
+        let (connection, acp_id) = self.connection_for(app_session_id)?;
+        let answer = connection.request(
+            context_usage::CONTEXT_USAGE_METHOD,
+            json!({ "sessionId": acp_id, "detail": true }),
+            CONTEXT_USAGE_TIMEOUT,
+        )?;
+        context_usage::parse(&answer)
     }
 
     /// Sets a session config option (e.g. the model); returns the agent's updated
