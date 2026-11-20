@@ -46,7 +46,8 @@ COMMUNITY
   #general        the existing #general, moved here
   Lounge          voice, renamed from General; its access is set by the maintainer by hand
 
-LEARN           the team shares; members can only react
+LEARN           the team shares; members see only #reading-list
+  #reading-list       public: everyone reads and reacts, the team posts
   #coding-agents      Claude Code, Codex, Qwen Code, prompting and AI
   #web3-hackathons    web3 and lessons from hackathon projects
   #articles-videos    articles and videos worth reading or watching
@@ -116,12 +117,12 @@ Per-category overwrites:
 |---|---|---|
 | START HERE | Deny Send Messages, Create Public Threads, Use Application Commands (so no bot posts there at a member's request) | Allow Send Messages |
 | COMMUNITY | Inherit | Inherit |
-| LEARN | Deny Send Messages, Create Public Threads, Send Messages in Threads and Use Application Commands, so members can only react | Allow Send Messages, Create Public Threads, Send Messages in Threads |
+| LEARN | Deny View Channel, Send Messages, Create Public Threads, Send Messages in Threads and Use Application Commands. Builder is allowed View Channel only, so it reads and reacts | Allow View Channel, Send Messages, Create Public Threads, Send Messages in Threads |
 | ECOSYSTEM | Deny Send Messages, so members cannot start a post but still reply in one (Send Messages in Threads) | Allow Send Messages |
 | SUPPORT | Inherit (can create posts and reply) | Inherit; Manage Threads applies moderated tags |
 | TEAM | Deny View Channel | Allow View Channel |
 
-Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model for `@everyone` and Team. An overwrite for a role made by hand is kept as it is. Two channels are the exceptions. `#builders` has its own overwrites inside LEARN: `@everyone` is denied View Channel, and Builder and Team are allowed View Channel, Send Messages, Create Public Threads and Send Messages in Threads. Lounge's access is set by the maintainer in Discord, and the scripts never sync or change it. Roles are put in order by moving only a spec role that is out of place, so a role made by hand keeps its position.
+Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model for `@everyone` and Team. An overwrite for a role made by hand is kept as it is. Three channels are the exceptions. `#reading-list` has its own overwrites inside LEARN: `@everyone` keeps View Channel but is denied Send Messages, Create Public Threads, Send Messages in Threads and Use Application Commands, and Team is allowed to post, so it is the one LEARN channel members see. `#builders` has its own overwrites inside LEARN: `@everyone` is denied View Channel, and Builder and Team are allowed View Channel, Send Messages, Create Public Threads and Send Messages in Threads. Lounge's access is set by the maintainer in Discord, and the scripts never sync or change it. Roles are put in order by moving only a spec role that is out of place, so a role made by hand keeps its position.
 
 ## Community and onboarding
 
@@ -138,7 +139,7 @@ Community settings:
 | Description | Zorvo is a free, open-source Mac app that runs coding agents such as Claude Code, Codex and Qwen Code in one chat. |
 
 Onboarding:
-- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, Lounge, `#coding-agents`, `#web3-hackathons`, `#articles-videos`, `#ecosystem`, `#help`, `#bugs`, `#ideas`. Members cannot post in the LEARN channels or start a post in `#ecosystem`, so none of them count toward the 5 below. Discord requires at least 7 default channels, at least 5 of which members can post in. Here the 5 are `#general`, Lounge and the three forums, exactly the minimum: removing any of them from the defaults breaks Onboarding.
+- Default channels: `#welcome`, `#announcements`, `#activity`, `#general`, `#reading-list`, `#ecosystem`, `#help`, `#bugs`, `#ideas`. Discord refuses a default channel that `@everyone` cannot see (`DEFAULT_CHANNEL_REQUIRES_EVERYONE_ACCESS`), so Lounge, whose access is set by hand, and the hidden LEARN channels are not among them; a test in the setup scripts checks every default against the spec. Discord also asks for at least 7 defaults; it accepted these with `#general` and the three forums as the channels members post in.
 - One required, single-choice question shown on join: "What brings you to Zorvolabs?" with the answers "I use Zorvo", "I'm trying Zorvo out", "I want to contribute" and "Just looking around", so someone who only wants to join has an honest answer too. Every answer gives the Member role; Discord assigns it, so no bot is involved. The answers show the team, in Onboarding's own stats, who the community is.
 - Rules screening on, with the rules below. A member cannot post until they accept.
 
@@ -258,3 +259,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - Product tags dropped before any were added: 20 projects do not fit Discord's 20-tag limit per forum. Project questions go in the project's own `#ecosystem` post. `#ecosystem` holds 20 posts, oldest first, sorted by creation date, each tagged Hackathon.
 - LEARN category added on request, below COMMUNITY: three ordinary text channels (`#coding-agents`, `#web3-hackathons`, `#articles-videos`) where the team shares and members can only react, with no messages and no threads. All three are among Onboarding's default channels.
 - Builder role and `#builders` added on request: a purple role given by hand, and a channel inside LEARN that only Builder and Team can see. Lounge's access is the maintainer's own and is left alone.
+- LEARN made members-only-by-exception on request: members see only the new `#reading-list` (read and react, team posts); `#coding-agents`, `#web3-hackathons` and `#articles-videos` are hidden from them and readable by Builder and Team. Onboarding's defaults lost Lounge and the hidden LEARN channels, since Discord refuses a default `@everyone` cannot see.
