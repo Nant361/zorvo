@@ -281,8 +281,9 @@ describe("time formatting", () => {
 describe("sourceLine", () => {
   const agent = (overrides: Parameters<typeof makeCatalogAgent>[0]) => makeCatalogAgent(overrides);
 
-  it("puts the version before where the agent comes from", () => {
-    expect(sourceLine(agent({ id: "a", name: "A", version: "0.93.0", status: "by_zorvo" }))).toBe("0.93.0 · installed by Zorvo");
+  it("puts the version before where the agent comes from, and says nothing for Zorvo's own copy", () => {
+    expect(sourceLine(agent({ id: "a", name: "A", version: "0.93.0", status: "by_zorvo" }))).toBe("0.93.0");
+    expect(sourceLine(agent({ id: "a", name: "A", version: null, status: "by_zorvo" }))).toBe("installed by Zorvo");
     expect(sourceLine(agent({ id: "a", name: "A", version: "0.64.0", status: "on_your_mac" }))).toBe("0.64.0 · on this Mac");
     expect(sourceLine(agent({ id: "a", name: "A", version: "0.2.0", status: "not_installed" }))).toBe("0.2.0 · not installed");
     expect(sourceLine(agent({ id: "a", name: "A", status: "unsupported" }))).toBe("not available for this Mac");
@@ -297,7 +298,12 @@ describe("sourceLine", () => {
   });
 
   it("says when the registry no longer lists the agent", () => {
-    expect(sourceLine(agent({ id: "a", name: "A", version: "1.0.0", status: "by_zorvo", listed: false }))).toBe("1.0.0 · installed by Zorvo · no longer listed");
+    expect(sourceLine(agent({ id: "a", name: "A", version: "1.0.0", status: "by_zorvo", listed: false }))).toBe("1.0.0 · no longer listed");
+  });
+
+  it("names the update the row offers", () => {
+    expect(sourceLine(agent({ id: "a", name: "A", version: "0.93.0", status: "by_zorvo" }), "0.94.1")).toBe("0.93.0 · update 0.94.1 ready");
+    expect(sourceLine(agent({ id: "a", name: "A", version: "0.5.0", status: "ready", distribution: "uvx" }), "0.6.0")).toBe("0.5.0 · runs with uvx · update 0.6.0 ready");
   });
 });
 

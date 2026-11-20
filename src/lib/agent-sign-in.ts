@@ -21,6 +21,13 @@ export const SIGN_IN_LABELS: Readonly<Record<SignInState, string>> = {
   unchecked: 'Not checked',
 };
 
+/** Settings → Agents' words for each state: a status, not the sidebar's call to act. */
+export const SIGN_IN_STATUS_WORDS: Readonly<Record<SignInState, string>> = {
+  ready: 'Ready',
+  needed: 'Needs sign-in',
+  unchecked: 'Not checked',
+};
+
 /** The composer's placeholder while the draft's agent waits for a sign-in. */
 export function signInPlaceholder(agentName: string, continuesSession: boolean): string {
   return `Sign in to ${agentName} to ${continuesSession ? 'continue this session' : 'send a message'}.`;

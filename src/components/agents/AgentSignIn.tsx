@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef } from "react";
+import { useId } from "react";
 import { Button } from "../ui/Button";
 import type { SettingsSignIn } from "../../hooks/useSettingsSignIn";
-import { authCopy, signInButtonLabel } from "../../lib/acp-auth";
+import { authCopy, isSetupOnly, signInButtonLabel, type AuthMethod } from "../../lib/acp-auth";
 import { plainReason } from "../../lib/agent-sign-in";
 
 export interface AgentSignInProps {
@@ -17,8 +17,8 @@ function folderNameOf(cwd: string | undefined): string | null {
 }
 
 /**
- * Said next to Check sign-in, before it runs, when asking can open a session in the agent: where it
- * opens, that the session can run the project's hooks, and that Zorvo asks the same way after a sign-in.
+ * Said with Check sign-in, before it runs, when asking can open a session in the agent: where it opens,
+ * that the session can run the project's hooks, and that Zorvo asks the same way after a sign-in.
  */
 export function sessionWarning(agentName: string, reportsStatus: boolean | undefined, cwd?: string): string | null {
   if (reportsStatus === true) return null;
@@ -31,7 +31,7 @@ export function sessionWarning(agentName: string, reportsStatus: boolean | undef
   return `If ${agentName} cannot say who is signed in, Zorvo opens a session in ${place} to find out. ${tail}`;
 }
 
-/** What the live region says: the sign-in under way, else the last check's result. */
+/** What the row's live region says: the sign-in under way, else the last check's result. */
 export function signInStatus(agentName: string, signIn: SettingsSignIn, agentId: string): { text: string; isError: boolean } {
   const check = signIn.checkOf(agentId);
   const request = signIn.requestOf(agentId);
@@ -50,98 +50,82 @@ export function signInStatus(agentName: string, signIn: SettingsSignIn, agentId:
   }
 }
 
+/** True while this agent cannot start another check or sign-in: one runs here, or another agent's login does. */
+export function isSignInBusy(signIn: SettingsSignIn, agentId: string): boolean {
+  const request = signIn.requestOf(agentId);
+  const isSigningIn = request?.status === "signing-in" || request?.status === "checking";
+  return signIn.checkOf(agentId).phase === "checking" || isSigningIn || signIn.busyAgentId !== null;
+}
+
+/** The verb on a method's button: the one its name starts with ("Log in with Google" reads Log in), else Sign in. */
+function shortLabel(method: AuthMethod): string {
+  const verb = /^(log ?in|sign ?in|sign ?up|connect|continue|authenticate|authorize)\b/i.exec(method.name.trim())?.[1];
+  return verb ? verb.charAt(0).toUpperCase() + verb.slice(1).toLowerCase() : "Sign in";
+}
+
+/** The line under a method's name: the agent's own description, else what pressing it does. */
+function methodNote(method: AuthMethod): string | null {
+  if (method.description) return method.description;
+  if (method.kind === "terminal") return "Opens a sign-in terminal.";
+  if (method.kind === "explain") return "Set the key in your shell, then check again.";
+  return null;
+}
+
 /**
- * An agent's sign-in, opened inside its Settings → Agents row (the row shows the state as a chip):
- * while the agent needs one, its methods in a bordered list, with the same words as the new-session
- * panel; then what checking may do and Check sign-in, and the result in a live region.
+ * While an agent needs a sign-in, its methods as rows inside its Settings → Agents row, with a hairline
+ * between them and no box of their own. A method Zorvo can run has its button (the short verb shows, the
+ * whole method names it for a screen reader); a key or setting Zorvo never handles has Check again.
  */
 export function AgentSignIn({ agentId, agentName, signIn }: AgentSignInProps) {
-  const state = signIn.stateOf(agentId);
-  const check = signIn.checkOf(agentId);
-  const request = signIn.requestOf(agentId);
   const methods = signIn.methodsOf(agentId);
+  const isBusy = isSignInBusy(signIn, agentId);
   const warning = sessionWarning(agentName, signIn.reportsStatusOf(agentId), signIn.cwd);
   const warningId = useId();
-  const isSigningIn = request?.status === "signing-in" || request?.status === "checking";
-  // One sign-in at a time: another agent's running login would be cut off by this one.
-  const isBusy = check.phase === "checking" || isSigningIn || signIn.busyAgentId !== null;
-  const { text, isError } = signInStatus(agentName, signIn, agentId);
   const copy = authCopy(agentName, methods);
+  // The status word already says a sign-in is needed: a lead line shows only when there is nothing to pick.
+  const lead = methods.length === 0 ? copy.cliHint : isSetupOnly(methods) ? copy.lead : null;
 
-  // Back to this row when the login's dialog closes and the button that opened it is gone (the agent is ready now).
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const hasDialog = signIn.terminal.dialog !== null && request !== null;
-  const hadDialog = useRef(false);
-  useEffect(() => {
-    if (hadDialog.current && !hasDialog) {
-      const focused = document.activeElement;
-      if (!focused || focused === document.body) sectionRef.current?.focus();
-    }
-    hadDialog.current = hasDialog;
-  }, [hasDialog]);
-
-  const runs = (method: (typeof methods)[number]) => method.kind === "agent" || method.kind === "terminal";
   return (
-    <div
-      ref={sectionRef}
-      tabIndex={-1}
-      role="group"
-      aria-label={`${agentName} sign-in`}
-      className="flex flex-col gap-2.5 rounded-md focus-ring"
-    >
-      {state === "needed" && (
-        <>
-          {[copy.lead, copy.cliHint, copy.keysNote].filter(Boolean).map((line) => (
-            <p key={line} className="text-ui-sm text-fg-muted">
-              {line}
-            </p>
-          ))}
-          {methods.length > 0 && (
-            <ul className="flex flex-col overflow-hidden rounded-lg border border-border bg-sheet">
-              {methods.map((method) => (
-                <li key={method.id} className="flex items-center gap-2.5 border-b border-border px-3 py-2.25 last:border-b-0">
-                  {runs(method) ? (
-                    <>
-                      <span className="min-w-0 flex-1 text-ui text-fg-secondary">{method.name}</span>
-                      {/* Settings runs a sign-in, never an agent's own setup: that runs from the draft's card. */}
-                      <Button size="md" disabled={isBusy} onClick={() => signIn.signInWith(agentId, method.id)}>
-                        <span className="text-fg">{signInButtonLabel(method)}</span>
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="text-ui text-fg-secondary">{method.name}</span>
-                        {method.description && <span className="text-ui-sm text-fg-muted">{method.description}</span>}
-                      </span>
-                      <span className="shrink-0 text-caption text-fg-subtle">In your shell</span>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+    <div role="group" aria-label={`${agentName} sign-in`} className="flex flex-col">
+      {lead && <p className="pb-2 text-ui-sm text-fg-muted">{lead}</p>}
+      {methods.length > 0 && (
+        <ul className="flex flex-col">
+          {methods.map((method) => {
+            const note = methodNote(method);
+            return (
+              <li key={method.id} className="flex items-center gap-3 border-t border-border py-2.5 first:border-t-0 first:pt-0">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-ui text-fg-secondary">{method.name}</span>
+                  {note && <span className="text-ui-sm text-fg-muted">{note}</span>}
+                </span>
+                {method.kind === "agent" || method.kind === "terminal" ? (
+                  // Settings runs a sign-in, never an agent's own setup: that runs from the draft's card.
+                  <Button size="md" disabled={isBusy} aria-label={signInButtonLabel(method)} onClick={() => signIn.signInWith(agentId, method.id)}>
+                    <span className="text-fg">{shortLabel(method)}</span>
+                  </Button>
+                ) : method.kind === "explain" ? (
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    disabled={isBusy}
+                    aria-describedby={warning ? warningId : undefined}
+                    onClick={() => signIn.check(agentId)}
+                  >
+                    Check again
+                  </Button>
+                ) : (
+                  <span className="shrink-0 text-caption text-fg-subtle">From a new session</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
-
-      <div className={`flex items-center gap-2 ${warning ? "" : "justify-end"}`}>
-        {warning && (
-          <p id={warningId} className="min-w-0 flex-1 text-ui-sm text-fg-muted">
-            {warning}
-          </p>
-        )}
-        <Button
-          size="md"
-          disabled={isBusy}
-          onClick={() => signIn.check(agentId)}
-          aria-describedby={warning ? warningId : undefined}
-        >
-          Check sign-in
-        </Button>
-      </div>
-      <p role="status" className={text === "" ? "sr-only" : isError ? "text-ui-sm text-danger" : "text-ui-sm text-fg-muted"}>
-        {text}
-      </p>
+      {warning && (
+        <span id={warningId} className="sr-only">
+          {warning}
+        </span>
+      )}
     </div>
   );
 }

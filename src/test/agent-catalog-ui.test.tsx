@@ -104,7 +104,7 @@ describe("AgentCatalog", () => {
     renderCatalog();
 
     expect(row("Claude Code")).toHaveTextContent("1.2.0");
-    expect(row("Claude Code")).toHaveTextContent("1.2.0 · installed by Zorvo");
+    expect(row("Claude Code")).toHaveTextContent("1.2.0 · update 1.3.0 ready");
     expect(row("Qwen Code")).toHaveTextContent("runs with npx");
     expect(row("Gemini CLI")).toHaveTextContent("Google's coding agent");
   });

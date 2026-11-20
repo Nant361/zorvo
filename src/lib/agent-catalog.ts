@@ -182,11 +182,14 @@ export function formatCheckedAgo(seconds: number, now: number): string {
   return RELATIVE_FORMAT.format(-Math.floor(elapsed / SECONDS_PER_DAY), 'day');
 }
 
-/** Where an agent in use comes from, after its version: the mono line under its name in Settings → Agents. */
-function sourceWords(agent: CatalogAgent): string {
+/**
+ * Where an agent in use comes from, after its version: the mono line under its name in Settings → Agents.
+ * Zorvo's own copy is the usual case and says nothing; any other source is named.
+ */
+function sourceWords(agent: CatalogAgent): string | null {
   switch (agent.status) {
     case 'by_zorvo':
-      return 'installed by Zorvo';
+      return null;
     case 'on_your_mac':
       return 'on this Mac';
     case 'ready':
@@ -201,13 +204,20 @@ function sourceWords(agent: CatalogAgent): string {
 }
 
 /**
- * "0.93.0 · installed by Zorvo": an agent in use's version and source. A program found outside Zorvo at a
- * known place shows no version, since it may not be the registry's.
+ * "0.93.0 · update 0.94.1 ready": an agent in use's version, where it comes from unless Zorvo installed it,
+ * and the update its row offers. A program found outside Zorvo at a known place shows no version, since it
+ * may not be the registry's. `updateVersion` is passed only when the row offers that update.
  */
-export function sourceLine(agent: CatalogAgent): string {
+export function sourceLine(agent: CatalogAgent, updateVersion: string | null = null): string {
   const version = agent.location === null ? agent.version : null;
-  const line = version ? `${version} · ${sourceWords(agent)}` : sourceWords(agent);
-  return agent.listed ? line : `${line} · no longer listed`;
+  const parts = [
+    version,
+    sourceWords(agent),
+    updateVersion ? `update ${updateVersion} ready` : null,
+    agent.listed ? null : 'no longer listed',
+  ];
+  // Zorvo's copy with no version known still says where it is from, so the line is never empty.
+  return parts.filter(Boolean).join(' · ') || 'installed by Zorvo';
 }
 
 /** What an available agent's line says first, before its description: why it cannot be used, or that it is already here. */
