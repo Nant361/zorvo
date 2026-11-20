@@ -23,7 +23,7 @@
 
 <p align="center">
   <a href="https://github.com/zakyirsyaad/zorvo/releases/latest"><img src="https://img.shields.io/github/v/release/zakyirsyaad/zorvo?label=latest" alt="Latest release"></a>
-  <a href="https://github.com/zakyirsyaad/zorvo/releases"><img src="https://img.shields.io/github/downloads/zakyirsyaad/zorvo/total" alt="Downloads"></a>
+  <a href="https://github.com/zakyirsyaad/zorvo/releases"><img src="https://img.shields.io/github/downloads/zakyirsyaad/zorvo/Zorvo-mac.dmg?label=downloads" alt="Downloads of Zorvo-mac.dmg, all releases"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-lightgrey" alt="macOS on Apple Silicon or Intel">
 </p>
 
