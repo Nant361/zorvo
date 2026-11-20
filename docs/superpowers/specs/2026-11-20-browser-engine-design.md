@@ -1,15 +1,19 @@
 # In-app browser: which engine
 
 Date: 2026-11-20. Status: direction approved on 2026-11-20, after an
-independent review whose findings are folded in below. The spikes in section 6
-have not been run, and no feature code follows until the gate spikes pass.
+independent review whose findings are folded in below. No spike in section 6
+has been accepted as passed, and no feature code follows until the gate spikes
+are. PR 256 now carries a WKWebView probe that is measured against this note
+(section 7). Two decisions taken after its first results are in section 8,
+numbers 4 and 5.
 
 ## Why this note exists
 
-PR 256 adds a browser beside the chat, built on a bundled Chromium (CEF). Its
-review asked for the engine to be settled before more code is written, because
-the engine decides the download size, the entitlements of the main process and
-the build chain, and none of those can be changed cheaply later.
+PR 256 first added a browser beside the chat, built on a bundled Chromium
+(CEF). Its review asked for the engine to be settled before more code is
+written, because the engine decides the download size, the entitlements of the
+main process and the build chain, and none of those can be changed cheaply
+later.
 
 This note compares three engines, picks one and lists what has to be proven
 first. It is not the feature spec. Screens, copy and artboards come after the
@@ -186,11 +190,13 @@ Enough to judge the decision. The feature spec will replace this section.
     see and alter both. That is accepted and stated in the tool's answers:
     console lines and `evaluate` results are what the page chose to show.
 - **What a page may do.** Load `https`, and `http` where the system allows it
-  (see section 4). Camera and microphone are refused by a permission handler
-  that always denies, never left to wry's default. Location and screen capture
-  have no handler in wry, so spike 7 has to show they are refused. Downloads
-  are refused. A new window opens as a tab up to the session's limit, built
-  like any other tab, otherwise it is refused.
+  (see section 4). A page gets no capture API: Zorvo declares no camera or
+  microphone use, every browser view turns screen capture off, and the public
+  delegates deny camera, microphone and location on top of that (section 8,
+  decision 4). wry's default, which grants camera and microphone when no
+  handler is set, is never left in place. Spike 7 has to show all of it.
+  Downloads are refused. A new window opens as a tab up to the session's
+  limit, built like any other tab, otherwise it is refused.
 - **Ending a page.** `_killWebContentProcess`, as `artifacts/view.rs::end`
   does, because dropping the view does not stop a page that loops.
 - **Frontend.** A Browser tab inside the inspector's normal tab strip. The
@@ -238,10 +244,16 @@ the feature spec.
 6. **A page that loops.** With five tabs open, one running `while (true) {}`
    leaves Zorvo responsive, and closing that tab ends its process. Record the
    memory five tabs use.
-7. **A page cannot capture.** With Screen Recording granted to Zorvo, a page
-   that calls `getDisplayMedia`, `getUserMedia` and
-   `navigator.geolocation.getCurrentPosition` gets a refusal for each, with no
-   system prompt in Zorvo's name.
+7. **A page cannot capture.** The probe's bundle matches Zorvo: an
+   `Info.plist` with no camera, microphone or location usage string, ordinary
+   script settings, `_screenCaptureEnabled` off, and Screen Recording granted
+   to the app. The page, a same-origin frame and a cross-origin frame each
+   find no `navigator.mediaDevices`, and each gets a refusal from
+   `navigator.geolocation.getCurrentPosition`, with no system prompt in
+   Zorvo's name. A second run adds the camera and microphone strings, to show
+   that `getDisplayMedia` is still gone and the delegate refuses
+   `getUserMedia`. Both runs on macOS 27 and on one system below it, where
+   location has no public delegate callback (section 8, decision 4).
 8. **What loads.** `https://example.com`, `http://localhost:3000`,
    `http://127.0.0.1:3000`, `http://app.test` and `http://example.com`: record
    which load with today's `Info.plist`.
@@ -258,8 +270,15 @@ to decide whether B can do job 2 at all.
 
 ## 7. What happens to PR 256
 
-- **Can merge on their own now:** the OpenCode transport fix in
-  `background_processes.rs` with its test, and the `url_check.rs` cleanup.
+Since this note was written, PR 256 was cut down to a WKWebView probe under
+`experiments/browser-wk/`, with a design document of its own. That document
+becomes the spike report (section 8, decision 5). The list below is about the
+first version of the PR, the CEF one, and still says which of its code carries
+over.
+
+- **Merged on their own:** the OpenCode transport fix in
+  `background_processes.rs` with its test (#258), and the `url_check.rs`
+  cleanup (#257).
 - **Carries over to B:** `browser-address.ts`, the note chips and
   `browser-note.ts`, the comment overlay, the toolbar and viewport controls
   (once they use the `ui/` primitives), the link menu item, the operation
@@ -286,16 +305,91 @@ reversed by saying so:
    menu and the address bar are the user's ways in, and the agent has the
    tool.
 
+Taken later on 2026-11-20. PR 256's probe left two questions open, and the
+maintainer asked for them to be reviewed and decided. These two can be
+reversed the same way:
+
+4. **A page gets no capture API.** Zorvo keeps declaring no camera or
+   microphone use, every browser view turns screen capture off, and the public
+   delegates still deny. Lockdown Mode and the private display-capture
+   delegate are not used. The browser is offered on macOS 12 and later,
+   decided at run time, and the app's minimum version does not change. The
+   detail is below.
+5. **This note is the reference** for the engine decision, the gates and the
+   open questions. PR 256's document becomes the spike report measured against
+   it: results by the spike numbers in section 6, saying for each what the
+   probe covers and what it leaves. Its sections on the boundary, the first
+   agent operations and the panel are input for the feature spec. They agree
+   with section 5.
+
 Still open:
 
-4. **Who builds it, and when.** The contributor of PR 256, or in-house, and
+6. **Who builds it, and when.** The contributor of PR 256, or in-house, and
    before or after computer use.
-5. **Minimum macOS.** `tauri.conf.json` sets none today. Content worlds need
-   macOS 11. If spike 1 has to fall back to a store by identifier, the minimum
-   becomes 14, and that is a decision to take before the feature spec, not in
-   it.
-6. **Plain `http` to public hosts.** Recommended for the first version: do not
+7. **Whether the browser may need macOS 14.** Decision 4 sets the browser's
+   minimum at 12 and leaves the app's alone. If spike 1 has to fall back to a
+   store by identifier, the browser's minimum becomes 14, and that is a
+   decision to take before the feature spec, not in it.
+8. **Plain `http` to public hosts.** Recommended for the first version: do not
    change `Info.plist`; load `https` and local addresses, and say so plainly
    when a page is refused. Allowing it means
    `NSAllowsArbitraryLoadsInWebContent`, which applies to every web view in
    the app.
+9. **Address-bar text that is not a URL.** PR 256's document sends it to
+   Google search, which hands what the user typed to a third party. Decided
+   with the panel, not here.
+
+### Decision 4 in detail
+
+The screen request that stayed pending in PR 256's probe exists because the
+probe's `Info.plist` declares camera and microphone use. Zorvo declares
+neither, in `src-tauri/Info.plist` or in the 0.13.1 bundle, and without them a
+WKWebView has no `navigator.mediaDevices`. A small probe on one Mac, macOS
+26.5.2, with ordinary script settings, in a bundle without the two keys and in
+one with them:
+
+| Bundle | Setting | `getDisplayMedia`, page and a fresh iframe | `getUserMedia` | `WebAssembly` |
+|---|---|---|---|---|
+| No usage strings, as Zorvo | default | undefined, undefined | undefined | object |
+| Camera and microphone strings, as the probe | default | function, function | function | object |
+| Camera and microphone strings | `_screenCaptureEnabled` off | undefined, undefined | function | object |
+
+The three layers, in this order:
+
+1. **Zorvo declares no camera or microphone use.** Then no web view in the
+   app, artifact pages included, has `navigator.mediaDevices`, which covers
+   camera, microphone and screen together. A test keeps
+   `NSCameraUsageDescription` and `NSMicrophoneUsageDescription` out of
+   `Info.plist`, the way a test keeps `updater:*` out of the capabilities.
+2. **Every browser view turns `WKPreferences._screenCaptureEnabled` off before
+   it is created.** `getDisplayMedia` is
+   `[EnabledBySetting=ScreenCaptureEnabled]` in WebKit's `MediaDevices.idl`,
+   so this removes it from every frame even if layer 1 is lost one day, and it
+   leaves the JIT and the rest of the page alone. It is private API, used the
+   way `artifacts/view.rs` uses `_killWebContentProcess`: behind
+   `respondsToSelector`, with the value read back. What a view does when the
+   selector is missing or the value does not read back is for the feature
+   spec; layer 1 still holds then.
+3. **The public delegates still deny.** Camera and microphone through
+   `requestMediaCapturePermissionFor` (macOS 12), location through the
+   callback macOS 27 adds. Below 27, WebKit refuses a location request that no
+   delegate handles (`WebPageProxy::requestGeolocationPermissionForFrame` ends
+   in `completionHandler(false)`).
+
+Not used, and why:
+
+- **Lockdown Mode as the browser's configuration.** It turns off the JIT and
+  more, on exactly the pages an agent is there to check. By WebKit's source,
+  it removed the capture API in PR 256's probe by turning the media-devices
+  setting off, which layer 1 does at no cost.
+- **The private `_webView:requestDisplayCapturePermissionForOrigin:…`
+  delegate.** Nothing reaches it once the API is gone, and when WebKit stops
+  calling a delegate there is no way to notice.
+
+Not shown yet:
+
+- Any of this on macOS 27. The table is one Mac on 26.5.2.
+- Whether one of the two usage strings alone brings `navigator.mediaDevices`
+  back. Both and neither were tried.
+- The location refusal below macOS 27. It is read from WebKit's source, not
+  tested.
