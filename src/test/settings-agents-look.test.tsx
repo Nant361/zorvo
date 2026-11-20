@@ -63,16 +63,24 @@ function renderCatalog(overrides: Partial<Parameters<typeof AgentCatalog>[0]> = 
 const row = (name: string) => screen.getByRole("listitem", { name });
 
 describe("an agent's row as drawn", () => {
-  it("an in-use row is one line with a logo tile, mono source, chip and buttons", () => {
+  it("an in-use row is one line: a logo tile, the version and its update, a status word, one button and ⋯", () => {
     renderCatalog();
     const claude = row("Claude Code");
     expect(claude.querySelector(".size-7.rounded-lg.bg-chip")).not.toBeNull();
     expect(within(claude).getByText("Claude Code")).toHaveClass("font-medium", "text-fg");
-    expect(within(claude).getByText("1.2.0 · installed by Zorvo")).toHaveClass("font-mono", "text-caption", "text-fg-muted");
+    expect(within(claude).getByText("1.2.0 · update 1.3.0 ready")).toHaveClass("font-mono", "text-caption", "text-fg-muted");
     expect(claude).toHaveTextContent("Sign-in: Ready");
-    expect(within(claude).getByRole("button", { name: "Update to 1.3.0" }).className).toContain("border-border-strong");
-    expect(within(claude).getByRole("button", { name: "More actions for Claude Code" })).toBeInTheDocument();
-    expect(within(claude).queryByRole("button", { name: "Remove" })).toBeNull();
+    // A dot and a word, not a pill: the button stays the only shape that looks pressable.
+    const status = within(claude).getByText("Ready");
+    expect(status.className).not.toMatch(/\bbg-|rounded/);
+    expect(status.querySelector(".rounded-full.bg-status-running")).not.toBeNull();
+    const update = within(claude).getByRole("button", { name: "Update to 1.3.0" });
+    expect(update).toHaveTextContent(/^Update$/);
+    expect(update.className).toContain("border-border-strong");
+    expect(within(claude).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+      "Update to 1.3.0",
+      "More actions for Claude Code",
+    ]);
   });
 
   it("an available row has its description and an outline Add", () => {
@@ -108,35 +116,40 @@ describe("an agent's row as drawn", () => {
     expect(row("Claude Code").className).not.toMatch(/\bbg-|rounded/);
   });
 
-  it("a row opens its sign-in when the agent needs one", () => {
+  it("a row lists its sign-in methods as rows while the agent needs one, with no box of their own", () => {
     renderCatalog({ signIn: fakeSignIn({ "codex-acp": "needed" }) });
     const codex = row("Codex");
     expect(within(codex).getByRole("group", { name: "Codex sign-in" })).toBeInTheDocument();
-    // An opened row has no tint: the method list under the line is what shows it.
+    expect(codex).toHaveTextContent("Sign-in: Needs sign-in");
+    // An opened row has no tint, and the methods sit in it without a second box.
     expect(codex.className).not.toContain("bg-");
-    expect(within(codex).getByRole("button", { name: "Log in with Google" }).closest("ul")).toHaveClass("bg-sheet", "border-border");
-    const chevron = within(codex).getByRole("button", { name: "Hide sign-in for Codex" });
-    expect(chevron).toHaveAttribute("aria-expanded", "true");
-    expect(within(codex).getByRole("button", { name: "Log in with Google" })).toBeInTheDocument();
+    const logIn = within(codex).getByRole("button", { name: "Log in with Google" });
+    expect(logIn).toHaveTextContent(/^Log in$/);
+    expect(logIn.closest("ul")?.className).not.toMatch(/\bbg-|border\b|rounded/);
+    expect(within(codex).queryByRole("button", { name: /sign-in for/ })).toBeNull();
   });
 
-  it("opens a closed row's sign-in when the agent comes to need one, and keeps it open once ready", () => {
+  it("shows the methods while the agent needs a sign-in, and not once it is ready", () => {
     const { props, rerender } = renderCatalog();
     expect(within(row("Codex")).queryByRole("group", { name: "Codex sign-in" })).toBeNull();
     rerender(<AgentCatalog {...props} signIn={fakeSignIn({ "codex-acp": "needed" })} />);
     expect(within(row("Codex")).getByRole("group", { name: "Codex sign-in" })).toBeInTheDocument();
     rerender(<AgentCatalog {...props} signIn={fakeSignIn({ "codex-acp": "ready" })} />);
-    expect(within(row("Codex")).getByRole("group", { name: "Codex sign-in" })).toBeInTheDocument();
+    expect(within(row("Codex")).queryByRole("group", { name: "Codex sign-in" })).toBeNull();
+    expect(row("Codex")).toHaveTextContent("Sign-in: Ready");
   });
 
-  it("the chevron shows and hides the sign-in of a ready agent", () => {
-    renderCatalog();
-    const claude = row("Claude Code");
-    expect(within(claude).queryByRole("group", { name: "Claude Code sign-in" })).toBeNull();
-    fireEvent.click(within(claude).getByRole("button", { name: "Show sign-in for Claude Code" }));
-    expect(within(claude).getByRole("button", { name: "Check sign-in" })).toBeInTheDocument();
-    fireEvent.click(within(claude).getByRole("button", { name: "Hide sign-in for Claude Code" }));
-    expect(within(claude).queryByRole("group", { name: "Claude Code sign-in" })).toBeNull();
+  it("puts Check sign-in in ⋯, with what checking may do as its description", async () => {
+    const signIn = { ...fakeSignIn(), reportsStatusOf: () => false };
+    renderCatalog({ signIn });
+    await act(async () => {
+      fireEvent.click(within(row("Claude Code")).getByRole("button", { name: "More actions for Claude Code" }));
+    });
+    const check = screen.getByRole("menuitem", { name: /^Check sign-in/ });
+    expect(check).toHaveAccessibleDescription(/Claude Code cannot say who is signed in, so Zorvo opens a session in the zorvo folder/);
+    fireEvent.click(check);
+    expect(signIn.check).toHaveBeenCalledWith("claude-acp");
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("Remove asks under the row, naming running sessions", async () => {
@@ -222,14 +235,13 @@ describe("code review fixes", () => {
   it("hides an open sign-in while the agent installs or updates", async () => {
     const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__;
     vi.spyOn(internals, "invoke").mockImplementation(() => new Promise(() => {}));
-    renderCatalog();
-    fireEvent.click(within(row("Claude Code")).getByRole("button", { name: "Show sign-in for Claude Code" }));
+    renderCatalog({ signIn: fakeSignIn({ "claude-acp": "needed" }) });
     expect(within(row("Claude Code")).getByRole("group", { name: "Claude Code sign-in" })).toBeInTheDocument();
     await act(async () => startInstall("claude-acp"));
     expect(within(row("Claude Code")).queryByRole("group", { name: "Claude Code sign-in" })).toBeNull();
   });
 
-  it("announces a sign-in result in a closed row", () => {
+  it("says a sign-in check's result under the row", () => {
     const signIn = { ...fakeSignIn(), checkOf: () => ({ phase: "idle", message: "Signed in to Claude Code." }) as AgentCheck };
     renderCatalog({ signIn });
     expect(within(row("Claude Code")).queryByRole("group", { name: "Claude Code sign-in" })).toBeNull();
