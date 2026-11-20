@@ -257,8 +257,16 @@ fn load_app_state(store: State<'_, AppStore>) -> Result<PersistedState, String> 
 
 /// Persists the app state atomically, replacing the previous file.
 #[tauri::command(async)]
-fn save_app_state(store: State<'_, AppStore>, state: PersistedState) -> Result<(), String> {
-    store.save_state(&state)
+fn save_app_state(
+    store: State<'_, AppStore>,
+    computer_use: State<'_, Arc<computer_use::ComputerUse>>,
+    state: PersistedState,
+) -> Result<(), String> {
+    store.save_state(&state)?;
+    // The gate reads the switch on every call, so it follows each save. Off
+    // stops computer use at once.
+    computer_use.set_enabled(state.settings.computer_use && cfg!(target_os = "macos"));
+    Ok(())
 }
 
 /// Loads a session's chat transcript, empty when the session has no messages yet.
@@ -501,8 +509,18 @@ pub fn run() {
                 private_mcp_script(app.handle()),
             ));
             app.manage(start_agent_tools(app.handle(), &data_dir));
+            let computer_use_dir = data_dir.clone();
             let (store, migration) = data_migration::open_store(data_dir);
             app.manage(store);
+            // Off until the saved switch says otherwise; no driver starts here.
+            let computer_use_on = app
+                .state::<store::AppStore>()
+                .load_state()
+                .is_ok_and(|state| state.settings.computer_use && cfg!(target_os = "macos"));
+            app.manage(Arc::new(computer_use::ComputerUse::new(
+                computer_use_dir,
+                computer_use_on,
+            )));
             app.manage(Arc::new(artifacts::store::ArtifactStore::new(
                 app.state::<store::AppStore>().root().join("artifacts"),
             )));
@@ -566,6 +584,11 @@ pub fn run() {
             app_update::app_update_check,
             app_update::app_update_install,
             app_update::app_update_restart,
+            app_update::app_restart,
+            computer_use::commands::computer_use_status,
+            computer_use::commands::computer_use_request_permissions,
+            computer_use::commands::computer_use_open_pane,
+            computer_use::commands::computer_use_reset_permissions,
             get_agent_profiles,
             refresh_login_env,
             get_agent_catalog,
@@ -675,6 +698,7 @@ pub fn run() {
                 let pty = app.state::<PtySessionManager>();
                 workspace_terminal::end_all_sessions(&pty);
                 app.state::<Arc<agent_tools::AgentTools>>().shutdown();
+                app.state::<Arc<computer_use::ComputerUse>>().stop_driver();
                 artifacts::view::close(app);
             }
         });

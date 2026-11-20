@@ -277,3 +277,51 @@ fn real_driver_starts_lists_and_binds() {
     client.kill();
     assert!(!is_running(pid));
 }
+
+// ── The shared driver behind the switch ───────────────────────────────────
+
+use zorvo_lib::computer_use::{ComputerUse, NoDriver};
+
+fn computer_use(enabled: bool) -> ComputerUse {
+    ComputerUse::with_starter(
+        scratch("state"),
+        enabled,
+        Box::new(|| {
+            DriverClient::start(fake(&[]), options(Some("0.52.13"))).map_err(NoDriver::Failed)
+        }),
+    )
+}
+
+#[test]
+fn switch_off_gives_no_driver() {
+    assert_eq!(computer_use(false).driver().err(), Some(NoDriver::Off));
+}
+
+#[test]
+fn one_driver_is_shared_until_it_ends() {
+    let state = computer_use(true);
+    let first = state.driver().unwrap();
+    let again = state.driver().unwrap();
+    assert_eq!(first.pid(), again.pid());
+    first.kill();
+    // A driver that ended is replaced on the next ask.
+    let next = state.driver().unwrap();
+    assert_ne!(next.pid(), first.pid());
+    assert!(is_running(next.pid()));
+}
+
+#[test]
+fn switch_off_kills_the_driver() {
+    let state = computer_use(true);
+    let client = state.driver().unwrap();
+    let pid = client.pid();
+    let session = client.bind_session("Qwen Code").unwrap();
+    state.set_enabled(false);
+    assert!(!is_running(pid));
+    let call = client.begin_call(&session, "click", json!({}));
+    assert_eq!(client.wait(call), Err(DriverError::Exited));
+    assert_eq!(state.driver().err(), Some(NoDriver::Off));
+    // On again: a new driver starts on the next ask.
+    state.set_enabled(true);
+    assert!(is_running(state.driver().unwrap().pid()));
+}
