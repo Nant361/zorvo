@@ -204,3 +204,13 @@ screen-SPI and restricted-mode results remain in
 hashes. They are superseded evidence and are not assessments of the
 selected policy. The [renderer workload](scroll/README.md) separately
 measures scripted animation; native trackpad parity is still unmeasured.
+
+
+Schema 4 reports real quiet-history spans and oldest-sample age; a trailing
+window outside 5000–6500 ms does not pass. Direct runs without inherited media
+APIs are unverified rather than failed denials, and only inherited-authorized
+devices are requested. Prepared apps stay registered after permission setup and
+reuse until `--clean`, so approval and later revocation can resolve the identity.
+A reuse result must match the requested launch/long-hidden flags and pass both
+the snapshot and current assessments. All seven linked recordings are required
+by the tests, with explicit modes and schema versions.

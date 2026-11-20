@@ -25,7 +25,7 @@ version is unchanged; the canonical browser minimum is macOS 12 at runtime.
 | --- | --- | --- |
 | **1. Store per session — partial** | Three independently configured Swift views use two non-persistent stores. Two views share `alpha`; the other session cannot read or overwrite it and retains `beta`. | The wry configuration path, `window.open`, scripts installed once, IPC after closing a sibling tab and absence of disk remnants. No store-by-identifier fallback is selected here. |
 | **2. Script boundary — partial** | Typed fill data remains literal. A forged global plus replacements of `document.querySelector`, `Element.prototype.matches` and `JSON.stringify` leave the isolated snapshot's input and serialized proof intact. The page cannot reach the isolated native frame handler. | This is Swift, not Rust. wry's IPC and Rust checks, hostile navigation generations and production element references remain untested. The DOM is shared and untrusted. |
-| **3. Hidden tab — observed pass for the standalone React case** | The short hidden, covered and minimized cases pass independently of the visible fallback. After 190.7 seconds hidden and 180.6 seconds minimized without page commands, click plus state/native snapshots complete in 41.6 and 160.6 ms. Four counter paths and their last five quiet seconds are recorded below. | Integration with the app, another Space, more page workloads and sustained cost. Hidden/minimized RAF stops; visible-window fallback measurements are below, with their limits. |
+| **3. Hidden tab — observed pass for the standalone React case** | The short hidden, covered and minimized cases pass independently of the visible fallback. After 191.46 seconds hidden and 191.48 seconds minimized without page commands, click plus state/native snapshots complete in 7.13 and 166.35 ms. Four counter paths and their last five quiet seconds are recorded below. | Integration with the app, another Space, more page workloads and sustained cost. Hidden/minimized RAF stops; visible-window fallback measurements are below, with their limits. |
 | **4. Usable snapshot — not exercised** | The local React fixture and native identities for same-origin and cross-origin frames are available. | The five real pages, accessible control names, open shadow roots, a full tree and references surviving until navigation. The probe's small state object is not that snapshot engine. |
 | **5. Input — partial** | An isolated-world native value setter and input event update a real React controlled input; button clicks trigger a React re-render. | A native `select` and sites that reject script events. These events do not become trusted user input. |
 | **6. Looping page — not exercised** | Normal temporary-app and loopback-fixture teardown is checked. | Five live tabs, `while (true) {}`, responsive Zorvo, ending that tab's WebContent process and memory reclamation. Normal exit does not prove this gate. |
@@ -105,7 +105,7 @@ identity. Both camera and microphone authorization are `authorized` in this
 launch, and Screen Recording is granted through the parent context. It uses
 exactly the same signed binary as the new
 [LaunchServices comparison](../../../experiments/browser-wk/results/2026-11-20-launchservices.json),
-at source commit `98903abc`, with no camera, microphone or location
+at source commit `16a6c47b`, with no camera, microphone or location
 description. All three direct-run realms expose `mediaDevices` and `getUserMedia`, while
 `getDisplayMedia` remains undefined. Each camera/microphone request returns
 `NotAllowedError` through one public callback, and location returns error 1
@@ -117,9 +117,8 @@ explicitly marks `usageStringBoundaryHolds: false`. Its launch-specific gate
 requires the inherited media API to be present before counting the public
 denials, so a no-grant parent with absent APIs cannot pass this third run.
 The narrower direct assessment passes. The paired independent launch has
-undetermined camera/microphone authorization and no `mediaDevices`; it is
-unverified only for its own Screen Recording grant. The earlier granted
-independent-app recording above covers that separate precondition. Other
+undetermined camera/microphone authorization and no `mediaDevices`; its own
+Screen Recording grant is active and the tightened assessment passes. Other
 parent apps and older OS versions remain untested;
 the maintainer's [canonical-note update in #270](https://github.com/zakyirsyaad/zorvo/pull/270)
 records this limit rather than assuming declarations alone cover every launch.
@@ -191,49 +190,36 @@ minimized or on another Space. The feature spec must account for that limit.
 
 ### Plain interval and longer hidden runs
 
-The [updated recording](../../../experiments/browser-wk/results/2026-11-20-long-hidden.json)
-uses source commit `4a6ce3f5`, with a fourth counter started by a plain 100 ms
-`setInterval`. Its short conditions record the following progress after each
-click, with the new counter shown separately:
+The [schema 4 recording](../../../experiments/browser-wk/results/2026-11-20-long-hidden.json)
+uses source commit `16a6c47b`, adds a plain 100 ms interval and retains the app's
+own Screen Recording grant through collection. All 24 current observations pass.
+The short conditions record these changes after each click:
 
 | Condition | Seconds | Chained 100 ms timeout | Plain 100 ms interval | RAF | Fetch completions |
 | --- | --- | --- | --- | --- | --- |
-| Visible | 5.06 | 49 | 49 | 303 | 25 |
-| Hidden | 5.25 | 5 | 5 | 0 | 16 |
-| Covered | 5.25 | 7 | 7 | 6 | 16 |
-| Minimized | 5.15 | 6 | 6 | 0 | 17 |
+| visible | 5.25 | 51 | 51 | 315 | 25 |
+| hidden | 5.19 | 3 | 3 | 0 | 5 |
+| covered | 5.25 | 4 | 4 | 5 | 6 |
+| minimized | 5.21 | 3 | 3 | 0 | 6 |
 
-This plain interval is also slowed in the hidden/minimized cases on this
-Mac; it does not justify treating every timer as a one-second timer. The
-fetch loop still progresses more frequently, while RAF stops in the hidden
-and minimized cases. Each wait must account for the path it uses.
+Two additional conditions leave the page alone for at least three minutes,
+without native page commands. Bounded page-side history supplies the trailing
+counter window before the first command. The actual span is recorded, rather
+than clamped to five seconds; schema 4 requires 5000–6500 ms and rejects a stale
+baseline after suspension. The pre-idle image precedes the quiet period, then
+the React click and command/native snapshots follow it.
 
-Two additional conditions leave the page alone for at least three minutes.
-No native page command runs during the quiet interval. Bounded page-side
-history records the four counters, then supplies their changes over the
-last five seconds before the first command. The pre-idle image and state
-are read before the quiet interval; the click and updated command/native
-snapshots follow it.
+| Condition | Actual quiet duration | Counter span | Timeout / interval / RAF / fetch | Command snapshot | Updated native image |
+| --- | --- | --- | --- | --- | --- |
+| hidden-after-idle | 191.46 s | 5587 ms | 6 / 6 / 0 / 5 | 2.58 ms | 7.13 ms |
+| minimized-after-idle | 191.48 s | 5278 ms | 6 / 6 / 0 / 13 | 41.81 ms | 166.35 ms |
 
-| Condition | Actual quiet duration | Chained timeout / plain interval / RAF / fetch, last 5 quiet seconds | Click to command snapshot | Click to updated native image |
-| --- | --- | --- | --- | --- |
-| Hidden after idle | 190.67 s | 5 / 5 / 0 / 12 | 37.85 ms | 41.62 ms |
-| Minimized after idle | 180.64 s | 5 / 5 / 0 / 13 | 155.58 ms | 160.62 ms |
-
-Both conditions retain `documentHidden: true`; the second also records
-`windowMiniaturized: true`. The longer actual wakeup times are recorded,
-not rounded down to the requested 180 seconds. All short hidden conditions,
-the visible fallback and these long conditions have separate gates. A
-successful fallback never turns a failed hidden/minimized gate into a pass.
-The [four long-run crops](../../../experiments/browser-wk/results/2026-11-20-long-hidden/)
-show the React counter changing after each idle period.
-
-This collection has no independent Screen Recording grant. Its overall
-assessment therefore remains unverified for that permission precondition;
-the hidden-interaction gates themselves pass. The earlier granted capture
-recordings remain separate evidence. Another Space and longer workloads
-are still untested. Resource samples in the long rows cover the five seconds
-after the click, not the whole three-minute quiet period.
+Both conditions record actual documentHidden true; minimized also records
+windowMiniaturized true. Hidden, fallback and long-hidden gates are separate.
+The [four crops](../../../experiments/browser-wk/results/2026-11-20-long-hidden/)
+show React state 7 to 8 and 8 to 9. CPU/resource samples cover only the usual
+five seconds after each click, not the three-minute quiet period. Another
+Space, sustained costs and other page workloads remain untested.
 
 The CPU values sum process CPU-time deltas for the host and the main view's
 WebContent PID over the recorded interval. Resident memory is a point
@@ -379,3 +365,37 @@ particularly older-OS coverage and the remaining wry paths, then the feature
 spec. Engine/view, agent operations with session grants, and the ordinary
 Inspector panel remain focused later PRs. The address-bar search provider
 remains undecided.
+
+
+## Fourth-review measurements
+
+The current probe uses schema 4. A prepared identity remains registered through
+permission setup, collection and grant revocation; `--clean` owns its removal.
+Temporary runs still unregister in `finally`. The runner checks the requested
+launch and long-hidden flags against the result and assesses it with both the
+snapshot and current validators. Old snapshots cannot silently satisfy a new run.
+
+The replacement direct and independent recordings use the same signed binary at
+`16a6c47b`. The independent run has its own Screen Recording grant and passes all
+23 current observations. The direct run identifies ChatGPT/Codex responsibility,
+records authorized camera and microphone status, and passes the public-denial
+checks in all three realms. If those inherited APIs are absent, schema 4 reports
+the direct condition as unverified. Under a partial grant it requests only the
+authorized device and marks the other not attempted, avoiding an undeclared-device
+TCC request. The Screen Recording evidence names its responsible application.
+
+The replacement long-hidden recording also has the app's own Screen Recording
+grant and passes all 24 current observations. Its actual quiet periods are
+191.46 seconds hidden and 191.48 seconds minimized, with no native page commands.
+Click-to-command/native-image latencies are 2.58/7.13 ms and 41.81/166.35 ms.
+The trailing counter spans are **5587 ms** and **5278 ms**, not exactly five seconds:
+chained timeout/plain interval/RAF/fetch counts are 6/6/0/5 and 6/6/0/13.
+`windowMs` and `oldestSampleAgeMs` now report the actual baseline age. Schema 4
+accepts a 5000–6500 ms range and rejects stale/suspended history. These numbers
+replace the earlier clamped-span recording and table.
+The earlier short baseline remains historical evidence for its named commit.
+
+CI names all seven required recordings, their modes and schemas, in addition to
+scanning shared structure and validating attachments. It still does not pin
+historical hashes to the checkout. The current probe adds regression tests for
+old launch modes, stale quiet history and unexercised direct authorization.

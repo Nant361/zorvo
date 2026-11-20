@@ -116,8 +116,8 @@ test("recorded reports validate and identify the source commit without pinning t
   const expected = {
     "2026-11-20-public.json": ["zorvo", 1], "2026-11-20-usage-strings.json": ["usage-strings", 1],
     "2026-11-20-camera-only.json": ["camera-only", 1], "2026-11-20-microphone-only.json": ["microphone-only", 1],
-    "2026-11-20-direct.json": ["zorvo", 3], "2026-11-20-launchservices.json": ["zorvo", 3],
-    "2026-11-20-long-hidden.json": ["zorvo", 2],
+    "2026-11-20-direct.json": ["zorvo", 4], "2026-11-20-launchservices.json": ["zorvo", 4],
+    "2026-11-20-long-hidden.json": ["zorvo", 4],
   };
   for (const [name, [mode, version]] of Object.entries(expected)) {
     assert.ok(names.includes(name), "Missing required evidence: " + name);
