@@ -44,12 +44,13 @@ START HERE      everyone can read and react; only Team can write
 
 COMMUNITY
   #general        the existing #general, moved here
-  Lounge          voice, renamed from General
+  Lounge          voice, renamed from General; its access is set by the maintainer by hand
 
 LEARN           the team shares; members can only react
   #coding-agents      Claude Code, Codex, Qwen Code, prompting and AI
   #web3-hackathons    web3 and lessons from hackathon projects
   #articles-videos    articles and videos worth reading or watching
+  #builders           Builder and Team only: progress, questions, hackathon teams
 
 ECOSYSTEM       Zorvolabs projects other than Zorvo; members reply, only Team starts a post
   #ecosystem      forum, one post per project
@@ -95,16 +96,17 @@ Discord forums have no form templates; the post guidelines text is what a poster
 
 ## Roles and permissions
 
-Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Contributor, Member, `@everyone`. Roles the maintainer makes by hand are not part of this spec: the setup scripts never change them, their position or their access to a category.
+Roles, top to bottom: `zorvolabs` (managed), `Jockie Music (2)` (managed), Founder, Team, Builder, Contributor, Member, `@everyone`. Roles the maintainer makes by hand are not part of this spec: the setup scripts never change them, their position or their access to a category.
 
 | Role | Holders | Colour | Shown apart | Permissions |
 |---|---|---|---|---|
 | Founder | The maintainer only | amber-600 `#D97706` | Yes | None. The server owner already has every permission, and moderation comes from Team. A label, not a permission set. |
 | Team | Granted by hand; the maintainer too | blue-500 `#3B82F6` | Yes | View the TEAM category; Manage Messages, Manage Threads, Timeout Members, Kick Members, View Audit Log, Mention @everyone. No Administrator. |
+| Builder | Granted by hand by Team to people who build projects and enter hackathons | purple-500 `#A855F7` | Yes | None server-wide. Opens `#builders` in LEARN. |
 | Contributor | Granted by hand to people with a merged pull request | green-600 `#16A34A` | Yes | None. Colour and a member list group, as recognition. |
 | Member | Everyone who answers the Onboarding question; given by the bot to members who joined before it | cyan-600 `#0891B2` | Yes (the maintainer turned it on in Discord) | None. What members can do stays with `@everyone` and rules screening. |
 
-Role names are drawn on Discord's dark (`#313338`) and light (`#FFFFFF`) themes alike, so each colour is picked for at least 3:1 on both, measured: amber-600 3.97 and 3.19, blue-500 3.44 and 3.68, green-600 3.84 and 3.30, cyan-600 3.43 and 3.68. No single colour reaches 4.5:1 on both backgrounds (it would need a relative luminance at once below 0.18 and above 0.32), so 3:1 on both is the ceiling. The name next to the colour still reads at full contrast in the member list and on messages, since Discord draws the message text itself in the theme's text colour. A role icon needs boost level 2 and is out of scope.
+Role names are drawn on Discord's dark (`#313338`) and light (`#FFFFFF`) themes alike, so each colour is picked for at least 3:1 on both, measured: amber-600 3.97 and 3.19, blue-500 3.44 and 3.68, green-600 3.84 and 3.30, cyan-600 3.43 and 3.68, purple-500 3.19 and 3.96 (violet-500 measured 2.99 on dark and was not used). No single colour reaches 4.5:1 on both backgrounds (it would need a relative luminance at once below 0.18 and above 0.32), so 3:1 on both is the ceiling. The name next to the colour still reads at full contrast in the member list and on messages, since Discord draws the message text itself in the theme's text colour. A role icon needs boost level 2 and is out of scope.
 
 Server-wide `@everyone`: View Channels, Send Messages, Send Messages in Threads, Create Public Threads, Embed Links, Attach Files, Add Reactions, Read Message History, Connect, Speak, Use Voice Activity. Off: Mention @everyone/@here/all roles, Manage Channels, Manage Roles, Manage Webhooks, Create Private Threads.
 
@@ -119,7 +121,7 @@ Per-category overwrites:
 | SUPPORT | Inherit (can create posts and reply) | Inherit; Manage Threads applies moderated tags |
 | TEAM | Deny View Channel | Allow View Channel |
 
-Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model for `@everyone` and Team. An overwrite for a role made by hand is kept as it is.
+Channels sync to their category's permissions; no channel gets its own overwrite, so the table above is the whole permission model for `@everyone` and Team. An overwrite for a role made by hand is kept as it is. Two channels are the exceptions. `#builders` has its own overwrites inside LEARN: `@everyone` is denied View Channel, and Builder and Team are allowed View Channel, Send Messages, Create Public Threads and Send Messages in Threads. Lounge's access is set by the maintainer in Discord, and the scripts never sync or change it. Roles are put in order by moving only a spec role that is out of place, so a role made by hand keeps its position.
 
 ## Community and onboarding
 
@@ -255,3 +257,4 @@ Done with the bot's Administrator permission through the Discord REST API, excep
 - Roles made by hand are left alone: the scripts keep any category overwrite for a role the spec does not know and reorder roles only when the spec's own roles are out of order. Member is shown apart, as the maintainer set it.
 - Product tags dropped before any were added: 20 projects do not fit Discord's 20-tag limit per forum. Project questions go in the project's own `#ecosystem` post. `#ecosystem` holds 20 posts, oldest first, sorted by creation date, each tagged Hackathon.
 - LEARN category added on request, below COMMUNITY: three ordinary text channels (`#coding-agents`, `#web3-hackathons`, `#articles-videos`) where the team shares and members can only react, with no messages and no threads. All three are among Onboarding's default channels.
+- Builder role and `#builders` added on request: a purple role given by hand, and a channel inside LEARN that only Builder and Team can see. Lounge's access is the maintainer's own and is left alone.
