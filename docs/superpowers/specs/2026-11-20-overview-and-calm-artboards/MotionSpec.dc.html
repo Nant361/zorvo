@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zorvo · Motion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--run:#34d399;--pop:0 16px 40px -8px rgba(0,0,0,.6);--ease:cubic-bezier(.2,.8,.2,1);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--run:#047353;--pop:0 12px 32px -8px rgba(9,9,11,.18)}
+.z button{font:inherit;cursor:pointer;margin:0}
+.z button:focus-visible{outline:2px solid var(--fg2);outline-offset:2px}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.cap{margin:0 0 12px;color:var(--muted);font-size:12px;line-height:18px}
+.cap b{color:var(--fg2);font-weight:500}
+table{border-collapse:collapse;width:100%;font-size:12px;line-height:18px}
+th{text-align:left;font-weight:500;color:var(--muted);padding:0 10px 8px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);color:var(--fg2);vertical-align:top}
+td.mono{font-size:11px;color:var(--fg);white-space:nowrap}
+.panel{position:relative;width:340px;height:300px;overflow:hidden;background:var(--sheet);border:1px solid var(--line);border-radius:10px}
+.layer{position:absolute;inset:0;display:flex;flex-direction:column;padding:8px;box-sizing:border-box;transition:transform 240ms var(--ease),opacity 240ms var(--ease)}
+.layer.left{transform:translateX(-16px);opacity:0;pointer-events:none;visibility:hidden}
+.layer.right{transform:translateX(16px);opacity:0;pointer-events:none;visibility:hidden}
+.z .orow{display:flex;align-items:center;gap:10px;width:100%;min-height:32px;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--fg2);text-align:left;font-size:13px;line-height:18px;transition:background-color 120ms ease-out}
+.z .orow:hover{background:var(--hover)}
+.z .orow:active{background:var(--strong)}
+.sh{margin:0;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:500}
+.chip{height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:0;border-radius:6px;background:var(--chip);color:var(--fg2);font-size:12px;transition:background-color 120ms ease-out}
+.z .chip:hover{background:var(--hover)}
+.menu{position:absolute;left:0;bottom:36px;width:200px;box-sizing:border-box;display:flex;flex-direction:column;padding:4px;border-radius:8px;background:var(--s3);border:1px solid var(--line);box-shadow:var(--pop);transform-origin:bottom left;transition:opacity 180ms var(--ease),transform 180ms var(--ease)}
+.menu.closed{opacity:0;transform:translateY(4px) scale(.97);pointer-events:none;visibility:hidden}
+.z .mi{height:30px;display:flex;align-items:center;padding:0 10px;border:0;border-radius:5px;background:transparent;color:var(--fg2);font-size:13px;text-align:left;transition:background-color 120ms ease-out}
+.z .mi:hover{background:var(--hover)}
+.msg{transition:opacity 160ms ease-out}
+.msg.hidden{opacity:0}
+@media (prefers-reduced-motion:reduce){.layer,.menu,.msg{transition-duration:1ms}.layer.left,.layer.right{transform:none}.menu.closed{transform:none}}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="width: 1024px; height: 760px; box-sizing: border-box; display: flex; gap: 40px; padding: 32px; background: var(--ground); color: var(--fg); font-size: 13px; line-height: 18px;">
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+    <p class="cap"><b>Empat token gerak, dipakai di seluruh aplikasi.</b> Gerak menjelaskan dari mana sesuatu datang; tidak ada yang berputar terus kecuali tanda proses yang memang sedang berjalan.</p>
+    <table>
+      <thead><tr><th>Token</th><th>Waktu</th><th>Dipakai untuk</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">quick</td><td class="mono">120ms ease-out</td><td>Hover, tekan, ganti warna baris dan tombol</td></tr>
+        <tr><td class="mono">menu</td><td class="mono">180ms</td><td>Menu, popover, tooltip: muncul dari arah tombolnya, fade + skala 0.97 ke 1</td></tr>
+        <tr><td class="mono">panel</td><td class="mono">240ms</td><td>Panel kanan masuk ke detail dan kembali (geser 16px + fade), panel dan sidebar dibuka atau ditutup</td></tr>
+        <tr><td class="mono">appear</td><td class="mono">160ms ease-out</td><td>Pesan baru dan kartu izin muncul sekali dengan fade; teks yang mengalir tidak dianimasikan per kata</td></tr>
+      </tbody>
+    </table>
+    <p class="cap" style="margin-top: 16px;">Kurva menu dan panel: <span class="mono" style="color: var(--fg2);">cubic-bezier(.2,.8,.2,1)</span>, cepat di awal lalu melambat. Dengan Reduce motion di macOS, semua menjadi perubahan instan tanpa geser atau skala.</p>
+    <p class="cap" style="margin-top: 8px;">Tidak dianimasikan: isi diff, terminal, scroll chat yang mengikuti output, dan angka yang berubah.</p>
+  </div>
+
+  <div style="width: 380px; flex: none; display: flex; flex-direction: column; gap: 24px;">
+    <div>
+      <p class="cap"><b>Coba: klik baris, lalu Back.</b> Token panel.</p>
+      <div class="panel">
+        <div class="{{overviewClass}}" aria-hidden="{{overviewHidden}}">
+          <p class="sh">Running</p>
+          <button class="orow" onClick="{{openTask}}"><svg viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; flex: none; fill: none; stroke: var(--run); stroke-width: 2.25; stroke-linecap: round;"><path d="M12 3a9 9 0 1 1-9 9"></path></svg><span style="flex: 1;">Explore the session list tests</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: var(--subtle);"><path d="m9 6 6 6-6 6"></path></svg></button>
+          <button class="orow" onClick="{{openTask}}"><svg viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; flex: none; fill: none; stroke: var(--run); stroke-width: 2.25; stroke-linecap: round;"><path d="M12 3a9 9 0 1 1-9 9"></path></svg><span class="mono" style="flex: 1; font-size: 12px;">pnpm tauri dev</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: var(--subtle);"><path d="m9 6 6 6-6 6"></path></svg></button>
+          <p class="sh" style="margin-top: 8px;">Output</p>
+          <button class="orow" onClick="{{openTask}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--muted);"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18"></path></svg><span style="flex: 1;">Session row options</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: var(--subtle);"><path d="m9 6 6 6-6 6"></path></svg></button>
+        </div>
+        <div class="{{detailClass}}" aria-hidden="{{detailHidden}}">
+          <button onClick="{{closeTask}}" style="align-self: flex-start; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>Overview</button>
+          <p style="margin: 12px 8px 4px; font-weight: 600;">Explore the session list tests</p>
+          <p style="margin: 0 8px; color: var(--subtle); font-size: 11px;">Subagent of Claude Code</p>
+          <p style="margin: 16px 8px 0; color: var(--fg2); font-size: 13px; line-height: 20px;">Two test files cover the list. Neither checks the status words.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <p class="cap"><b>Coba: buka menu model.</b> Token menu, dari arah tombol.</p>
+      <div style="position: relative; height: 160px; display: flex; align-items: flex-end;">
+        <div class="{{menuClass}}" role="menu" aria-label="Model">
+          <button class="mi" role="menuitem" onClick="{{toggleMenu}}">Opus</button>
+          <button class="mi" role="menuitem" onClick="{{toggleMenu}}">Sonnet</button>
+          <button class="mi" role="menuitem" onClick="{{toggleMenu}}">Haiku</button>
+        </div>
+        <button class="chip" aria-haspopup="menu" aria-expanded="{{menuOpen}}" onClick="{{toggleMenu}}">Opus<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: var(--muted);"><path d="m6 9 6 6 6-6"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1024,"height":760}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { detail: false, menu: false };
+  }
+  renderVals() {
+    const light = (this.props.theme ?? 'dark') === 'light';
+    const detail = this.state.detail;
+    const menu = this.state.menu;
+    return {
+      themeClass: light ? 'z light' : 'z',
+      overviewClass: detail ? 'layer left' : 'layer',
+      detailClass: detail ? 'layer' : 'layer right',
+      overviewHidden: detail ? 'true' : 'false',
+      detailHidden: detail ? 'false' : 'true',
+      menuClass: menu ? 'menu' : 'menu closed',
+      menuOpen: menu ? 'true' : 'false',
+      openTask: () => this.setState({ detail: true }),
+      closeTask: () => this.setState({ detail: false }),
+      toggleMenu: () => this.setState({ menu: !this.state.menu })
+    };
+  }
+}
+</script>
+</body>
+</html>

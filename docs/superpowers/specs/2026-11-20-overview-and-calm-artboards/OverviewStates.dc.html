@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zorvo · Overview panel · States</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--run:#34d399;--att:#fbbf24;--unread:#38bdf8;--danger:#f87171;--merged:#c084fc;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--run:#047353;--att:#a34b08;--unread:#0369a1;--danger:#b91c1c;--merged:#7e22ce}
+.z button{font:inherit;cursor:pointer;margin:0}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.cap{margin:0 0 10px;color:var(--muted);font-size:12px;line-height:18px}
+.cap b{color:var(--fg2);font-weight:500}
+.panel{width:340px;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:var(--sheet);border:1px solid var(--line);border-radius:10px}
+.sec{display:flex;flex-direction:column;padding:10px 8px;border-top:1px solid var(--line)}
+.sec:first-child{border-top:0}
+.sh{display:flex;align-items:center;gap:6px;margin:0;padding:2px 8px 6px;color:var(--muted);font-size:11px;font-weight:500;line-height:16px}
+.sh span{color:var(--subtle);font-weight:400}
+.z .orow{display:flex;align-items:center;gap:10px;width:100%;min-height:32px;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--fg2);text-align:left;font-size:13px;line-height:18px}
+.z .orow:hover{background:var(--hover)}
+.z .orow:hover .om,.z .orow:hover .ol i{color:var(--muted)}
+.ol{flex:1;min-width:0;display:flex;flex-direction:column}
+.ol b{font-weight:400;color:var(--fg2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ol i{font-style:normal;font-size:11px;line-height:16px;color:var(--subtle);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.om{flex:none;color:var(--subtle);font-size:11px}
+.oi{color:var(--muted)}
+.chev{width:12px;height:12px;color:var(--subtle)}
+.pr{flex:none;display:inline-flex;align-items:center;gap:3px;height:18px;font-size:11px;line-height:18px}
+.pr .ico{width:12px;height:12px}
+.empty{margin:0;padding:4px 8px 6px;color:var(--subtle);font-size:12px;line-height:18px}
+.spin{width:14px;height:14px;flex:none;fill:none;stroke:var(--run);stroke-width:2.25;stroke-linecap:round;animation:zspin 1s linear infinite}
+@keyframes zspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.step{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 14px;border-radius:6px;font-size:12px;color:var(--fg2)}
+.step .verb{width:56px;flex:none;color:var(--muted)}
+.step .tg{flex:1;min-width:0;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.step .rs{color:var(--subtle);font-size:11px}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="width: 1180px; height: 860px; box-sizing: border-box; display: flex; gap: 40px; padding: 32px; background: var(--ground); color: var(--fg); font-size: 13px; line-height: 18px;">
+
+  <div style="display: flex; flex-direction: column;">
+    <p class="cap"><b>Sesi baru.</b> Output selalu tampil, walau masih kosong. Running, Sources, dan Pull request baru muncul saat ada isinya.</p>
+    <aside class="panel" aria-label="Session overview">
+      <section class="sec" aria-labelledby="a-env">
+        <h2 class="sh" id="a-env">Environment</h2>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M9 13h6M12 10v6"></path></svg><span class="ol"><b>Changes</b></span><span class="om">None yet</span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span class="ol"><b>Files</b></span><span class="om">agent-desktop</span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-6 3-11 6"></path></svg><span class="ol"><b class="mono" style="font-size: 12px;">main</b></span><span class="om"></span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+      </section>
+      <section class="sec" aria-labelledby="a-out">
+        <h2 class="sh" id="a-out">Output</h2>
+        <p class="empty">Nothing yet. Pages and files Claude Code makes in this session show here.</p>
+      </section>
+    </aside>
+  </div>
+
+  <div style="display: flex; flex-direction: column; min-height: 0;">
+    <p class="cap"><b>Satu task dibuka.</b> Panel memanjang setinggi jendela; Back kembali ke ringkasan.</p>
+    <aside class="panel" aria-label="Subagent Explore the session list tests" style="flex: 1; min-height: 0;">
+      <div style="height: 44px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--line);">
+        <button style="height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg>Overview</button>
+      </div>
+      <div style="flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px;">
+        <svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9"></path></svg>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;"><h2 style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--fg); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">Explore the session list tests</h2><span style="color: var(--subtle); font-size: 11px; line-height: 16px;">Subagent of Claude Code · started 2 min ago</span></div>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 12px 12px;">
+        <div style="display: flex; flex-direction: column; margin-left: 7px; border-left: 1px solid var(--line);">
+          <div class="step"><span class="verb">Searched</span><span class="tg mono">"SessionList" in src/test</span><span class="rs">6 results</span></div>
+          <div class="step"><span class="verb">Read</span><span class="tg mono">session-list.test.tsx</span><span class="rs">Done</span></div>
+          <div class="step"><span class="verb">Read</span><span class="tg mono">sidebar-groups.test.ts</span><span class="rs">Done</span></div>
+          <p style="margin: 8px 0; padding-left: 14px; color: var(--fg2); font-size: 13px; line-height: 20px;">Two test files cover the list. Neither checks the status words, so a row can lose its label without a test failing.</p>
+          <div class="step"><span class="verb">Read</span><span class="tg mono">SessionRow.tsx</span><span class="rs">Done</span></div>
+          <div class="step"><span class="verb">Ran</span><span class="tg mono">pnpm vitest run session-list</span><span class="rs">Exit 0</span></div>
+          <div class="step"><span class="verb">Reading</span><span class="tg mono">fixtures/sessions.ts</span><span class="rs" style="color: var(--run);">Running</span></div>
+        </div>
+      </div>
+      <div style="flex: none; padding: 10px 14px 12px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 11px; line-height: 16px;">Stop Claude Code to stop this subagent.</div>
+    </aside>
+  </div>
+
+  <div style="display: flex; flex-direction: column;">
+    <p class="cap"><b>Setelah giliran selesai.</b> Yang selesai dilipat, yang gagal tetap terlihat, PR yang sudah merged ada paling bawah.</p>
+    <aside class="panel" aria-label="Session overview">
+      <section class="sec" aria-labelledby="c-env">
+        <h2 class="sh" id="c-env">Environment</h2>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M9 13h6M12 10v6"></path></svg><span class="ol"><b>Changes</b></span><span class="om">Committed</span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-6 3-11 6"></path></svg><span class="ol"><b class="mono" style="font-size: 12px;">agent/release-0-13-1</b></span><span class="om">into main</span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+      </section>
+      <section class="sec" aria-labelledby="c-run">
+        <h2 class="sh" id="c-run">Finished <span>3</span></h2>
+        <button class="orow"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--danger);"><circle cx="12" cy="12" r="9"></circle><path d="m9 9 6 6M15 9l-6 6"></path></svg><span class="ol"><b class="mono" style="font-size: 12px;">pnpm test</b><i>Shell · exit 1</i></span><span class="om" style="color: var(--danger);">Failed</span></button>
+        <button class="orow"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--muted);"><path d="M20 6 9 17l-5-5"></path></svg><span class="ol"><b>Explore the session list tests</b><i>Subagent · 11 steps</i></span><span class="om mono">2m 31s</span></button>
+        <button class="orow"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--muted);"><path d="M20 6 9 17l-5-5"></path></svg><span class="ol"><b>Find where sessions are grouped</b><i>Subagent · 6 steps</i></span><span class="om mono">48s</span></button>
+      </section>
+      <section class="sec" aria-labelledby="c-out">
+        <h2 class="sh" id="c-out">Output <span>1</span></h2>
+        <button class="orow"><svg class="ico oi" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18"></path></svg><span class="ol"><b>Release notes v0.13.1</b><i>Page · version 1</i></span><span class="om">1 h ago</span></button>
+      </section>
+      <section class="sec" aria-labelledby="c-pr">
+        <h2 class="sh" id="c-pr">Pull request</h2>
+        <button class="orow" aria-label="Open pull request 248 in your browser. Merged."><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--merged);"><circle cx="6" cy="5" r="2.5"></circle><circle cx="6" cy="19" r="2.5"></circle><circle cx="18" cy="12" r="2.5"></circle><path d="M6 7.5v9M6 7.5c0 3.5 4 4.5 9.5 4.5"></path></svg><span class="ol"><b>Release v0.13.1</b><i><span class="mono">#248</span> · <span style="color: var(--merged);">Merged</span> · 1 h ago</i></span><svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"></path><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg></button>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1180,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = (this.props.theme ?? 'dark') === 'light';
+    return { themeClass: light ? 'z light' : 'z' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zorvo · Calmer agent rows in Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--run:#34d399;--att:#fbbf24;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--run:#047353;--att:#a34b08}
+.z button{font:inherit;cursor:pointer;margin:0}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.lab{margin:0 0 12px;font-size:12px;line-height:18px;color:var(--muted)}
+.lab b{color:var(--fg);font-weight:600}
+.tile{width:28px;height:28px;flex:none;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:var(--chip);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg2)}
+.grp{display:flex;flex-direction:column;border-radius:12px;background:var(--s2);border:1px solid var(--line);overflow:hidden}
+.r{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line)}
+.r:first-child{border-top:0}
+.nm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nm b{font-weight:500;color:var(--fg)}
+.nm i{font-style:normal;font-size:11px;color:var(--subtle)}
+.z .ob{height:28px;padding:0 10px;border:1px solid var(--strong);border-radius:7px;background:transparent;color:var(--fg2);font-size:12px}
+.z .tb{height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--fg2);font-size:12px}
+.z .tb:hover{background:var(--hover)}
+.z .ib{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:0;border-radius:7px;background:transparent;color:var(--muted)}
+.pill{height:22px;display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:6px;background:var(--chip);font-size:11px;color:var(--fg2)}
+.st{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg2)}
+.dot{width:6px;height:6px;border-radius:9999px;flex:none}
+.m{display:flex;align-items:center;gap:12px;padding:8px 0}
+.m span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.m b{font-weight:400;color:var(--fg2)}
+.m i{font-style:normal;font-size:11px;color:var(--subtle)}
+.notes{margin:12px 0 0;padding:0 0 0 16px;color:var(--muted);font-size:12px;line-height:20px}
+.notes b{color:var(--fg2);font-weight:500}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="width: 1180px; height: 640px; box-sizing: border-box; display: flex; gap: 40px; padding: 32px; background: var(--ground); color: var(--fg); font-size: 13px; line-height: 18px;">
+
+  <div style="flex: 1; min-width: 0;">
+    <p class="lab"><b>Sebelum.</b> Tiga tingkat kotak bersarang: grup, kotak metode sign-in, lalu tombol bergaris di setiap baris.</p>
+    <div class="grp">
+      <div class="r"><span class="tile" aria-hidden="true">C</span><span class="nm"><b>Claude Code</b><i class="mono">0.93.0 · installed by Zorvo</i></span><span class="pill"><span class="dot" style="background: var(--run);"></span>Ready</span><button class="ob">Update to 0.94.1</button><button class="ib" aria-label="More for Claude Code"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div>
+      <div class="r" style="flex-direction: column; align-items: stretch; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 12px;"><span class="tile" aria-hidden="true">A</span><span class="nm"><b>Antigravity</b><i class="mono">1.4.5 · installed by Zorvo</i></span><span class="pill"><span class="dot" style="background: var(--att);"></span>Sign in</span></div>
+        <div style="margin-left: 40px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--ground);">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line);"><span style="flex: 1;">Log in with Google</span><button class="ob">Log in with Google</button></div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px;"><span style="flex: 1; display: flex; flex-direction: column;"><span>API key</span><span style="font-size: 11px; color: var(--subtle);">Set the key in your shell, then check again.</span></span><span style="font-size: 11px; color: var(--subtle);">In your shell</span></div>
+        </div>
+        <div style="margin-left: 40px; display: flex; align-items: center; gap: 12px;"><span style="flex: 1; font-size: 12px; color: var(--muted);">Checking may open a short session in Antigravity.</span><button class="ob">Check sign-in</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex: 1; min-width: 0;">
+    <p class="lab"><b>Sesudah.</b> Satu kotak grup. Status berupa titik dan kata, satu tombol utama per baris, sisanya di menu ⋯.</p>
+    <div class="grp">
+      <div class="r"><span class="tile" aria-hidden="true">C</span><span class="nm"><b>Claude Code</b><i class="mono">0.93.0 · update 0.94.1 ready</i></span><span class="st"><span class="dot" style="background: var(--run);"></span>Ready</span><button class="ob">Update</button><button class="ib" aria-label="More for Claude Code"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div>
+      <div class="r" style="flex-direction: column; align-items: stretch; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 12px;"><span class="tile" aria-hidden="true">A</span><span class="nm"><b>Antigravity</b><i class="mono">1.4.5</i></span><span class="st"><span class="dot" style="background: var(--att);"></span>Needs sign-in</span><button class="ib" aria-label="More for Antigravity"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div>
+        <div style="margin-left: 40px; display: flex; flex-direction: column;">
+          <div class="m"><span><b>Log in with Google</b><i>Opens a sign-in terminal.</i></span><button class="ob">Log in</button></div>
+          <div class="m" style="border-top: 1px solid var(--line);"><span><b>API key</b><i>Set the key in your shell, then check again.</i></span><button class="tb">Check again</button></div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Status</b> berupa titik dan kata, bukan pill, jadi tombol tetap jadi satu-satunya bentuk yang bisa diklik.</li>
+      <li><b>Versi dan update</b> masuk ke baris kecil di bawah nama, dan tombolnya cukup "Update".</li>
+      <li><b>Metode sign-in</b> berupa baris biasa di dalam grup, tanpa kotak kedua. "Check sign-in" pindah ke menu ⋯ dan ke baris API key.</li>
+    </ul>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1180,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = (this.props.theme ?? 'dark') === 'light';
+    return { themeClass: light ? 'z light' : 'z' };
+  }
+}
+</script>
+</body>
+</html>
