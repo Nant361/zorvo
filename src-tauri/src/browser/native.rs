@@ -222,6 +222,16 @@ fn world(mtm: MainThreadMarker) -> Retained<WKContentWorld> {
 }
 
 fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
+    create_tab(app, sid, url, true)
+}
+
+/// A page-created window stays behind the user's selected tab. WebKit itself
+/// enforces the gesture requirement before calling our sole popup delegate.
+pub(super) fn create_background(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
+    create_tab(app, sid, url, false)
+}
+
+fn create_tab(app: &AppHandle, sid: &str, url: &str, activate: bool) -> Result<String, String> {
     let mtm = MainThreadMarker::new().ok_or("Browser view must be created on the main thread.")?;
     policy::check_inherited_authorization()?;
     let window = app
@@ -250,7 +260,7 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
             config.setApplicationNameForUserAgent(Some(&NSString::from_str(APPLICATION_NAME)));
             config
                 .preferences()
-                .setJavaScriptCanOpenWindowsAutomatically(true);
+                .setJavaScriptCanOpenWindowsAutomatically(false);
             policy::disable_screen_capture(&config.preferences())?;
             let controller = config.userContentController();
             controller.addScriptMessageHandler_contentWorld_name(
@@ -278,8 +288,6 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
         let loaded_app = app.clone();
         let loaded_sid = sid.to_string();
         let loaded_id = id.clone();
-        let popup_app = app.clone();
-        let popup_sid = sid.to_string();
         let view = wry::WebViewBuilder::new()
             .with_webview_configuration(config)
             .with_visible(false)
@@ -290,19 +298,6 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 height: 600.,
             }))
             .with_navigation_handler(|raw| navigation_url(&raw).is_ok())
-            .with_new_window_req_handler(move |raw, _| {
-                if navigation_url(&raw).is_ok() {
-                    let app = popup_app.clone();
-                    let session = popup_sid.clone();
-                    let _ = popup_app.run_on_main_thread(move || {
-                        if create(&app, &session, &raw).is_ok() {
-                            changed(&app, &session);
-                        }
-                    });
-                }
-                wry::NewWindowResponse::Deny
-            })
-            .with_permission_handler(|_| wry::PermissionResponse::Deny)
             .with_download_started_handler(|_, _| false)
             .with_on_page_load_handler(move |event, _| {
                 let app = loaded_app.clone();
@@ -344,8 +339,10 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 .map_err(|e| format!("Could not load the browser page: {e}"))?;
         }
         // No app initialization script or invoke key exists in this view. Only our isolated data handler is installed.
-        for (_, tab) in &session.tabs {
-            let _ = tab.view.set_visible(false);
+        if activate {
+            for (_, tab) in &session.tabs {
+                let _ = tab.view.set_visible(false);
+            }
         }
         session.tabs.push((
             id.clone(),
@@ -361,7 +358,9 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 pending: vec![],
             },
         ));
-        session.active = Some(id.clone());
+        if activate || session.active.is_none() {
+            session.active = Some(id.clone());
+        }
         Ok(id)
     })
 }

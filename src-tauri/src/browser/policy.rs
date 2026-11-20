@@ -149,9 +149,11 @@ define_class!(
         fn popup(&self,_view:&WKWebView,_configuration:&WKWebViewConfiguration,action:&WKNavigationAction,_features:&WKWindowFeatures)->*mut WKWebView {
             let url=unsafe{action.request().URL().and_then(|u|u.absoluteString()).map(|s|s.to_string())};
             if let Some(url)=url.filter(|url|super::navigation_url(url).is_ok()) {
-                let app=self.ivars().app.clone(); let session=self.ivars().session.clone();
+                let app=self.ivars().app.clone(); let session=self.ivars().session.clone(); let tab=self.ivars().tab.clone();
                 let app2=app.clone();
-                let _=app.run_on_main_thread(move||{ if super::create(&app2,&session,&url).is_ok(){super::changed(&app2,&session);} });
+                let _=app.run_on_main_thread(move||{
+                    if super::with_tab(&session,&tab,|_|()).is_some() && super::create_background(&app2,&session,&url).is_ok(){super::changed(&app2,&session);}
+                });
             }
             std::ptr::null_mut()
         }

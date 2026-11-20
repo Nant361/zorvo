@@ -9,7 +9,6 @@ pub mod background_processes;
 pub mod branches;
 pub mod browser;
 pub mod browser_commands;
-pub mod browser_debug;
 pub mod changes;
 pub mod data_migration;
 pub mod diff_stats;
@@ -228,7 +227,6 @@ fn end_orphaned_sessions(
     tools: State<'_, Arc<agent_tools::AgentTools>>,
 ) -> usize {
     browser::close_all(&app);
-    browser_debug::close(&app, None);
     #[cfg(all(target_os = "macos", debug_assertions))]
     browser::frontend_ready(&app);
     let terminals = pty.session_ids();
@@ -299,6 +297,7 @@ fn delete_transcript(
     session_id: String,
 ) -> Result<(), String> {
     browser_commands::forget(&app, &session_id);
+    browser::close_session(&app, session_id.clone());
     store.delete_transcript(&session_id)
 }
 
@@ -523,7 +522,6 @@ pub fn run() {
             app.manage(Arc::new(browser::history::BrowserHistory::new(
                 app.state::<store::AppStore>().root(),
             )));
-            app.manage(browser_debug::DebugBrowsers::default());
             app.manage(Arc::new(artifacts::store::ArtifactStore::new(
                 app.state::<store::AppStore>().root().join("artifacts"),
             )));
@@ -604,11 +602,8 @@ pub fn run() {
             browser_commands::browser_history_clear,
             browser_commands::browser_agent_execute,
             browser_commands::browser_permission,
-            browser_commands::browser_file_permission,
-            browser_commands::browser_manual_file_permission,
             browser_commands::browser_catalog,
-            browser_debug::browser_runtime_install,
-            browser_debug::browser_runtime_status,
+            browser_commands::browser_permission_status,
             browser::browser_bounds,
             artifacts::commands::artifact_show,
             artifacts::commands::artifact_list,
@@ -736,7 +731,6 @@ pub fn run() {
                 app.state::<Arc<agent_tools::AgentTools>>().shutdown();
                 artifacts::view::close(app);
                 browser::close_all(app);
-                browser_debug::close(app, None);
             }
         });
 }

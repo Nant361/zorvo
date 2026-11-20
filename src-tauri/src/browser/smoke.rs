@@ -256,6 +256,9 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
         let tid=state["activeTabId"].as_str().ok_or("No native active tab.")?.to_string();
         browser_bounds(app.clone(),a.clone(),Some(tid.clone()),Some(Bounds{x:20.,y:100.,width:800.,height:600.}),true).await?;
         let snapshot=execute(app,a.clone(),json!({"operation":"snapshot"})).await?;
+        if snapshot.to_string().contains("synthetic-password-secret") || snapshot.to_string().contains("synthetic-code-secret") || snapshot.to_string().contains("synthetic-card-secret") {
+            return Err("A default native snapshot exposed a sensitive form value.".into());
+        }
         let button=snapshot["controls"].as_array().and_then(|rows|rows.iter().find(|r|r["name"]=="Increment")).and_then(|r|r["ref"].as_str()).ok_or("Snapshot did not name the button.")?.to_owned();
         steps.push(json!({"name":"native view and isolated snapshot","pass":true}));
         execute(app,a.clone(),json!({"operation":"fill","selector":"#input","value":"changed"})).await?;
@@ -314,16 +317,23 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
         steps.push(json!({"name":"navigation observes a new complete document and rejects its old same-tab ref","pass":true,"document":ready}));
         browser_bounds(app.clone(),a.clone(),Some(site_tab.clone()),Some(Bounds{x:20.,y:100.,width:800.,height:600.}),true).await?;
         steps.push(super::dialog_smoke::smoke(app,&a,&site_tab).await?);
-        let before=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?["tabs"].as_array().map(Vec::len).unwrap_or(0);
-        execute(app,a.clone(),json!({"operation":"evaluate","expression":"(window.open(location.href),true)"})).await?;
-        let mut after=before;
-        for _ in 0..30 {
-            after=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?["tabs"].as_array().map(Vec::len).unwrap_or(0);
-            if after>before {break;}
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let before=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?;
+        let selected=before["activeTabId"].as_str().ok_or("No active popup source tab.")?.to_owned();
+        let popup=execute(app,a.clone(),json!({"operation":"evaluate","tabId":selected,"expression":"new Promise(resolve=>setTimeout(()=>resolve({blocked:window.open(location.href)===null}),50))"})).await?;
+        let after=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?;
+        if popup["blocked"]!=true || before["tabs"].as_array().map(Vec::len)!=after["tabs"].as_array().map(Vec::len) || after["activeTabId"]!=selected {
+            return Err(format!("An unprompted page popup changed native tabs: {popup}; {before}; {after}"));
         }
-        if after!=before+1 {return Err("Native window.open did not create a session tab.".into());}
-        steps.push(json!({"name":"window.open creates a tab in the same session","pass":true}));
+        let (send,receive)=tokio::sync::oneshot::channel();
+        let (handle,session,target)=(app.clone(),a.clone(),url.clone());
+        app.run_on_main_thread(move||{let _=send.send(super::native::create_background(&handle,&session,&target));}).map_err(|_|"Popup background test could not reach main.")?;
+        let background=receive.await.map_err(|_|"Popup background creation was cancelled.")??;
+        let background_state=execute(app,a.clone(),json!({"operation":"tabs.list"})).await?;
+        if background_state["activeTabId"]!=selected || background_state["tabs"].as_array().map(Vec::len)!=before["tabs"].as_array().map(|tabs|tabs.len()+1) {
+            return Err(format!("A page-created tab took over the selected tab: {background_state}"));
+        }
+        execute(app,a.clone(),json!({"operation":"tabs.close","tabId":background})).await?;
+        steps.push(json!({"name":"automatic popup is blocked and page-created background tab preserves selection","pass":true,"automaticPopupBlocked":true,"activeTabPreserved":true}));
         Ok::<_,String>(())
     }.await;
     super::close_session(app, a);

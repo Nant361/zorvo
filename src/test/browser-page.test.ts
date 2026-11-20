@@ -39,6 +39,35 @@ function page() {
 }
 
 describe("native browser page helper", () => {
+  it("omits credential, one-time code and payment values from default reads while preserving refs", async () => {
+    const p = page();
+    p.document.body.innerHTML = `
+      <input aria-label="Password" type="password" value="password-secret">
+      <input aria-label="New password" autocomplete="section-account NEW-PASSWORD" value="new-password-secret">
+      <input aria-label="Verification code" autocomplete="one-time-code" value="otp-secret">
+      <input aria-label="Card number" autocomplete="section-checkout billing cc-number" value="card-number-secret">
+      <textarea aria-label="Card security code" autocomplete="shipping cc-csc">card-code-secret</textarea>
+      <select aria-label="Card expiry" autocomplete="billing cc-exp-month"><option value="expiry-secret" selected>Expiry month</option></select>
+      <input aria-label="Public name" autocomplete="name" value="visible name">
+    `;
+    const snapshot = await p.call<{ controls: Control[] }>("snapshot");
+    const controls = snapshot.controls;
+    expect(controls).toHaveLength(7);
+    for (const control of controls.slice(0, 6)) {
+      expect(control).not.toHaveProperty("value");
+      expect(control.ref).toEqual(expect.any(String));
+    }
+    expect(controls[6]).toMatchObject({ name: "Public name", value: "visible name" });
+    expect(JSON.stringify(snapshot)).not.toContain("secret");
+    const found = await p.call<Control[]>("find", { text: "Password" });
+    expect(found).toHaveLength(2);
+    expect(found.every(control => !Object.hasOwn(control, "value"))).toBe(true);
+    await p.call("fill", { ref: controls[0].ref, value: "replacement-secret" });
+    expect(p.document.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("replacement-secret");
+    const after = await p.call<{ controls: Control[] }>("snapshot");
+    expect(JSON.stringify(after.controls)).not.toContain("replacement-secret");
+  });
+
   it("finds ordinary and nested open-shadow controls and drives their snapshot refs", async () => {
     const p = page();
     p.document.body.innerHTML = '<button>Light button</button><x-widget></x-widget><x-closed></x-closed>';

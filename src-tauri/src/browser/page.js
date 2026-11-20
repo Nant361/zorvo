@@ -80,8 +80,12 @@
     }
     return elements.slice(0, 1000);
   }
+  // Snapshots are a default read, so never include credentials or payment data
+  // already present in a form. Explicit page-world evaluate remains grant-bound.
+  const sensitiveValue = el => el.type === 'password' || (el.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/)
+    .some(token => ['current-password', 'new-password', 'one-time-code'].includes(token) || token.startsWith('cc-'));
   const describe = el => ({ref: ref(el), role: el.getAttribute('role') || el.localName, name: name(el),
-    ...(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement ? {value: bounded(el.value), type: el.type, disabled: el.disabled} : {}),
+    ...(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement ? {...(!sensitiveValue(el) ? {value: bounded(el.value)} : {}), type: el.type, disabled: el.disabled} : {}),
     ...(el instanceof HTMLInputElement && ['checkbox','radio'].includes(el.type) ? {checked: el.checked} : {}),
     ...(el instanceof HTMLAnchorElement ? {url: bounded(el.href, 8192)} : {})});
   function fill(el, value) {
