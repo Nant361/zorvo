@@ -149,6 +149,61 @@ fn looks_through_a_launcher_shell_deeper_down_and_a_little_later() {
 }
 
 #[test]
+fn skips_opencode_acp_transport_and_still_lists_work_launched_under_it() {
+    let rows = parse_ps(
+        "10 1 10 01:30 /Applications/Agent Tools/opencode acp --cwd /project\n\
+         11 10 11 01:30 /Applications/Agent Tools/opencode serve --stdio --port 0\n\
+         16 11 16 00:30 /Applications/Zorvo.app/Contents/MacOS/zorvo mcp-bridge\n\
+         12 11 12 00:15 node vite\n\
+         13 11 13 00:10 /Applications/Agent Tools/opencode serve --stdio --port 0\n\
+         14 10 14 00:08 /Applications/Agent Tools/opencode serve --port 8080\n\
+         15 10 15 00:05 /bin/zsh -c npm run dev\n",
+    );
+    let roots = [("session".to_owned(), 10)];
+    assert!(select_tasks(&rows[..3], &roots).is_empty());
+    let tasks = select_tasks(&rows, &roots);
+    let pids: Vec<_> = tasks.iter().map(|t| t.pid).collect();
+    assert_eq!(pids, [12, 13, 14, 15]);
+}
+
+#[test]
+fn looks_through_the_internal_bridge_to_find_real_tasks() {
+    let rows = parse_ps(
+        "10 1 10 01:30 /tools/opencode acp\n\
+         11 10 11 01:30 /tools/opencode serve --stdio --port 0\n\
+         12 11 12 00:30 /Applications/Zorvo.app/Contents/MacOS/zorvo mcp-bridge\n\
+         13 12 13 00:10 node build.mjs\n",
+    );
+    let tasks = select_tasks(&rows, &[("session".to_owned(), 10)]);
+    assert_eq!(tasks.iter().map(|t| t.pid).collect::<Vec<_>>(), [13]);
+}
+
+#[test]
+fn keeps_similarly_named_user_servers_and_bridges() {
+    for parent in [
+        "/tools/opencode acp-other",
+        "/tools/other-opencode acp",
+        "/different/opencode acp",
+        "/tools/opencode run acp",
+    ] {
+        let mut root = row(10, 1, parent);
+        root.elapsed_secs = 600;
+        let mut server = row(11, 10, "/tools/opencode serve --stdio --port 0");
+        server.pgid = 11;
+        let tasks = select_tasks(&[root, server], &[("session".to_owned(), 10)]);
+        assert_eq!(tasks.iter().map(|t| t.pid).collect::<Vec<_>>(), [11]);
+    }
+    let rows = parse_ps(
+        "10 1 10 01:30 /tools/agent --acp\n\
+         11 10 11 00:10 /Applications/Zorvo.app/Contents/MacOS/zorvo mcp-bridge\n",
+    );
+    assert_eq!(
+        select_tasks(&rows, &[("session".to_owned(), 10)])[0].pid,
+        11
+    );
+}
+
+#[test]
 fn lists_a_command_that_replaced_its_shell() {
     // Qwen Code's shell tool starts the command in its own group, and bash
     // execs a simple command, so `pnpm test:unit` is the group leader and no

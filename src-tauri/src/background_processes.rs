@@ -9,6 +9,7 @@
 //! a pid the UI held on to cannot reach a process that reused it.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
@@ -132,7 +133,7 @@ fn is_shell(command: &str) -> bool {
 pub fn select_tasks(rows: &[ProcessRow], roots: &[(String, u32)]) -> Vec<TaskProcess> {
     let children = children_by_parent(rows);
 
-    let elapsed: HashMap<u32, u64> = rows.iter().map(|row| (row.pid, row.elapsed_secs)).collect();
+    let by_pid: HashMap<_, _> = rows.iter().map(|row| (row.pid, row)).collect();
     let mut seen_roots = HashSet::new();
     let mut listed = HashSet::new();
     let mut tasks = Vec::new();
@@ -140,7 +141,7 @@ pub fn select_tasks(rows: &[ProcessRow], roots: &[(String, u32)]) -> Vec<TaskPro
         if !seen_roots.insert(*root) {
             continue;
         }
-        for row in tasks_below(&children, *root, elapsed.get(root).copied()) {
+        for row in tasks_below(&children, *root, &by_pid) {
             if listed.insert(row.pid) {
                 tasks.push(TaskProcess {
                     pid: row.pid,
@@ -176,13 +177,45 @@ fn is_task(row: &ProcessRow, root_elapsed: Option<u64>) -> bool {
     row.pgid == row.pid
 }
 
+/// OpenCode ACP starts its stdio server in a separate process group. Match
+/// both ends of that launch so an ordinary shell running a server still shows.
+fn is_opencode_transport(parent: &str, child: &str) -> bool {
+    let Some(binary) = child.strip_suffix(" serve --stdio --port 0") else {
+        return false;
+    };
+    Path::new(binary).ends_with("opencode")
+        && parent
+            .strip_prefix(binary)
+            .and_then(|args| args.strip_prefix(' '))
+            .and_then(|args| args.split_whitespace().next())
+            == Some("acp")
+}
+
+fn is_session_helper(row: &ProcessRow, by_pid: &HashMap<u32, &ProcessRow>) -> bool {
+    let Some(parent) = by_pid.get(&row.ppid) else {
+        return false;
+    };
+    // The server also starts the MCP bridge supplied by Zorvo in its own group.
+    if row
+        .command
+        .strip_suffix(" mcp-bridge")
+        .is_some_and(|binary| Path::new(binary).ends_with("zorvo"))
+    {
+        return by_pid
+            .get(&parent.ppid)
+            .is_some_and(|acp| is_opencode_transport(&acp.command, &parent.command));
+    }
+    is_opencode_transport(&parent.command, &row.command)
+}
+
 /// The tasks under `root` with no other task between them and it, a shell
 /// that launched the agent itself looked through.
 fn tasks_below<'a>(
     children: &HashMap<u32, Vec<&'a ProcessRow>>,
     root: u32,
-    root_elapsed: Option<u64>,
+    by_pid: &HashMap<u32, &ProcessRow>,
 ) -> Vec<&'a ProcessRow> {
+    let root_elapsed = by_pid.get(&root).map(|r| r.elapsed_secs);
     let mut found = Vec::new();
     let mut visited = HashSet::from([root]);
     let mut stack: Vec<&ProcessRow> = children
@@ -196,7 +229,7 @@ fn tasks_below<'a>(
         if !visited.insert(row.pid) {
             continue;
         }
-        if is_task(row, root_elapsed) {
+        if is_task(row, root_elapsed) && !is_session_helper(row, by_pid) {
             found.push(row);
         } else if let Some(list) = children.get(&row.pid) {
             stack.extend(list.iter().rev().copied());
