@@ -11,8 +11,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
 <style>
 body{margin:0}
-.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--primary:#fafafa;--onp:#09090b;--run:#34d399;--att:#fbbf24;--unread:#38bdf8;--danger:#f87171;--buf:#d4a017;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
-.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--primary:#09090b;--onp:#fafafa;--run:#047353;--att:#a34b08;--unread:#0369a1;--danger:#b91c1c;--buf:#a34b08}
+.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--primary:#fafafa;--onp:#09090b;--run:#34d399;--att:#fbbf24;--unread:#38bdf8;--danger:#f87171;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--primary:#09090b;--onp:#fafafa;--run:#047353;--att:#a34b08;--unread:#0369a1;--danger:#b91c1c}
 .z button{font:inherit;cursor:pointer;margin:0}
 .mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
 .ico{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
@@ -73,11 +73,11 @@ dl{margin:0;display:flex;flex-direction:column;gap:6px}
           <div class="big"><strong>57.7%</strong><span class="mono">577.0k / 1.0M tokens</span></div>
           <p class="note" style="margin-top: 2px;">423.0k left before the window is full</p>
         </div>
-        <div class="bar" role="img" aria-label="Used 57.7%, free 27.3%, autocompact buffer 15%"><i style="width: 57.7%; background: var(--fg2); border-radius: 9999px 0 0 9999px;"></i><i style="width: 27.3%; background: var(--strong);"></i><i style="width: 15%; background: var(--buf); border-radius: 0 9999px 9999px 0;"></i></div>
+        <div class="bar" role="img" aria-label="Used 57.7%, free 27.3%, autocompact buffer 15%"><i style="width: 57.7%; background: var(--fg2); border-radius: 9999px 0 0 9999px;"></i><i style="width: 27.3%; background: var(--hover);"></i><i style="width: 15%; background: var(--strong); border-radius: 0 9999px 9999px 0;"></i></div>
         <dl class="leg">
           <div><span class="dot" style="background: var(--fg2);"></span><dt>Used</dt><dd class="mono">577.0k <span class="pc">57.7%</span></dd></div>
-          <div><span class="dot" style="background: var(--strong);"></span><dt>Free</dt><dd class="mono">273.0k <span class="pc">27.3%</span></dd></div>
-          <div><span class="dot" style="background: var(--buf);"></span><dt>Autocompact buffer</dt><dd class="mono">150.0k <span class="pc">15.0%</span></dd></div>
+          <div><span class="dot" style="background: var(--hover); box-shadow: inset 0 0 0 1px var(--strong);"></span><dt>Free</dt><dd class="mono">273.0k <span class="pc">27.3%</span></dd></div>
+          <div><span class="dot" style="background: var(--strong);"></span><dt>Autocompact buffer</dt><dd class="mono">150.0k <span class="pc">15.0%</span></dd></div>
         </dl>
         <div style="border-top: 1px solid var(--line); padding-top: 12px;">
           <p class="lbl">What fills it <span>Estimated by Qwen Code</span></p>
