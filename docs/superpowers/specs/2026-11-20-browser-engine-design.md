@@ -5,7 +5,8 @@ independent review whose findings are folded in below. No spike in section 6
 has been accepted as passed, and no feature code follows until the gate spikes
 are. PR 256 now carries a WKWebView probe that is measured against this note
 (section 7). Two decisions taken after its first results are in section 8,
-numbers 4 and 5.
+numbers 4 and 5, with a limit on decision 4's first layer found later the
+same day.
 
 ## Why this note exists
 
@@ -190,11 +191,13 @@ Enough to judge the decision. The feature spec will replace this section.
     see and alter both. That is accepted and stated in the tool's answers:
     console lines and `evaluate` results are what the page chose to show.
 - **What a page may do.** Load `https`, and `http` where the system allows it
-  (see section 4). A page gets no capture API: Zorvo declares no camera or
-  microphone use, every browser view turns screen capture off, and the public
-  delegates deny camera, microphone and location on top of that (section 8,
-  decision 4). wry's default, which grants camera and microphone when no
-  handler is set, is never left in place. Spike 7 has to show all of it.
+  (see section 4). Capture is refused in three layers: Zorvo declares no
+  camera or microphone use, every browser view turns screen capture off, and
+  the public delegates deny camera, microphone and location (section 8,
+  decision 4). The first layer depends on how Zorvo was started, so the other
+  two are required in every view, not spare. wry's default, which grants
+  camera and microphone when no handler is set, is never left in place. Spike
+  7 has to show all of it.
   Downloads are refused. A new window opens as a tab up to the session's
   limit, built like any other tab, otherwise it is refused.
 - **Ending a page.** `_killWebContentProcess`, as `artifacts/view.rs::end`
@@ -252,8 +255,12 @@ the feature spec.
    `navigator.geolocation.getCurrentPosition`, with no system prompt in
    Zorvo's name. A second run adds the camera and microphone strings, to show
    that `getDisplayMedia` is still gone and the delegate refuses
-   `getUserMedia`. Both runs on macOS 27 and on one system below it, where
-   location has no public delegate callback (section 8, decision 4).
+   `getUserMedia`. A third run starts the first bundle as a plain child of a
+   shell whose app holds a camera or microphone grant, where
+   `navigator.mediaDevices` comes back: `getDisplayMedia` is still gone, the
+   delegate refuses `getUserMedia`, and no stream is obtained. All runs on
+   macOS 27 and on one system below it, where location has no public delegate
+   callback (section 8, decision 4).
 8. **What loads.** `https://example.com`, `http://localhost:3000`,
    `http://127.0.0.1:3000`, `http://app.test` and `http://example.com`: record
    which load with today's `Info.plist`.
@@ -309,12 +316,14 @@ Taken later on 2026-11-20. PR 256's probe left two questions open, and the
 maintainer asked for them to be reviewed and decided. These two can be
 reversed the same way:
 
-4. **A page gets no capture API.** Zorvo keeps declaring no camera or
-   microphone use, every browser view turns screen capture off, and the public
-   delegates still deny. Lockdown Mode and the private display-capture
-   delegate are not used. The browser is offered on macOS 12 and later,
-   decided at run time, and the app's minimum version does not change. The
-   detail is below.
+4. **A page is refused capture, in three layers.** Zorvo keeps declaring no
+   camera or microphone use, every browser view turns screen capture off, and
+   the public delegates still deny. The first layer removes the API only in a
+   Zorvo that was opened from Finder or with `open`; started from a terminal
+   whose app holds a capture grant, the API is back, so the second and third
+   layers are required. Lockdown Mode and the private display-capture delegate
+   are not used. The browser is offered on macOS 12 and later, decided at run
+   time, and the app's minimum version does not change. The detail is below.
 5. **This note is the reference** for the engine decision, the gates and the
    open questions. PR 256's document becomes the spike report measured against
    it: results by the spike numbers in section 6, saying for each what the
@@ -356,11 +365,13 @@ one with them:
 
 The three layers, in this order:
 
-1. **Zorvo declares no camera or microphone use.** Then no web view in the
-   app, artifact pages included, has `navigator.mediaDevices`, which covers
-   camera, microphone and screen together. A test keeps
-   `NSCameraUsageDescription` and `NSMicrophoneUsageDescription` out of
-   `Info.plist`, the way a test keeps `updater:*` out of the capabilities.
+1. **Zorvo declares no camera or microphone use.** Then, in a Zorvo opened
+   from Finder or with `open`, no web view in the app, artifact pages
+   included, has `navigator.mediaDevices`, which covers camera, microphone and
+   screen together. A test keeps `NSCameraUsageDescription` and
+   `NSMicrophoneUsageDescription` out of `Info.plist`, the way a test keeps
+   `updater:*` out of the capabilities. This layer stops where the next
+   heading says.
 2. **Every browser view turns `WKPreferences._screenCaptureEnabled` off before
    it is created.** `getDisplayMedia` is
    `[EnabledBySetting=ScreenCaptureEnabled]` in WebKit's `MediaDevices.idl`,
@@ -369,7 +380,8 @@ The three layers, in this order:
    way `artifacts/view.rs` uses `_killWebContentProcess`: behind
    `respondsToSelector`, with the value read back. What a view does when the
    selector is missing or the value does not read back is for the feature
-   spec; layer 1 still holds then.
+   spec. Since layer 1 does not hold for every launch, "carry on without it"
+   is not a safe answer there.
 3. **The public delegates still deny.** Camera and microphone through
    `requestMediaCapturePermissionFor` (macOS 12), location through the
    callback macOS 27 adds. Below 27, WebKit refuses a location request that no
@@ -386,10 +398,55 @@ Not used, and why:
   delegate.** Nothing reaches it once the API is gone, and when WebKit stops
   calling a delegate there is no way to notice.
 
+#### Where layer 1 stops
+
+PR 256's report mentions that its probe, started as a direct child, had the
+capture API with no usage strings. A second small probe on the same Mac, now
+on macOS 27.2.1, repeats it. It loads one page, reads which APIs exist, and
+records its responsible process and the microphone status that process gives
+it (`AVCaptureDevice.authorizationStatus`). It requests no capture.
+
+| Started | Responsible process | Microphone status | Bundle strings | `mediaDevices` | `getDisplayMedia` |
+|---|---|---|---|---|---|
+| With `open` | itself | not determined | none | undefined | undefined |
+| With `open` | itself | not determined | both | object | function |
+| With `open`, screen preference off | itself | not determined | both | object | undefined |
+| Child of a shell | an app with a microphone string and no grant | not determined | none | undefined | undefined |
+| Child of a launcher app | the launcher, both strings, no grant | not determined | none | undefined | undefined |
+| Child of a shell | an app with both strings and a microphone grant | authorized | none | object | function |
+| Same, screen preference off | the same app | authorized | none | object | undefined |
+
+`getUserMedia` is a function wherever `mediaDevices` is an object.
+
+macOS ties a privacy grant to the responsible process, and a plain child
+takes its parent's. So a bundle with no usage strings has the API when the
+app above it holds a grant. The parent's usage strings alone do not bring it
+back (rows 4 and 5). This is the mechanism `spawn/` works against for the
+agents Zorvo starts; here Zorvo is the child.
+
+What follows:
+
+- A Zorvo opened from Finder or with `open` is its own responsible process,
+  and layer 1 holds (row 1).
+- `pnpm tauri dev`, and a release binary run from a shell, are children of
+  the terminal's app. If that app holds a camera or microphone grant, every
+  web view in that Zorvo has `navigator.mediaDevices`. That is an ordinary
+  state while developing.
+- Layer 2 still removes `getDisplayMedia` there (row 7). Layers 2 and 3 are
+  therefore set in every browser view, whatever the plist says.
+- The plist test guards the released app. It says nothing about a dev build.
+- The artifact page's view is in the same position, and section 3 notes that
+  wry grants camera and microphone when no handler is set. That view needs
+  its own deny handler, outside this note.
+
 Not shown yet:
 
-- Any of this on macOS 27. The table is one Mac on 26.5.2.
-- Whether one of the two usage strings alone brings `navigator.mediaDevices`
-  back. Both and neither were tried.
+- The first table on macOS 27 by this note's own probe. PR 256's reports
+  cover the page and both frame kinds on 27.0.1, and say that either usage
+  string alone brings `navigator.mediaDevices` back. They are under review.
+- Whether a grant alone is enough. The app in rows 6 and 7 has both the
+  strings and the grant.
+- Whether a stream can be obtained in rows 6 and 7, and whether the public
+  delegate refuses there. No request was made.
 - The location refusal below macOS 27. It is read from WebKit's source, not
   tested.
