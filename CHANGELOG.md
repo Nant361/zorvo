@@ -4,6 +4,12 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-21
+
+### Changed
+
+- **Zorvo is signed with a Developer ID and notarized by Apple.** macOS opens a downloaded copy without warning that it comes from an unidentified developer. Since the signature differs from earlier versions, macOS may ask once more for access to your folders, and Private mode may ask once to use its items in your Keychain; choose Always Allow.
+
 ### Fixed
 
 - **A session shows the pull request its agent opened.** When an agent makes its own worktree in your folder (`git worktree add -b …`) and opens a pull request from it, the session's row in the sidebar and its overview card now show that pull request and its checks. Zorvo reads the branch and the address from the agent's own shell commands and keeps them with the session, so they stay after a restart; a session you have not opened since this update shows them once you open it.
@@ -431,7 +437,8 @@ Tagged but never published; its fix shipped in 0.11.2.
 
 - Approval safety, terminal handling, the stream parser and working folders. ([#1])
 
-[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/zakyirsyaad/zorvo/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/zakyirsyaad/zorvo/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/zakyirsyaad/zorvo/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/zakyirsyaad/zorvo/compare/v0.12.0...v0.13.0
