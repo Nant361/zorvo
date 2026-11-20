@@ -10,7 +10,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ### Changed
 
-- **A compact browser toolbar.** Navigation, the address and element selection share one row. Tabs, browser choices and debugging tools live in the menu, leaving more room for the page.
+- **A compact browser toolbar.** Navigation, the address and element selection share one row, with page tabs above it. Browser choices and debugging tools have their own menu.
 - **Site information in the browser.** See the connection, cookie count and agent access for the current page, and clear its cookies and origin storage. A menu keeps a still image of the page behind it instead of showing an empty panel.
 
 ### Fixed
@@ -19,6 +19,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 - **Responsive pages in the browser.** WebKit now includes its Safari compatibility token and Zorvo identity, so sites such as Google serve a layout that follows the panel width.
 - **Clearer browser commands for agents.** Browser tools now describe URLs, tab IDs and scroll distances directly, so agents can open and scroll a page without guessing the arguments.
 - **OpenCode retry errors in the chat.** Failed model requests now show the agent's retry status and error instead of leaving only a working indicator.
+- **A session shows the pull request its agent opened.** When an agent makes its own worktree in your folder (`git worktree add -b …`) and opens a pull request from it, the session's row in the sidebar and its overview card now show that pull request and its checks. Zorvo reads the branch and the address from the agent's own shell commands and keeps them with the session, so they stay after a restart; a session you have not opened since this update shows them once you open it.
 
 ## [0.14.0] - 2026-11-20
 

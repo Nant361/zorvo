@@ -1,5 +1,5 @@
 import type { PullRequestStatus } from '../hooks/usePullRequest';
-import type { Session } from '../types';
+import type { AgentWork, Session } from '../types';
 import { isArchived, workspacePathOf } from './session-helpers';
 
 /** How a pull request reads at a glance: its state, with failing checks standing out on an open one. */
@@ -84,4 +84,35 @@ export function sessionBranchOf(
 export function pullRequestOnBranch(folder: FolderPullRequests, branch: string | null): PullRequestStatus | null {
   if (!branch) return null;
   return folder.pullRequests.find((pullRequest) => pullRequest.branch === branch) ?? null;
+}
+
+/**
+ * The newest pull request the agent made itself: one whose address `gh pr create` printed, else
+ * one whose head is a branch it made (`agentWorkOf`). An agent often works in a worktree of its own
+ * inside the folder, whose branch the folder's checkout never shows.
+ */
+export function pullRequestOfWork(folder: FolderPullRequests, work: AgentWork | undefined): PullRequestStatus | null {
+  if (!work) return null;
+  for (const url of [...work.pullRequestUrls].reverse()) {
+    const found = folder.pullRequests.find((pullRequest) => pullRequest.url.toLowerCase() === url.toLowerCase());
+    if (found) return found;
+  }
+  for (const branch of [...work.branches].reverse()) {
+    const found = pullRequestOnBranch(folder, branch);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * The pull request a session's row shows: a worktree session's branch's, else one its agent made,
+ * else the folder's branch's for the newest session there (`sessionBranchOf`).
+ */
+export function sessionPullRequestOf(
+  session: Session,
+  folder: FolderPullRequests,
+  newestInFolder: ReadonlyMap<string, string>,
+): PullRequestStatus | null {
+  if (session.worktree) return pullRequestOnBranch(folder, session.worktree.branch);
+  return pullRequestOfWork(folder, session.agentWork) ?? pullRequestOnBranch(folder, sessionBranchOf(session, folder, newestInFolder));
 }

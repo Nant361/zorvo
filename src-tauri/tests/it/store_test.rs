@@ -80,6 +80,7 @@ fn session(id: &str, status: &str) -> SessionRecord {
         private_mode: None,
         private_usage: None,
         title_source: None,
+        agent_work: None,
     }
 }
 
@@ -146,6 +147,37 @@ fn a_session_keeps_who_opened_it() {
     let loaded = store.load_state().expect("load state");
     assert_eq!(loaded.sessions.len(), 2);
     assert!(loaded.sessions[0].opened_by.is_none());
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_session_keeps_what_its_agent_made() {
+    let root = unique_temp_root("agent-work");
+    fs::create_dir_all(&root).expect("create root");
+    let store = AppStore::new(root.clone());
+    let mut state = PersistedState::default();
+    let mut worked = session("s-w", "idle");
+    worked.agent_work = Some(zorvo_lib::store::AgentWorkRecord {
+        branches: vec!["fix/notice".to_string()],
+        pull_request_urls: vec!["https://github.com/o/r/pull/259".to_string()],
+    });
+    state.sessions = vec![worked, session("s-x", "idle")];
+    store.save_state(&state).expect("save state");
+
+    let raw = fs::read_to_string(root.join("state.json")).expect("read state file");
+    assert_eq!(raw.matches("agentWork").count(), 1, "saved once: {raw}");
+    assert!(raw.contains("pullRequestUrls"), "in camelCase: {raw}");
+    let loaded = store.load_state().expect("load state");
+    let work = loaded.sessions[0].agent_work.as_ref().expect("the work");
+    assert_eq!(work.branches, ["fix/notice"]);
+
+    // A wrong-typed record loads the session without it.
+    let broken = raw.replace("\"branches\": [", "\"branches\": 7, \"x\": [");
+    assert_ne!(broken, raw, "the fixture was changed");
+    fs::write(root.join("state.json"), broken).expect("write state file");
+    let loaded = store.load_state().expect("load state");
+    assert_eq!(loaded.sessions.len(), 2);
+    assert!(loaded.sessions[0].agent_work.is_none());
     fs::remove_dir_all(&root).ok();
 }
 

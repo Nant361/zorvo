@@ -212,12 +212,19 @@ extension Probe {
     record("visible-window fallback interaction", fallback, ["sameWindowCoverPass": fallback])
     if longHidden {
       let delayed = measurements.filter { ($0["mode"] as? String ?? "").hasSuffix("-after-idle") }
+      // Same range as report.mjs, so a stale or suspended history is a failed
+      // gate here and not a pass the validator then has to contradict.
+      let quietSpan: ([String: Any]) -> Double = {
+        (($0["lastFiveSecondsOfQuiet"] as? [String: Any])?["windowMs"] as? NSNumber)?.doubleValue
+          ?? 0
+      }
       let passed =
         delayed.count == 2
         && delayed.allSatisfy {
           $0["reactAndSnapshotWithinOneSecond"] as? Bool == true
             && $0["documentHidden"] as? Bool == true
             && ($0["quietDurationMs"] as? Double ?? 0) >= 180_000
+            && (5000...6500).contains(quietSpan($0))
             && ($0["mode"] as? String != "minimized-after-idle"
               || $0["windowMiniaturized"] as? Bool == true)
         }

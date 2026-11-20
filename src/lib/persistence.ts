@@ -20,6 +20,7 @@ import { normalizeAppearance } from './appearance';
 import type { AgentOptions } from './acp-draft';
 import { validArtifactComments } from './artifact-comments';
 import { validReviewComments } from './review-comments';
+import { validAgentWork } from './agent-work';
 import { parseArtifactCard } from './artifacts';
 import { toCommands, toConfigOptions, toModels, toModes } from '../hooks/useAcpSessions';
 
@@ -128,10 +129,11 @@ function withValidStartCommit(worktree: SessionWorktree): SessionWorktree {
 
 /** A session keeps everything else when one of its optional fields is malformed. */
 function withValidFields(session: Session): Session {
-  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, titleSource, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, ...rest } = session;
+  const { worktree, pinned, archivedAt, namedByUser, hasUnread, historyElsewhere, titleSource, compareRunId, reviewComments, artifactComments, privateMode, privateUsage, delegatedFrom, openedBy, agentWork, ...rest } = session;
   const comments = validReviewComments(reviewComments);
   const pageComments = validArtifactComments(artifactComments);
   const usage = toPrivateUsage(privateUsage);
+  const work = validAgentWork(agentWork);
   const sessionCap = isPrivateMode(privateMode) ? privateSessionCap(privateMode.sessionCap) : undefined;
   return {
     ...rest,
@@ -157,6 +159,7 @@ function withValidFields(session: Session): Session {
         }
       : {}),
     ...(usage ? { privateUsage: usage } : {}),
+    ...(work ? { agentWork: work } : {}),
   };
 }
 

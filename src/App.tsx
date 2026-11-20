@@ -52,7 +52,8 @@ import { createdFilesOf } from "./lib/created-files";
 import { overviewOf } from "./lib/session-overview";
 import { useOverviewCollapse } from "./hooks/useOverviewCollapse";
 import { OverviewCard } from "./components/overview/OverviewCard";
-import { newestSessionInFolder, pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
+import { useAgentWork } from "./hooks/useAgentWork";
+import { newestSessionInFolder, pullRequestOfWork, pullRequestOnBranch, sessionPullRequestOf } from "./lib/pull-request-look";
 import { currentPlan } from "./lib/plan";
 import { useRepoPullRequests } from "./hooks/useRepoPullRequests";
 import { useAgentSignIn } from "./hooks/useAgentSignIn";
@@ -822,6 +823,7 @@ export default function App() {
     forget: forgetInMessage,
     onError: reportError,
   });
+  useAgentWork(sessions, transcripts, patchSession);
   useArtifactCommentSweep(sessions, artifacts.bySession, artifacts.readSessions, updateArtifactComments, forgetInMessage);
   /** Shows a subagent's or a shell command's task in the inspector, beside its session's chat. */
   const openTask = (sessionId: string, tab: TaskTab) => {
@@ -852,13 +854,17 @@ export default function App() {
   const pullRequestOf = useCallback(
     (session: Session) => {
       const folder = folderPullRequests.get(workspacePathOf(session));
-      return folder ? pullRequestOnBranch(folder, sessionBranchOf(session, folder, newestInFolder)) : null;
+      return folder ? sessionPullRequestOf(session, folder, newestInFolder) : null;
     },
     [folderPullRequests, newestInFolder],
   );
   // The top bar reads the same list; its own call is only for a branch outside the 100 newest.
   const shownFolder = activeSession ? folderPullRequests.get(workspacePathOf(activeSession)) : undefined;
-  const listedPullRequest = shownFolder ? pullRequestOnBranch(shownFolder, workspaceDetails?.branch ?? null) : null;
+  // A session in the folder's own checkout first shows the pull request its agent made, often from a worktree of its own.
+  const workPullRequest =
+    shownFolder && activeSession && !activeSession.worktree ? pullRequestOfWork(shownFolder, activeSession.agentWork) : null;
+  const listedPullRequest =
+    workPullRequest ?? (shownFolder ? pullRequestOnBranch(shownFolder, workspaceDetails?.branch ?? null) : null);
   const ownPullRequest = usePullRequest(
     isRepository && !listedPullRequest ? shownFolderPath : undefined,
     workspaceDetails?.branch ?? undefined,

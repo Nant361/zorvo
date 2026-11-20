@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
-import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
+import { appName, isPreparedSnapshot, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
 import { assessReport as assessCurrentReport, assertRequestedRun } from "./report.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -18,6 +18,8 @@ process.once("SIGTERM", () => controller.abort());
 const options = { signal: controller.signal, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 };
 const hash = content => createHash("sha256").update(content).digest("hex");
 const sourceNames = ["Probe.swift", "HiddenProbe.swift", "Fixture.tsx", "fixture.mjs", "Info.plist", "run.mjs", "report.mjs", "snapshot.mjs"];
+// The checkout's validator judges every collection beside the snapshot's own.
+const collectorNames = ["run.mjs", "snapshot.mjs", "report.mjs"];
 
 let fixture;
 let outputDirectory;
@@ -46,8 +48,9 @@ async function main() {
   const { prepare, requestPermissions, direct, longHidden } = cli;
   const reuse = cli.reuse !== null;
   // Prepared identities remain resolvable while macOS setup/approval and
-  // revocation happen outside this process. --clean owns their unregister.
-  keepRegistration = reuse;
+  // revocation happen outside this process. --clean owns their unregister,
+  // and refuses any other directory, so a reused temporary run unregisters.
+  keepRegistration = reuse && isPreparedSnapshot(cli.reuse);
   if (cli.clean) {
     const result = await removePreparedSnapshot(cli.clean, {
       isRunning: async root => (await recordedProcess(root)) !== null,
@@ -56,9 +59,9 @@ async function main() {
     console.log(JSON.stringify(result));
     return;
   }
-  await run("git", ["diff", "--quiet", "HEAD", "--", "run.mjs", "snapshot.mjs"], { ...options, cwd: directory });
+  await run("git", ["diff", "--quiet", "HEAD", "--", ...collectorNames], { ...options, cwd: directory });
   const { stdout: collectorCommit } = await run("git", ["rev-parse", "HEAD"], { ...options, cwd: directory });
-  const collectorSources = Object.fromEntries(await Promise.all(["run.mjs", "snapshot.mjs"].map(async name => [
+  const collectorSources = Object.fromEntries(await Promise.all(collectorNames.map(async name => [
     name, hash(await readFile(path.join(directory, name))),
   ])));
   if (prepare) await mkdir(preparedRoot, { recursive: true });
@@ -154,7 +157,6 @@ async function main() {
     if (await recordedProcess()) throw new Error("This snapshot's native probe is already running.");
     await rm(path.join(outputDirectory, "probe.pid"), { force: true });
     if (requestPermissions) {
-      keepRegistration = true;
       const resultPath = path.join(outputDirectory, "permission-setup.json");
       console.log("Permission setup: " + resultPath);
       launched = true;
@@ -189,7 +191,8 @@ async function main() {
       assertRequestedRun(report, { longHidden, direct, sourceCommit: manifest.sourceCommit });
       report.assessment = assessReport(report, manifest.mode);
       const currentAssessment = assessCurrentReport(report, manifest.mode);
-      if (JSON.stringify(currentAssessment) !== JSON.stringify(report.assessment)) throw new Error("The current validator disagrees with snapshot " + manifest.sourceCommit);
+      // The scope is wording; only a different status is a disagreement.
+      if (currentAssessment.status !== report.assessment.status) throw new Error("The current validator disagrees with snapshot " + manifest.sourceCommit);
       report.harness = {
         collectedAt: new Date().toISOString(), node: process.version, ...manifest,
         collectorCommit: collectorCommit.trim(), collectorSources,
