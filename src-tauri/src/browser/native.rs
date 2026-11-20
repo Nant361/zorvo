@@ -408,27 +408,86 @@ fn end(mut tab: Tab) {
 }
 
 pub async fn execute(app: &AppHandle, sid: String, args: Value) -> Result<Value, String> {
-    let (send, receive) = oneshot::channel();
-    let handle = app.clone();
     let timeout = args
         .get("timeoutMs")
         .and_then(Value::as_u64)
         .unwrap_or(10000)
         .clamp(100, 30000)
         + 2000;
-    app.run_on_main_thread(move || {
-        dispatch(
-            &handle,
-            &sid,
-            args,
-            Reply(Rc::new(RefCell::new(Some(send)))),
-        )
+    tokio::time::timeout(Duration::from_millis(timeout), async {
+        let mut args = args;
+        if matches!(
+            args["operation"].as_str(),
+            Some("snapshot" | "find" | "wait" | "click" | "fill" | "select" | "check" | "scroll")
+        ) {
+            await_helper(app, &sid, &mut args).await?;
+        }
+        let (send, receive) = oneshot::channel();
+        let handle = app.clone();
+        app.run_on_main_thread(move || {
+            dispatch(
+                &handle,
+                &sid,
+                args,
+                Reply(Rc::new(RefCell::new(Some(send)))),
+            )
+        })
+        .map_err(|_| "The browser main thread is unavailable.")?;
+        receive
+            .await
+            .map_err(|_| "The browser operation was cancelled.")?
     })
-    .map_err(|_| "The browser main thread is unavailable.")?;
-    tokio::time::timeout(Duration::from_millis(timeout), receive)
-        .await
-        .map_err(|_| "The browser operation timed out.")?
-        .map_err(|_| "The browser operation was cancelled.")?
+    .await
+    .map_err(|_| "The browser operation timed out.")?
+}
+
+/// A new view can answer IPC before its document-start helper exists. Wait
+/// outside the UI thread, pin the original tab, and never retry an interaction.
+/// The caller's single operation timeout also bounds this readiness wait.
+async fn await_helper(app: &AppHandle, sid: &str, args: &mut Value) -> Result<(), String> {
+    loop {
+        let (send, receive) = oneshot::channel();
+        let handle = app.clone();
+        let session = sid.to_owned();
+        let request = args.clone();
+        app.run_on_main_thread(move || {
+            let result = (|| {
+                crate::browser_commands::check_authorization(&handle, &session, &request)?;
+                let tab_id = request
+                    .get("tabId")
+                    .or_else(|| request.get("tabID"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                    .or_else(|| {
+                        SESSIONS.with(|sessions| {
+                            sessions
+                                .borrow()
+                                .get(&session)
+                                .and_then(|session| session.active.clone())
+                        })
+                    })
+                    .ok_or("Open a browser tab first.")?;
+                let ready = with_tab(&session, &tab_id, |tab| {
+                    // The document-start message follows helper installation.
+                    // Images and frames may still be loading; they must not hold
+                    // usable DOM interactions behind the complete-load event.
+                    tab.document.is_some()
+                })
+                .ok_or("The browser tab is closed or belongs to another session.")?;
+                Ok::<_, String>((tab_id, ready))
+            })();
+            let _ = send.send(result);
+        })
+        .map_err(|_| "The browser main thread is unavailable.")?;
+        let (tab_id, ready) = receive
+            .await
+            .map_err(|_| "The browser readiness check was cancelled.")??;
+        args["tabId"] = json!(tab_id);
+        if ready {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
@@ -637,7 +696,12 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                     .and_then(navigation_url)
                     .and_then(|u| {
                         cancel_pending(&mut tab.pending);
-                        tab.view.load_url(&u).map_err(|e| e.to_string())
+                        tab.view.load_url(&u).map_err(|e| e.to_string())?;
+                        tab.document = None;
+                        tab.frames.clear();
+                        tab.popup_link = None;
+                        tab.loading = true;
+                        Ok(())
                     })
                     .map(|_| json!({"navigating":true}));
                 let _ = reply.send(result);
@@ -648,17 +712,20 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                 }
                 unsafe {
                     let v = tab.view.webview();
-                    match operation {
-                        "back" => {
-                            v.goBack();
+                    let navigation = match operation {
+                        "back" => v.goBack(),
+                        "forward" => v.goForward(),
+                        "reload" => v.reload(),
+                        _ => {
+                            v.stopLoading();
+                            None
                         }
-                        "forward" => {
-                            v.goForward();
-                        }
-                        "reload" => {
-                            v.reload();
-                        }
-                        _ => v.stopLoading(),
+                    };
+                    if navigation.is_some() {
+                        tab.document = None;
+                        tab.frames.clear();
+                        tab.popup_link = None;
+                        tab.loading = true;
                     }
                 }
                 let _ = reply.send(Ok(json!({"accepted":true})));

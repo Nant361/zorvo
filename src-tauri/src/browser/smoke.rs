@@ -289,6 +289,24 @@ pub async fn smoke(app: &AppHandle) -> Result<Value, String> {
             steps.push(chrome_smoke(app, &a, &url).await?);
             return Ok::<_,String>(());
         }
+        let delayed = parsed.join("/delayed").map_err(|_| "Invalid delayed fixture URL.")?;
+        let opened=execute(app,a.clone(),json!({"operation":"tabs.open","url":delayed.as_str()})).await?;
+        let delayed_tab=opened["tabId"].as_str().ok_or("No delayed native tab.")?.to_owned();
+        execute(app,a.clone(),json!({"operation":"wait","tabId":delayed_tab,"selector":"#delayed-ready"})).await?;
+        execute(app,a.clone(),json!({"operation":"click","tabId":delayed_tab,"selector":"#delayed-ready"})).await?;
+        let count=execute(app,a.clone(),json!({"operation":"evaluate","tabId":delayed_tab,"expression":"document.querySelector('#delayed-ready').textContent"})).await?;
+        if count!="1" {return Err("A deferred native interaction did not execute exactly once.".into());}
+        execute(app,a.clone(),json!({"operation":"tabs.close","tabId":delayed_tab})).await?;
+        steps.push(json!({"name":"immediate wait on a delayed first document reaches the helper and clicks once","pass":true}));
+        let loading = parsed.join("/loading").map_err(|_| "Invalid loading fixture URL.")?;
+        let opened=execute(app,a.clone(),json!({"operation":"tabs.open","url":loading.as_str()})).await?;
+        let loading_tab=opened["tabId"].as_str().ok_or("No loading native tab.")?.to_owned();
+        execute(app,a.clone(),json!({"operation":"wait","tabId":loading_tab,"selector":"#loading-ready"})).await?;
+        execute(app,a.clone(),json!({"operation":"click","tabId":loading_tab,"selector":"#loading-ready"})).await?;
+        let pending=execute(app,a.clone(),json!({"operation":"evaluate","tabId":loading_tab,"expression":"({count:document.querySelector('#loading-ready').textContent,ready:document.readyState})"})).await?;
+        if pending["count"]!="1" || pending["ready"]=="complete" {return Err(format!("A pending image blocked usable DOM interactions: {pending}"));}
+        execute(app,a.clone(),json!({"operation":"tabs.close","tabId":loading_tab})).await?;
+        steps.push(json!({"name":"a stalled image does not block helper-ready DOM interactions","pass":true,"page":pending}));
         steps.push(responsive_smoke(app, &a, &parsed).await?);
         if std::env::var("ZORVO_BROWSER_SMOKE_CASE").as_deref() == Ok("responsive") {
             return Ok::<_,String>(());

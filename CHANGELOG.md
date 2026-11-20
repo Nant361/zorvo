@@ -15,6 +15,7 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 ### Fixed
 
+- **Browser tools wait for a new page.** An operation issued immediately after opening a tab waits for its page helper, instead of failing before the document is ready. The wait keeps its original tab and timeout.
 - **Private browser form values.** Snapshots omit passwords, one-time codes and card autocomplete values. Automatic popups are blocked and permitted page-created tabs stay in the background.
 - **Browser tabs survive an agent exit.** Ending or crashing an agent revokes its browser access without closing the user's pages or losing their login and unfinished forms.
 - **Browser tools on sites with a strict content policy.** Native JavaScript expressions and console reads use WebKit's page-world compiler, so a site's ban on `eval` does not block the tools. The site's policy remains unchanged.

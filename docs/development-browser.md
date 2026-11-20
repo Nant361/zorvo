@@ -40,6 +40,13 @@ completion cannot answer them twice. Guarded termination/reset and close calls
 release retained page state, with the legacy termination call as a fallback.
 Behavior on other WebKit versions still requires runtime verification.
 
+DOM operations wait for the document-start helper before dispatch. The wait
+pins the original tab, checks authorization and tab lifetime, and shares the
+operation's timeout. It runs outside the UI thread and never retries a click
+or another interaction. A delayed-response fixture verifies an immediate wait
+followed by exactly one click on the first document. A stalled-image fixture
+also verifies that helper readiness does not wait for all network loading.
+
 ## Operations and page controls
 
 The Rust catalog in `browser/catalog.json` exposes exactly these 19 operations:
