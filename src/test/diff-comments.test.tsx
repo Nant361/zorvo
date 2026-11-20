@@ -173,7 +173,7 @@ describe("Where comments are offered", () => {
       render(<App />);
     });
 
-    const chip = await screen.findByRole("button", { name: /1 lines added, 1 removed/ });
+    const chip = await screen.findByRole("button", { name: /1 lines added, 1 removed\. Open the diff/ });
     await act(async () => {
       fireEvent.click(chip);
     });
@@ -894,7 +894,7 @@ describe("The top bar's chip in the app", () => {
     await act(async () => {
       render(<App />);
     });
-    const chip = await screen.findByRole("button", { name: /1 lines added, 1 removed/ });
+    const chip = await screen.findByRole("button", { name: /1 lines added, 1 removed\. Open the diff/ });
     await act(async () => {
       fireEvent.click(chip);
     });

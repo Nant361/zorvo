@@ -143,7 +143,7 @@ async function renderApp() {
 
 async function openDiff() {
   await act(async () => {
-    fireEvent.click(await screen.findByRole("button", { name: /lines added/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /lines added.*Open the diff/ }));
   });
 }
 
@@ -464,7 +464,7 @@ describe("Adding comments to the message", () => {
     const failing = { stats: false };
     seed([alpha([commentOf()])], { failing });
     await renderApp();
-    const chip = await screen.findByRole("button", { name: /lines added/ });
+    const chip = await screen.findByRole("button", { name: /lines added.*Open the diff/ });
     failing.stats = true;
     await act(async () => {
       fireEvent.click(chip);

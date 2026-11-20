@@ -4,7 +4,6 @@ import { useLatest } from './useLatest';
 import type { BackgroundProcess } from '../lib/background-tasks';
 
 export const BACKGROUND_POLL_MS = 5000;
-export const BACKGROUND_POLL_OPEN_MS = 2000;
 
 /** `list` with each process's ports taken from `known` where it is listed. */
 function withKnownPorts(list: BackgroundProcess[], known: readonly BackgroundProcess[]): BackgroundProcess[] {
@@ -13,15 +12,15 @@ function withKnownPorts(list: BackgroundProcess[], known: readonly BackgroundPro
 }
 
 /**
- * Polls the shell processes agents started while any session is alive, faster
- * while the background tasks menu is open. A tick is skipped while a read is
+ * Polls the shell processes agents started while any session is alive, with
+ * their listening ports when `withPorts` asks for them. A tick is skipped while a read is
  * still running, so a scan slower than the interval is not superseded before
  * it answers; `reload` still starts a new read at once. A failed poll keeps
  * the previous list and is reported once, until a poll succeeds again.
  */
 export function useBackgroundProcesses(
   hasLiveSessions: boolean,
-  isMenuOpen: boolean,
+  withPorts: boolean,
   onError?: (message: string) => void,
 ): { processes: BackgroundProcess[]; readAt: number; reload: () => void } {
   const [read, setRead] = useState<{ processes: BackgroundProcess[]; readAt: number }>({ processes: [], readAt: 0 });
@@ -41,15 +40,15 @@ export function useBackgroundProcesses(
       latestReadRef.current += 1;
       const readId = latestReadRef.current;
       isReading = true;
-      // Ports are only shown in the open menu, and finding them is the slow part.
-      invoke<BackgroundProcess[]>('background_processes', { withPorts: isMenuOpen })
+      // Finding ports is the slow part, so they are read only while something shows them.
+      invoke<BackgroundProcess[]>('background_processes', { withPorts })
         .then((list) => {
           if (isCancelled || readId !== latestReadRef.current) return;
           if (!Array.isArray(list)) throw new Error('expected a list of processes');
           hasReportedFailureRef.current = false;
           const readAt = Date.now();
-          // Without ports, keep the ones last seen, so opening the menu shows them at once.
-          setRead((prev) => ({ processes: isMenuOpen ? list : withKnownPorts(list, prev.processes), readAt }));
+          // Without ports, keep the ones last seen, so they show at once when asked for again.
+          setRead((prev) => ({ processes: withPorts ? list : withKnownPorts(list, prev.processes), readAt }));
         })
         .catch((error) => {
           if (isCancelled || readId !== latestReadRef.current || hasReportedFailureRef.current) return;
@@ -64,12 +63,12 @@ export function useBackgroundProcesses(
       if (!isReading) poll();
     };
     poll();
-    const timer = setInterval(tick, isMenuOpen ? BACKGROUND_POLL_OPEN_MS : BACKGROUND_POLL_MS);
+    const timer = setInterval(tick, BACKGROUND_POLL_MS);
     return () => {
       isCancelled = true;
       clearInterval(timer);
     };
-  }, [hasLiveSessions, isMenuOpen, reloads, onErrorRef]);
+  }, [hasLiveSessions, withPorts, reloads, onErrorRef]);
 
   const reload = useCallback(() => setReloads((n) => n + 1), []);
 

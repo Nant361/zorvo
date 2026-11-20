@@ -3,7 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useArrivedKeys } from "../hooks/useArrivedKeys";
 import { MessageRow } from "./chat/MessageRow";
 import { WorkingIndicator } from "./chat/ReplyExtras";
-import { waitingToolCallIds } from "../lib/task-view";
 import { AgentStallNotice } from "./chat/AgentStallNotice";
 import { SelectionToolbar } from "./chat/SelectionToolbar";
 import type { AgentFailures } from "../lib/agent-stall";
@@ -85,12 +84,8 @@ export interface ChatCanvasProps {
   delegatedFrom?: ReactNode;
   /** A delegation's status under the messages, before the turn's own status. */
   delegationStatus?: ReactNode;
-  /** Opens a subagent's task beside the chat; without it a task row is not a button. */
-  onOpenTask?: (toolId: string) => void;
-  /** The subagent whose task tab is on screen. */
-  openTaskId?: string;
-  /** The commands the agent left running, as rows after the last message. */
-  tasksFooter?: ReactNode;
+  /** A window with no overview card (a popout) shows a subagent's steps under the reply's tools. */
+  showSubagentSteps?: boolean;
   /** Shown under the last message and the turn's status (a failed turn's card). */
   footer?: ReactNode;
   /** Puts a quote of text selected in a message into the message box; Reply is offered only when given. */
@@ -136,9 +131,7 @@ export function ChatCanvas({
   header,
   delegatedFrom,
   delegationStatus,
-  onOpenTask,
-  openTaskId,
-  tasksFooter,
+  showSubagentSteps = false,
   footer,
   onReply,
   replyBlockedReason,
@@ -217,11 +210,6 @@ export function ChatCanvas({
   // These take the message id, so every row gets the same function and an
   // unchanged row is not re-rendered when the host makes a new closure.
   const handleFork = useCallback((id: string) => onForkRef.current?.(id), [onForkRef]);
-  // The same array while the same requests wait, so a row is not drawn again on every streamed frame.
-  const waitingKey = waitingToolCallIds(messages).join("\n");
-  const waiting = useMemo(() => (waitingKey ? waitingKey.split("\n") : undefined), [waitingKey]);
-  const onOpenTaskRef = useLatest(onOpenTask);
-  const handleOpenTask = useCallback((_messageId: string, toolId: string) => onOpenTaskRef.current?.(toolId), [onOpenTaskRef]);
   const handleRewind = useCallback((id: string) => onRewindRef.current?.(id), [onRewindRef]);
   const handleChooseOption = useCallback(
     (cardId: string, optionId: string, answers?: Record<string, string>) =>
@@ -303,14 +291,11 @@ export function ChatCanvas({
           onOpenUrl={onOpenUrl}
           privateModelId={privateModelId}
           privateModel={privateModel}
-          onOpenTask={onOpenTask ? handleOpenTask : undefined}
-          openTaskId={openTaskId}
-          waitingToolCallIds={waiting}
+          showSubagentSteps={showSubagentSteps}
           appears={arrived.has(msg.id)}
           cardAppears={!arrived.has(msg.id) && arrived.has(cardKeyOf(msg) ?? "")}
         />
       ))}
-      {tasksFooter && <div className="mx-auto w-full max-w-chat">{tasksFooter}</div>}
       {delegationStatus}
       {isWorking && <WorkingIndicator agentName={shownAgentName} since={workStartedAt} />}
       {isWorking && (

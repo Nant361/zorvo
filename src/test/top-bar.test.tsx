@@ -50,8 +50,6 @@ describe("TopBar", () => {
         <TopBar
           sessionName="Fix the login"
           branch="agent/fix-the-login-flow-for-users-who-signed-up-with-email"
-          pullRequest={{ branch: "agent/x", number: 134, title: "Fix", url: "https://github.com/o/r/pull/134", state: "open", isDraft: false, checks: { passing: 0, failing: 0, pending: 0 } }}
-          onOpenPullRequest={() => {}}
         />,
       );
       const title = screen.getByText("Fix the login");
@@ -381,25 +379,17 @@ describe("TopBar", () => {
   });
 
   describe("chips", () => {
-    it("draws the Plan, background-task and diff chips 28px high, and leaves the branch chip plain", () => {
+    it("draws the Plan and diff chips 28px high, and leaves the branch chip plain", () => {
       renderTopBar({
         sessionName: "A",
         workspaceName: "w",
         branch: "main",
         plan: [{ content: "Step", status: "in_progress" }],
-        backgroundTasks: {
-          tasks: [{ id: "agent:s2", kind: "agent" as const, name: "Refactor", status: "Working" as const, startedAt: 0, sessionId: "s2" }],
-          isOpen: false,
-          onOpenChange: () => {},
-          onOpenTask: () => {},
-          onStopTask: async () => true,
-        },
         diffStats: { added: 4, removed: 1 },
         onOpenDiff: () => {},
       });
       for (const chip of [
         screen.getByRole("button", { name: /^Plan,/ }),
-        screen.getByRole("button", { name: /background task/ }),
         screen.getByRole("button", { name: /lines added/ }),
       ]) {
         expect(chip).toHaveClass("h-7", "text-ui-sm", "px-2.5", "rounded-md", "border-border");
@@ -436,21 +426,9 @@ describe("TopBar", () => {
   });
 
   describe("background tasks", () => {
-    const backgroundTasks = {
-      tasks: [{ id: "agent:s2", kind: "agent" as const, name: "Refactor auth", status: "Working" as const, startedAt: 0, sessionId: "s2" }],
-      isOpen: false,
-      onOpenChange: () => {},
-      onOpenTask: () => {},
-      onStopTask: async () => true,
-    };
-
-    it("renders the background tasks menu only when given", () => {
-      const { unmount } = renderTopBar();
+    it("has no background-task chip: a session's tasks are in its overview card", () => {
+      renderTopBar({ sessionName: "A" });
       expect(screen.queryByRole("button", { name: /background task/ })).toBeNull();
-      unmount();
-
-      renderTopBar({ backgroundTasks });
-      expect(screen.getByRole("button", { name: "1 background task" })).toBeTruthy();
     });
   });
 

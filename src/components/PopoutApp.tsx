@@ -100,6 +100,8 @@ export function PopoutApp({ sessionId }: PopoutAppProps) {
         <article className="flex-1 flex flex-col relative overflow-hidden">
           {messages.length > 0 || session?.historyElsewhere ? (
             <ChatCanvas
+              // No overview card here: a subagent's steps show in the reply.
+              showSubagentSteps
               messages={messages}
               agentName={agent?.name}
               agentProfileId={session?.profileId}

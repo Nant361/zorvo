@@ -519,10 +519,6 @@ describe("Elicitations in the app", () => {
     await askForName(sessionId);
 
     expect(within(row()).getByText(/(^|· )Waiting for you$/)).toBeDefined();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^\d+ background tasks?$/ }));
-    });
-    expect(within(screen.getByRole("list", { name: "Running tasks" })).getByText("Needs approval")).toBeDefined();
     await waitFor(() =>
       expect(notifications.sent).toContainEqual(expect.objectContaining({ body: expect.stringMatching(/needs your answer/i) })),
     );

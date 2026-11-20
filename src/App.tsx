@@ -48,6 +48,9 @@ import { useTurnsEnded } from "./hooks/useTurnsEnded";
 import { usePullRequest } from "./hooks/usePullRequest";
 import { useWorkspacePullRequests } from "./hooks/useWorkspacePullRequests";
 import { createdFilesOf } from "./lib/created-files";
+import { overviewOf } from "./lib/session-overview";
+import { useOverviewCollapse } from "./hooks/useOverviewCollapse";
+import { OverviewCard } from "./components/overview/OverviewCard";
 import { newestSessionInFolder, pullRequestOnBranch, sessionBranchOf } from "./lib/pull-request-look";
 import { currentPlan } from "./lib/plan";
 import { useRepoPullRequests } from "./hooks/useRepoPullRequests";
@@ -84,7 +87,6 @@ import { useBackgroundTasks } from "./hooks/useBackgroundTasks";
 import { useSessionTaskTabs } from "./hooks/useSessionTaskTabs";
 import type { TaskTab } from "./hooks/useTaskTabs";
 import { TasksPanel } from "./components/tasks/TasksPanel";
-import { ShellTaskRows } from "./components/chat/TaskRow";
 import { useTranscripts } from "./hooks/useTranscripts";
 import { usePrivateCreditsRefresh } from "./hooks/usePrivateCreditsRefresh";
 import { usePrivateTopupRequests } from "./hooks/usePrivateTopupRequests";
@@ -727,12 +729,12 @@ export default function App() {
     isBusy: acp.isBusy,
     busySince: acp.busySinceOf,
     needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
-    // These three are declared further down and only ever called from a click.
-    onOpenSession: (id) => handleSelectSession(id),
-    onOpenTask: (id, tab) => openTask(id, tab),
+    portsFor: activeSessionId ?? null,
+    // Declared further down and only ever called from a click.
     stopAgent: (id) => handleInterrupt(id),
     onError: reportError,
   });
+  const overviewCollapse = useOverviewCollapse();
   const taskTabs = useSessionTaskTabs({ sessionId: activeSessionId ?? null, transcripts, tasks: backgroundTasks.tasks });
   const inspectorTabs = offeredTabs({
     hasFolder: Boolean(filesFolder),
@@ -809,9 +811,10 @@ export default function App() {
     taskTabs.open(sessionId, tab);
     inspector.show("tasks");
   };
-  const openTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "subagent" ? taskTabs.selected.toolId : undefined;
-  const openShellTaskId = inspectorTab === "tasks" && taskTabs.selected?.kind === "shell" ? taskTabs.selected.taskId : undefined;
-  const sessionShellTasks = backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId);
+  const sessionShellTasks = useMemo(
+    () => backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId),
+    [backgroundTasks.tasks, activeSessionId],
+  );
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -1605,6 +1608,23 @@ export default function App() {
   const canGoBack = !activeSession ? lastViewedSessionId !== null : navigation.canGoBack;
 
   const currentMessages = transcripts[activeSessionId] ?? [];
+  // The overview card beside the chat, worked out from what the app already holds; only again when one of those changes,
+  // since a streamed reply renders App on every frame.
+  const isActiveSessionBusy = activeSession ? isSessionBusy(activeSession.id) : false;
+  const sessionOverview = useMemo(
+    () =>
+      activeSession
+        ? overviewOf({
+            messages: activeTranscript ?? [],
+            isBusy: isActiveSessionBusy,
+            shellTasks: sessionShellTasks,
+            pages: sessionArtifacts,
+            files: createdFiles,
+            pullRequest,
+          })
+        : null,
+    [activeSession, activeTranscript, isActiveSessionBusy, sessionShellTasks, sessionArtifacts, createdFiles, pullRequest],
+  );
   const sessionPlan = currentPlan(currentMessages);
   const composer = composerStateFor({
     session: activeSession,
@@ -1784,9 +1804,8 @@ export default function App() {
               }
               runAgentCount={activeRun?.sessions.length}
               isDraft={isNewSessionDraft}
-              branch={workspaceDetails?.branch ?? undefined}
-              pullRequest={pullRequest}
-              onOpenPullRequest={openPullRequest}
+              // A session's branch and pull request are in its overview card; a run's panel has no card.
+              branch={activeSession ? undefined : (workspaceDetails?.branch ?? undefined)}
               canGoBack={canGoBack}
               canGoForward={navigation.canGoForward}
               onBack={() => navigateTo(!activeSession ? lastViewedSessionId : navigation.back())}
@@ -1799,17 +1818,11 @@ export default function App() {
               diffCommentCount={unsentCommentCount}
               onOpenDiff={inspectorTabs.includes("changes") ? () => inspector.openDiff() : undefined}
               onPopout={activeSession ? () => shell.popout(activeSession.id) : undefined}
-              backgroundTasks={{
-                tasks: backgroundTasks.tasks,
-                isOpen: backgroundTasks.isMenuOpen,
-                onOpenChange: backgroundTasks.setMenuOpen,
-                onOpenTask: backgroundTasks.open,
-                onStopTask: backgroundTasks.stop,
-              }}
               plan={sessionPlan}
               planSource={activeAgent?.name}
             />
-            <div className="flex min-h-0 flex-1">
+            {/* A container, so the overview card gives way to its pill on a narrow sheet (an inspector open beside it). */}
+            <div className="@container relative flex min-h-0 flex-1">
               {/* A still frame: the drop overlay is placed against it and the update banner sits on it, so both stay on
                   screen whatever the column under them is scrolled to. */}
               <article className={`${(isDiffOpen && inspector.isDiffExpanded) || isArtifactExpanded ? "hidden" : "flex"} flex-1 flex-col relative overflow-hidden`}>
@@ -1852,18 +1865,6 @@ export default function App() {
                       agentName={activeAgent?.name}
                       agentProfileId={activeSession?.profileId}
                       onForkBranch={(messageId) => void forkSession(messageId)}
-                      onOpenTask={activeSession ? (toolId) => openTask(activeSession.id, { kind: "subagent", toolId }) : undefined}
-                      openTaskId={openTaskId}
-                      tasksFooter={
-                        activeSession && sessionShellTasks.length > 0 ? (
-                          <ShellTaskRows
-                            tasks={sessionShellTasks}
-                            openTaskId={openShellTaskId}
-                            transcripts={transcripts}
-                            onOpen={(task) => openTask(activeSession.id, { kind: "shell", taskId: task.id })}
-                          />
-                        ) : undefined
-                      }
                       onReply={(quote) => composerRef.current?.insertText(quote)}
                       onOpenUrl={openLink}
                       privateModelId={activeSession?.privateMode?.modelId}
@@ -2187,6 +2188,31 @@ export default function App() {
                   {isNewSessionDraft && <NewSessionBelow sessionList={draftSessionList.sessionList} />}
                 </div>
               </article>
+              {activeSession && sessionOverview && !activeRun && !isArtifactExpanded && !isDiffOpen && (
+                <OverviewCard
+                  // Its own folds, floating and preview belong to one session.
+                  key={activeSession.id}
+                  overview={sessionOverview}
+                  agentName={activeAgent?.name ?? "The agent"}
+                  changes={isRepository ? diffStats : null}
+                  folderName={filesFolder?.name}
+                  branch={workspaceDetails?.branch ?? undefined}
+                  filesRoot={filesFolder?.path}
+                  isCollapsed={overviewCollapse.isCollapsed(activeSession.id)}
+                  onToggleCollapsed={() => overviewCollapse.toggle(activeSession.id)}
+                  onShowTab={(tab) => inspector.show(tab)}
+                  onOpenTask={(tab) => openTask(activeSession.id, tab)}
+                  onOpenPage={(artifactId) => {
+                    inspector.viewArtifact({ artifactId, version: null });
+                    inspector.show("artifacts");
+                  }}
+                  onOpenFile={(relative) => {
+                    inspector.viewFile(relative);
+                    inspector.show("files");
+                  }}
+                  onOpenUrl={openPullRequest}
+                />
+              )}
               {isArtifactExpanded && activeSession && (
                 <section aria-label="Artifact" className="relative flex min-w-0 flex-1 flex-col">
                   <ArtifactsPanel

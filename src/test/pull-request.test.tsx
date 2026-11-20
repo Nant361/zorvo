@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, renderHook, act, waitFor, within } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { MAX_FAILED_READS, usePullRequest, type PullRequestStatus } from "../hooks/usePullRequest";
-import { PullRequestChip } from "../components/topbar/PullRequestChip";
 
 type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
 
@@ -143,44 +142,5 @@ describe("usePullRequest across a branch switch", () => {
     // The new branch's answer is still coming: the old branch's pull request is not shown beside it.
     expect(result.current).toBeNull();
     expect(spy.mock.calls.filter(([cmd]) => cmd === "session_pull_request")).toHaveLength(2);
-  });
-});
-
-describe("PullRequestChip", () => {
-  it("names the pull request, its state and its checks, and opens it", () => {
-    const onOpen = vi.fn();
-    render(<PullRequestChip pullRequest={{ ...OPEN, checks: { passing: 1, failing: 1, pending: 0 } }} onOpen={onOpen} />);
-
-    const chip = screen.getByRole("button", { name: "Pull request #12, open, checks failing" });
-    expect(chip.textContent).toContain("#12");
-    fireEvent.click(chip);
-    expect(onOpen).toHaveBeenCalledWith("https://github.com/o/r/pull/12");
-  });
-
-  it("says when checks pass, are running, or there are none, and when it is a draft or merged", () => {
-    const { rerender } = render(<PullRequestChip pullRequest={OPEN} onOpen={() => {}} />);
-    expect(screen.getByRole("button", { name: "Pull request #12, open, checks passing" })).toBeDefined();
-
-    rerender(<PullRequestChip pullRequest={{ ...OPEN, isDraft: true, checks: { passing: 1, failing: 0, pending: 1 } }} onOpen={() => {}} />);
-    expect(screen.getByRole("button", { name: "Pull request #12, draft, checks running" })).toBeDefined();
-
-    rerender(<PullRequestChip pullRequest={{ ...OPEN, state: "merged", checks: { passing: 0, failing: 0, pending: 0 } }} onOpen={() => {}} />);
-    expect(screen.getByRole("button", { name: "Pull request #12, merged" })).toBeDefined();
-  });
-
-  it("reads the number in mono, then the state as a word", () => {
-    const { rerender } = render(<PullRequestChip pullRequest={OPEN} onOpen={() => {}} />);
-    const chip = () => screen.getByRole("button", { name: /^Pull request #12/ });
-    expect(within(chip()).getByText("#12").classList.contains("font-mono")).toBe(true);
-    const word = within(chip()).getByText("Open");
-    expect(word.classList.contains("font-mono")).toBe(false);
-    expect(word.classList.contains("text-fg-secondary")).toBe(true);
-
-    rerender(<PullRequestChip pullRequest={{ ...OPEN, isDraft: true }} onOpen={() => {}} />);
-    expect(within(chip()).getByText("Draft")).toBeDefined();
-    rerender(<PullRequestChip pullRequest={{ ...OPEN, state: "merged" }} onOpen={() => {}} />);
-    expect(within(chip()).getByText("Merged")).toBeDefined();
-    rerender(<PullRequestChip pullRequest={{ ...OPEN, state: "closed" }} onOpen={() => {}} />);
-    expect(within(chip()).getByText("Closed")).toBeDefined();
   });
 });

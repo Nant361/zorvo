@@ -121,7 +121,10 @@ describe("Window chrome wiring", () => {
 
     expect(header().getByText("Beta work")).toBeDefined();
     expect(header().getByText("zorvo")).toBeDefined();
-    expect(await header().findByLabelText("Branch main")).toBeDefined();
+    // The branch is in the session's overview card now, not the top bar.
+    const environment = within(screen.getByRole("region", { name: "Session overview" })).getByRole("region", { name: "Environment" });
+    expect(await within(environment).findByText("main")).toBeDefined();
+    expect(header().queryByLabelText("Branch main")).toBeNull();
     // Open in Finder opens the same folder.
     const spy = vi.spyOn(tauriInternals(), "invoke");
     await click(header().getByRole("button", { name: "More options" }));
@@ -332,7 +335,7 @@ describe("Window chrome wiring", () => {
     expect(spy.mock.calls.some(([cmd]) => cmd === "session_changes")).toBe(false);
   });
 
-  it("shows the pull request for the session's branch and opens it", async () => {
+  it("shows the pull request for the session's branch in the overview card and opens it", async () => {
     seedSessions();
     const spy = vi.spyOn(tauriInternals(), "invoke").mockImplementation((cmd, args) =>
       cmd === "session_pull_request"
@@ -349,7 +352,8 @@ describe("Window chrome wiring", () => {
     );
     await renderApp();
 
-    const chip = await header().findByRole("button", { name: "Pull request #7, open, checks passing" });
+    const card = within(screen.getByRole("region", { name: "Session overview" }));
+    const chip = await card.findByRole("button", { name: /^Open pull request 7 in your browser/ });
     expect(spy).toHaveBeenCalledWith(
       "session_pull_request",
       { path: "/Users/test/developer/zorvo" },
