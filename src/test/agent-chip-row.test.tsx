@@ -155,4 +155,16 @@ describe("the draft's agent chips", () => {
     expect(all).toHaveAttribute("aria-disabled", "true");
     expect(all).not.toHaveAttribute("aria-haspopup");
   });
+
+  it("keeps a signed-out Qwen Code picked and its private models on offer while Private holds it", () => {
+    const reason = "Private runs Qwen Code alone. Turn Private off to pick another agent.";
+    renderRow(["qwen-code"], {
+      lockedTo: { agentId: "qwen-code", reason },
+      modelOf: () => <button type="button">Private model: Qwen 3.8 27B</button>,
+    });
+    const qwen = chip("Qwen Code");
+    expect(qwen).toHaveAttribute("aria-pressed", "true");
+    expect(within(qwen).queryByText("Sign in")).toBeNull();
+    expect(chip("Private model: Qwen 3.8 27B").closest('[data-agent-group="qwen-code"]')).not.toBeNull();
+  });
 });

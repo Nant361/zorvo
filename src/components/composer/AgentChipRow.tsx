@@ -50,14 +50,18 @@ export function AgentChipRow({
 
   return (
     <div role="group" aria-label="Agents for this task" data-agent-chips="" className="flex flex-wrap items-center gap-1">
-      {chips.map((option) => {
+      {chips.map((listed) => {
+        // A private launch skips the agent's own sign-in: while Private holds this agent, a sign-in blocks nothing.
+        const isPrivateAgent = lockedTo?.agentId === listed.value;
+        const option = isPrivateAgent && listed.blockedBy === "sign-in" ? { ...listed, blockedBy: undefined } : listed;
         const isChosen = selected.includes(option.value);
         const isBlocked = option.blockedBy !== undefined;
-        const isLocked = lockedTo !== undefined && option.value !== lockedTo.agentId;
+        const isLocked = lockedTo !== undefined && !isPrivateAgent;
         const picksAlone = isBlocked || !canTick || (isOnlyBlocked && !isChosen);
         const blocked = blockedWord(option);
         const label = option.blockedBy === "install" ? `${option.name}, install first` : `${option.name}, sign in first`;
-        const model = isChosen && !isBlocked ? modelOf?.(option.value) : undefined;
+        // The private models stay on offer whatever the agent needs: they show what the session would run on.
+        const model = isChosen && (!isBlocked || isPrivateAgent) ? modelOf?.(option.value) : undefined;
         const chip = (
           <button
             key={option.value}
