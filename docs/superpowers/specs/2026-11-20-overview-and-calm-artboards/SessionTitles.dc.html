@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zorvo · Session titles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.z{--ground:#0a0a0b;--sheet:#111113;--s2:#18181b;--s3:#1f1f23;--hover:#27272a;--chip:rgba(255,255,255,.06);--line:#27272a;--strong:#71717a;--fg:#fafafa;--fg2:#d4d4d8;--muted:#a1a1aa;--subtle:#8b8b94;--run:#34d399;--att:#fbbf24;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+.z.light{--ground:#f4f4f5;--sheet:#fafafa;--s2:#ffffff;--s3:#ffffff;--hover:#e4e4e7;--chip:rgba(9,9,11,.05);--line:#e4e4e7;--strong:#808088;--fg:#09090b;--fg2:#27272a;--muted:#52525b;--subtle:#67676f;--run:#047353;--att:#a34b08}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.lab{margin:0 0 12px;font-size:12px;line-height:18px;color:var(--muted)}
+.lab b{color:var(--fg);font-weight:600}
+ol{margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:8px;color:var(--fg2);font-size:13px;line-height:20px}
+ol li span{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:12px;line-height:18px;margin-top:20px}
+th{text-align:left;font-weight:500;color:var(--muted);padding:0 12px 8px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--fg2)}
+td.from{color:var(--muted);word-break:break-all}
+td.to{color:var(--fg);font-weight:500}
+.tile{width:22px;height:22px;flex:none;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--chip);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg2)}
+.row{display:flex;align-items:flex-start;gap:10px;padding:7px 8px;border-radius:8px}
+.rt{flex:1;min-width:0;display:flex;flex-direction:column}
+.t1{color:var(--fg2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.t2{color:var(--subtle);font-size:11px;line-height:16px}
+.tm{flex:none;color:var(--subtle);font-size:11px;line-height:18px}
+.box{display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:10px;background:var(--ground)}
+.sub{margin:0 0 6px;color:var(--muted);font-size:11px;font-weight:500}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="width: 1180px; height: 720px; box-sizing: border-box; display: flex; gap: 48px; padding: 32px; background: var(--ground); color: var(--fg); font-size: 13px; line-height: 18px;">
+
+  <div style="flex: 1; min-width: 0;">
+    <p class="lab"><b>Judul sesi.</b> Urutan yang dipakai, yang pertama ada yang menang. Judul tetap satu baris di sidebar dan top bar.</p>
+    <ol>
+      <li>Nama yang kamu berikan sendiri lewat Rename. <span>Tidak pernah ditimpa.</span></li>
+      <li>Judul yang dikirim agent, kalau agent mengirimnya. <span>Datang setelah giliran pertama.</span></li>
+      <li>Baris pertama pesan pertamamu, dirapikan: link GitHub menjadi <span class="mono">owner/repo</span>, link lain menjadi nama situsnya, path panjang menjadi dua bagian terakhirnya, lalu dipotong di batas kata sekitar 60 karakter.</li>
+      <li>Pesan yang hanya berisi perintah, seperti <span class="mono">/init</span>, memakai nama agent dan foldernya sampai agent mengirim judul.</li>
+    </ol>
+    <table>
+      <thead><tr><th style="width: 52%;">Pesan pertama</th><th>Judul</th></tr></thead>
+      <tbody>
+        <tr><td class="from mono">apakah plugin https://github.com/affaan-m/ECC sudah terpasang di Qwen Code?</td><td class="to">apakah plugin affaan-m/ECC sudah terpasang di Qwen Code?</td></tr>
+        <tr><td class="from mono">Read the file "/Users/mac/Library/Application Support/xyz.zorvo.desktop/state.json" and tell me why it is so big</td><td class="to">Read the file xyz.zorvo.desktop/state.json and tell me why…</td></tr>
+        <tr><td class="from mono">cek https://docs.near.ai/cloud/verification lalu bandingkan dengan verify.rs</td><td class="to">cek docs.near.ai lalu bandingkan dengan verify.rs</td></tr>
+        <tr><td class="from mono">/init</td><td class="to">Qwen Code in antigravity-bridge</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="width: 300px; flex: none; display: flex; flex-direction: column; gap: 20px;">
+    <div>
+      <p class="sub">Sidebar sekarang</p>
+      <div class="box">
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">apakah plugin https://github.c...</span><span class="t2">Qwen Code · Working</span></span></div>
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">Read the file "/Users/mac/Libr...</span><span class="t2">Qwen Code</span></span><span class="tm">1 h ago</span></div>
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">/init</span><span class="t2">Qwen Code</span></span><span class="tm">Yesterday</span></div>
+      </div>
+    </div>
+    <div>
+      <p class="sub">Sidebar dengan aturan ini</p>
+      <div class="box">
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">apakah plugin affaan-m/ECC sudah…</span><span class="t2">Qwen Code · Working</span></span></div>
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">Read the file xyz.zorvo.desktop/…</span><span class="t2">Qwen Code</span></span><span class="tm">1 h ago</span></div>
+        <div class="row"><span class="tile" aria-hidden="true">Q</span><span class="rt"><span class="t1">Qwen Code in antigravity-bridge</span><span class="t2">Qwen Code</span></span><span class="tm">Yesterday</span></div>
+      </div>
+    </div>
+    <p style="margin: 0; color: var(--subtle); font-size: 12px; line-height: 18px;">Pesan aslinya tidak diubah. Hanya judul yang dirapikan, dan hover di judul tetap menampilkan baris aslinya.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1180,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = (this.props.theme ?? 'dark') === 'light';
+    return { themeClass: light ? 'z light' : 'z' };
+  }
+}
+</script>
+</body>
+</html>
