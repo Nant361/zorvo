@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
 import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
-import { assessReport as assessCurrentReport } from "./report.mjs";
+import { assessReport as assessCurrentReport, assertRequestedRun } from "./report.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const run = promisify(execFile);
@@ -186,9 +186,7 @@ async function main() {
       if (child.stdout) process.stdout.write(child.stdout);
       if (child.stderr) process.stderr.write(child.stderr);
       const report = JSON.parse(await readFile(resultPath, "utf8"));
-      if (report.longHidden !== longHidden || report.launchContext?.launch !== (direct ? "direct" : "launchservices")) {
-        throw new Error("Snapshot at source commit " + manifest.sourceCommit + " did not report the requested launch/hidden mode. Prepare a current snapshot.");
-      }
+      assertRequestedRun(report, { longHidden, direct, sourceCommit: manifest.sourceCommit });
       report.assessment = assessReport(report, manifest.mode);
       const currentAssessment = assessCurrentReport(report, manifest.mode);
       if (JSON.stringify(currentAssessment) !== JSON.stringify(report.assessment)) throw new Error("The current validator disagrees with snapshot " + manifest.sourceCommit);

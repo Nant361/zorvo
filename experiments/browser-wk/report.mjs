@@ -56,6 +56,12 @@ export function locationDenialPass(evidence) {
     evidence.callbacks === (evidence.publicDelegateAvailable ? 1 : 0);
 }
 
+export function assertRequestedRun(report, { longHidden, direct, sourceCommit }) {
+  if (report.longHidden !== longHidden || report.launchContext?.launch !== (direct ? "direct" : "launchservices")) {
+    throw new Error("Snapshot at source commit " + sourceCommit + " did not report the requested launch/hidden mode. Prepare a current snapshot.");
+  }
+}
+
 export function assessReport(report, mode) {
   const version = report?.schemaVersion ?? 1;
   const required = requiredChecks(mode, version, report?.longHidden === true);

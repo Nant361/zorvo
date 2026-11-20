@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
-import { assessReport, hiddenInteractionPass, locationDenialPass, requiredChecks } from "./report.mjs";
+import { assessReport, assertRequestedRun, hiddenInteractionPass, locationDenialPass, requiredChecks } from "./report.mjs";
 
 const shared = [
   "cookies per session", "no cookie overwrite across sessions", "isolated content world",
@@ -24,6 +24,24 @@ test("a complete report assesses only the named standalone observations", () => 
     scope: "Standalone Zorvo-configuration observations for engine spikes 1, 2, 3 and 7",
     status: "pass",
   });
+});
+
+test("an old or mismatched snapshot cannot satisfy a requested launch and long run", () => {
+  const requested={longHidden:true,direct:false,sourceCommit:"f09ca7a3"};
+  for (const report of [{schemaVersion:1},{longHidden:false,launchContext:{launch:"launchservices"}},{longHidden:true,launchContext:{launch:"direct"}}]) {
+    assert.throws(()=>assertRequestedRun(report,requested),/f09ca7a3/);
+  }
+  assert.doesNotThrow(()=>assertRequestedRun({longHidden:true,launchContext:{launch:"launchservices"}},requested));
+});
+
+test("an absent direct API is unverified and names inherited authorizations", () => {
+  const input=currentReport(); input.schemaVersion=4; input.launchContext={launch:"direct"};
+  for(const row of input.results.filter(row=>row.gate.startsWith("capture APIs in "))) {
+    row.status="unverified"; row.evidence={mediaDevices:"undefined",screen:"undefined",inheritedAuthorization:{camera:"not determined",microphone:"not determined"}};
+  }
+  assert.equal(assessReport(input,"zorvo").status,"unverified");
+  input.results.find(row=>row.gate.startsWith("capture APIs in ")).evidence.screen="function";
+  assert.throws(()=>assessReport(input,"zorvo"),/unexercised inherited/);
 });
 
 test("usage-declaration variants validate all frame checks", () => {
