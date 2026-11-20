@@ -27,7 +27,9 @@ export function browserAddress(input: string): string {
   const text = input.trim();
   if (!text) throw new Error("Enter an HTTP or HTTPS address.");
   if (/^(?:\/|~\/|[a-z]:[\\/])/i.test(text)) throw new Error("Use the Files tab to open a local path.");
-  if (!/\s/.test(text) && /^[a-z][a-z\d+.-]*:/i.test(text) && !/^localhost:\d/i.test(text) && !/^[\w.-]+:\d+(?:\/|$)/.test(text)) {
+  // "TODO: fix login" starts like a scheme too; an address has no white space after it.
+  const hasScheme = /^https?:\/\//i.test(text) || (/^[a-z][a-z\d+.-]*:/i.test(text) && !/\s/.test(text));
+  if (hasScheme && !/^localhost:\d/i.test(text) && !/^[\w.-]+:\d+(?:\/|$)/.test(text)) {
     const url = new URL(text);
     if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only HTTP and HTTPS pages can open here.");
     if (url.username || url.password) throw new Error("Remove credentials from the address.");

@@ -164,3 +164,14 @@ describe("native browser page helper", () => {
     expect(snapshot.controls[999].name).toBe("Button 999");
   });
 });
+
+it("leaves a password field's value out of the snapshot", async () => {
+  const { document, call } = page();
+  document.body.innerHTML = '<input id="user" value="ada"><input id="secret" type="password" value="hunter2">';
+  const snapshot = await call<{ controls: (Control & { type?: string })[] }>("snapshot");
+  const password = snapshot.controls.find(control => control.type === "password");
+  expect(password).toBeDefined();
+  expect(password).not.toHaveProperty("value");
+  expect(JSON.stringify(snapshot)).not.toContain("hunter2");
+  expect(snapshot.controls.find(control => control.value === "ada")).toBeDefined();
+});

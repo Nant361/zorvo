@@ -33,3 +33,10 @@ it("offers the wide Browser tab only for a session", () => {
   expect(offeredTabs({ hasFolder: true, isRepository: false, hasSession: false })).not.toContain("browser");
   expect(minInspectorWidth("browser")).toBe(560);
 });
+
+it("gives colon-prefixed non-address text the local search-not-configured hint", () => {
+  for (const text of ["TODO: fix login", "python: list comprehension", "error: cannot find module"]) {
+    expect(() => browserAddress(text)).toThrow("Search is not configured");
+  }
+  expect(() => browserAddress("mailto:someone@example.com")).toThrow();
+});
