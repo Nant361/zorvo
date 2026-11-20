@@ -17,13 +17,12 @@ function task(over: Partial<BackgroundTask>): BackgroundTask {
 interface SetupOptions {
   needsApproval?: (sessionId: string) => boolean;
   stopAgent?: (sessionId: string) => void | Promise<void>;
-  onOpenTask?: (sessionId: string, tab: unknown) => void;
   transcripts?: Record<string, ChatMessage[]>;
+  portsFor?: string | null;
 }
 
 function setup(sessions: readonly Session[], options: SetupOptions = {}) {
   const onError = vi.fn();
-  const onOpenSession = vi.fn();
   const stopAgent = vi.fn(options.stopAgent ?? (() => undefined));
   const hook = renderHook(
     ({ list }) =>
@@ -33,14 +32,13 @@ function setup(sessions: readonly Session[], options: SetupOptions = {}) {
         isBusy: () => false,
         busySince: () => undefined,
         needsApproval: options.needsApproval ?? (() => false),
-        onOpenSession,
-        onOpenTask: options.onOpenTask,
+        portsFor: options.portsFor,
         stopAgent,
         onError,
       }),
     { initialProps: { list: sessions } },
   );
-  return { ...hook, onError, onOpenSession, stopAgent };
+  return { ...hook, onError, stopAgent };
 }
 
 describe("useBackgroundTasks", () => {
@@ -95,57 +93,21 @@ describe("useBackgroundTasks", () => {
     expect(onError).toHaveBeenCalledWith("Could not stop Alpha: boom");
   });
 
-  it("opens the task's session", () => {
-    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
-    const { result, onOpenSession } = setup([]);
-    act(() => result.current.open(task({ sessionId: "s9" })));
-    expect(onOpenSession).toHaveBeenCalledWith("s9");
-  });
+  it("reads listening ports only while the session on screen has a shell command alive", async () => {
+    const spy = vi.spyOn(internals(), "invoke").mockResolvedValue([
+      { pid: 11, sessionId: "s1", command: "npm run dev", elapsedSecs: 30, ports: [] },
+    ]);
+    const portsAsked = () => spy.mock.calls.filter(([cmd]) => cmd === "background_processes").map(([, a]) => (a as { withPorts: boolean }).withPorts);
 
-  it("opens a subagent's task after selecting its session", () => {
-    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
-    const onOpenTask = vi.fn();
-    const transcripts = { s9: [{ id: "m", role: "agent" as const, content: "", timestamp: 1, tools: [{ id: "t1", name: "Agent", status: "running" as const, steps: [] }] }] };
-    const { result, onOpenSession } = setup([], { onOpenTask, transcripts });
+    setup([SESSION], { portsFor: "s2" });
+    await advance(0);
+    await advance(5_000);
+    expect(portsAsked().every((withPorts) => !withPorts)).toBe(true);
 
-    act(() => result.current.open(task({ id: "tool:s9:t1", kind: "subagent", sessionId: "s9" })));
-
-    expect(onOpenSession).toHaveBeenCalledWith("s9");
-    expect(onOpenTask).toHaveBeenCalledWith("s9", { kind: "subagent", toolId: "t1" });
-    expect(onOpenSession.mock.invocationCallOrder[0]).toBeLessThan(onOpenTask.mock.invocationCallOrder[0]);
-  });
-
-  it("only selects the session for a subagent whose steps the agent does not mark", () => {
-    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
-    const onOpenTask = vi.fn();
-    const transcripts = { s9: [{ id: "m", role: "agent" as const, content: "", timestamp: 1, tools: [{ id: "t1", name: "Task", status: "running" as const }] }] };
-    const { result, onOpenSession } = setup([], { onOpenTask, transcripts });
-
-    act(() => result.current.open(task({ id: "tool:s9:t1", kind: "subagent", sessionId: "s9" })));
-
-    expect(onOpenSession).toHaveBeenCalledWith("s9");
-    expect(onOpenTask).not.toHaveBeenCalled();
-  });
-
-  it("opens a shell command's task", () => {
-    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
-    const onOpenTask = vi.fn();
-    const { result } = setup([], { onOpenTask });
-
-    act(() => result.current.open(task({ id: "process:7", kind: "shell", sessionId: "s9", pid: 7 })));
-
-    expect(onOpenTask).toHaveBeenCalledWith("s9", { kind: "shell", taskId: "process:7" });
-  });
-
-  it("opens no task for a working session", () => {
-    vi.spyOn(internals(), "invoke").mockResolvedValue([]);
-    const onOpenTask = vi.fn();
-    const { result, onOpenSession } = setup([], { onOpenTask });
-
-    act(() => result.current.open(task({ id: "agent:s9", kind: "agent", sessionId: "s9" })));
-
-    expect(onOpenSession).toHaveBeenCalledWith("s9");
-    expect(onOpenTask).not.toHaveBeenCalled();
+    spy.mockClear();
+    setup([SESSION], { portsFor: "s1" });
+    await advance(0);
+    expect(portsAsked()).toContain(true);
   });
 
   it("does not poll when no session is running", async () => {

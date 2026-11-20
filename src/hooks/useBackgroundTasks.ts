@@ -2,8 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useBackgroundProcesses } from './useBackgroundProcesses';
 import { backgroundTasksOf, type BackgroundTask } from '../lib/background-tasks';
-import { findTaskTool } from '../lib/task-view';
-import type { TaskTab } from './useTaskTabs';
 import type { ChatMessage, Session } from '../types';
 
 export interface BackgroundTasksArgs {
@@ -12,23 +10,14 @@ export interface BackgroundTasksArgs {
   isBusy: (sessionId: string) => boolean;
   busySince: (sessionId: string) => number | undefined;
   needsApproval: (sessionId: string) => boolean;
-  onOpenSession: (sessionId: string) => void;
-  /** Shows a subagent's or a shell command's task beside its chat, once its session is selected. */
-  onOpenTask?: (sessionId: string, tab: TaskTab) => void;
+  /** The session on screen: while it has a shell command alive, its listening ports are read too. */
+  portsFor?: string | null;
   /**
    * Stops an agent's turn through the app's interrupt path, which also answers
    * pending permission requests and handles a starting or rewinding agent.
    */
   stopAgent: (sessionId: string) => void | Promise<void>;
   onError: (message: string) => void;
-}
-
-/** The task tab a row opens: a subagent's by its tool call, a shell command's by its row; a working session has none. */
-export function taskTabOf(task: BackgroundTask): TaskTab | undefined {
-  if (task.kind === 'shell') return { kind: 'shell', taskId: task.id };
-  const prefix = `tool:${task.sessionId}:`;
-  if (task.kind !== 'subagent' || !task.id.startsWith(prefix)) return undefined;
-  return { kind: 'subagent', toolId: task.id.slice(prefix.length) };
 }
 
 function stopCall(task: BackgroundTask, stopAgent: BackgroundTasksArgs['stopAgent']): Promise<unknown> {
@@ -42,21 +31,18 @@ function stopCall(task: BackgroundTask, stopAgent: BackgroundTasksArgs['stopAgen
   }
 }
 
-/** What is running in the background, for the TopBar menu, with Open and Stop. */
+/** What is running in the background, for the overview card and the task tabs, with Stop. */
 export interface BackgroundTasks {
   tasks: BackgroundTask[];
-  isMenuOpen: boolean;
-  setMenuOpen: (open: boolean) => void;
-  open: (task: BackgroundTask) => void;
   /** True when the backend call succeeded; false after reporting the failure through `onError`. */
   stop: (task: BackgroundTask) => Promise<boolean>;
 }
 
 export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
-  const { sessions, transcripts, isBusy, busySince, needsApproval, onOpenSession, onOpenTask, stopAgent, onError } = args;
-  const [isMenuOpen, setMenuOpen] = useState(false);
+  const { sessions, transcripts, isBusy, busySince, needsApproval, portsFor, stopAgent, onError } = args;
+  const [withPorts, setWithPorts] = useState(false);
   const hasLiveSessions = sessions.some((s) => s.status === 'running');
-  const { processes, readAt, reload } = useBackgroundProcesses(hasLiveSessions, isMenuOpen, onError);
+  const { processes, readAt, reload } = useBackgroundProcesses(hasLiveSessions, withPorts, onError);
 
   const tasks = useMemo(
     () =>
@@ -72,16 +58,9 @@ export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
     [sessions, transcripts, isBusy, busySince, needsApproval, processes, readAt],
   );
 
-  const open = useCallback(
-    (task: BackgroundTask) => {
-      onOpenSession(task.sessionId);
-      const tab = taskTabOf(task);
-      // A subagent whose agent marks no steps has nothing to show in a tab: its session is enough.
-      const canOpen = tab?.kind !== 'subagent' || findTaskTool(transcripts[task.sessionId] ?? [], tab.toolId) !== undefined;
-      if (tab && canOpen) onOpenTask?.(task.sessionId, tab);
-    },
-    [onOpenSession, onOpenTask, transcripts],
-  );
+  // The card and the task tab show a shell command's ports; finding them is slow, so only while one is on screen.
+  const hasShellOnScreen = Boolean(portsFor) && tasks.some((task) => task.kind === 'shell' && task.sessionId === portsFor);
+  if (hasShellOnScreen !== withPorts) setWithPorts(hasShellOnScreen);
 
   const stop = useCallback(
     async (task: BackgroundTask): Promise<boolean> => {
@@ -98,5 +77,5 @@ export function useBackgroundTasks(args: BackgroundTasksArgs): BackgroundTasks {
     [onError, reload, stopAgent],
   );
 
-  return { tasks, isMenuOpen, setMenuOpen, open, stop };
+  return { tasks, stop };
 }

@@ -729,9 +729,8 @@ export default function App() {
     isBusy: acp.isBusy,
     busySince: acp.busySinceOf,
     needsApproval: (id) => isAwaitingUser(transcripts[id] ?? []),
-    // These three are declared further down and only ever called from a click.
-    onOpenSession: (id) => handleSelectSession(id),
-    onOpenTask: (id, tab) => openTask(id, tab),
+    portsFor: activeSessionId ?? null,
+    // Declared further down and only ever called from a click.
     stopAgent: (id) => handleInterrupt(id),
     onError: reportError,
   });
@@ -812,7 +811,10 @@ export default function App() {
     taskTabs.open(sessionId, tab);
     inspector.show("tasks");
   };
-  const sessionShellTasks = backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId);
+  const sessionShellTasks = useMemo(
+    () => backgroundTasks.tasks.filter((task) => task.kind === "shell" && task.sessionId === activeSessionId),
+    [backgroundTasks.tasks, activeSessionId],
+  );
   const diffStats = inspector.headStats ? totalsOf(inspector.headStats) : undefined;
   // The commit this session's worktree began at: the diff can compare with it, and the chip stays for it.
   const startCommit = activeSession?.worktree?.startCommit;
@@ -1606,17 +1608,23 @@ export default function App() {
   const canGoBack = !activeSession ? lastViewedSessionId !== null : navigation.canGoBack;
 
   const currentMessages = transcripts[activeSessionId] ?? [];
-  // The overview card beside the chat: worked out on each render from what the app already holds.
-  const sessionOverview = activeSession
-    ? overviewOf({
-        messages: currentMessages,
-        isBusy: isSessionBusy(activeSession.id),
-        shellTasks: sessionShellTasks,
-        pages: sessionArtifacts,
-        files: createdFiles,
-        pullRequest,
-      })
-    : null;
+  // The overview card beside the chat, worked out from what the app already holds; only again when one of those changes,
+  // since a streamed reply renders App on every frame.
+  const isActiveSessionBusy = activeSession ? isSessionBusy(activeSession.id) : false;
+  const sessionOverview = useMemo(
+    () =>
+      activeSession
+        ? overviewOf({
+            messages: activeTranscript ?? [],
+            isBusy: isActiveSessionBusy,
+            shellTasks: sessionShellTasks,
+            pages: sessionArtifacts,
+            files: createdFiles,
+            pullRequest,
+          })
+        : null,
+    [activeSession, activeTranscript, isActiveSessionBusy, sessionShellTasks, sessionArtifacts, createdFiles, pullRequest],
+  );
   const sessionPlan = currentPlan(currentMessages);
   const composer = composerStateFor({
     session: activeSession,
@@ -2182,9 +2190,11 @@ export default function App() {
               </article>
               {activeSession && sessionOverview && !activeRun && !isArtifactExpanded && !isDiffOpen && (
                 <OverviewCard
+                  // Its own folds, floating and preview belong to one session.
+                  key={activeSession.id}
                   overview={sessionOverview}
                   agentName={activeAgent?.name ?? "The agent"}
-                  changes={isRepository ? (diffStats ?? { added: 0, removed: 0 }) : null}
+                  changes={isRepository ? diffStats : null}
                   folderName={filesFolder?.name}
                   branch={workspaceDetails?.branch ?? undefined}
                   filesRoot={filesFolder?.path}

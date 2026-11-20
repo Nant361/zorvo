@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { OverviewCard, type OverviewCardProps } from "../components/overview/OverviewCard";
@@ -147,5 +148,38 @@ describe("OverviewCard", () => {
     const { card, onToggleCollapsed } = show();
     fireEvent.click(within(card).getByRole("button", { name: "Collapse session overview" }));
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the focus to the pill when the card folds, and back to the collapse button when it opens", () => {
+    function Folding() {
+      const [isCollapsed, setIsCollapsed] = useState(false);
+      return (
+        <OverviewCard
+          overview={empty}
+          agentName="Claude Code"
+          changes={{ added: 1, removed: 0 }}
+          isCollapsed={isCollapsed}
+          onToggleCollapsed={() => setIsCollapsed((value) => !value)}
+          onShowTab={vi.fn()}
+          onOpenTask={vi.fn()}
+          onOpenPage={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenUrl={vi.fn()}
+        />
+      );
+    }
+    render(<Folding />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse session overview" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Expand session overview/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Expand session overview/ }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Collapse session overview" }));
+  });
+
+  it("says nothing of the changes while they are read", () => {
+    const { card } = show({}, { changes: undefined });
+    const row = within(section(card, "Environment")).getByRole("button", { name: /Changes/ });
+    expect(row.textContent).toBe("Changes");
   });
 });

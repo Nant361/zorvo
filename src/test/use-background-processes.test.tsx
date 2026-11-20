@@ -26,15 +26,15 @@ describe("useBackgroundProcesses", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("asks for listening ports only while the menu is open", async () => {
+  it("asks for listening ports only while they are wanted", async () => {
     const spy = stub(() => Promise.resolve([PROC]));
-    const { rerender } = renderHook(({ isOpen }) => useBackgroundProcesses(true, isOpen), {
-      initialProps: { isOpen: false },
+    const { rerender } = renderHook(({ withPorts }) => useBackgroundProcesses(true, withPorts), {
+      initialProps: { withPorts: false },
     });
     await advance(0);
     expect(spy).toHaveBeenLastCalledWith("background_processes", { withPorts: false }, undefined);
 
-    rerender({ isOpen: true });
+    rerender({ withPorts: true });
     await advance(0);
     expect(spy).toHaveBeenLastCalledWith("background_processes", { withPorts: true }, undefined);
   });
@@ -44,13 +44,13 @@ describe("useBackgroundProcesses", () => {
     vi.spyOn(internals(), "invoke").mockImplementation((_cmd, args) =>
       Promise.resolve([(args as { withPorts: boolean }).withPorts ? withPort : PROC]),
     );
-    const { result, rerender } = renderHook(({ isOpen }) => useBackgroundProcesses(true, isOpen), {
-      initialProps: { isOpen: true },
+    const { result, rerender } = renderHook(({ withPorts }) => useBackgroundProcesses(true, withPorts), {
+      initialProps: { withPorts: true },
     });
     await advance(0);
     expect(result.current.processes[0].ports).toEqual([5173]);
 
-    rerender({ isOpen: false });
+    rerender({ withPorts: false });
     await advance(0);
 
     expect(result.current.processes[0].ports).toEqual([5173]);
@@ -65,14 +65,6 @@ describe("useBackgroundProcesses", () => {
     await advance(4_999);
     expect(spy).toHaveBeenCalledTimes(1);
     await advance(1);
-    expect(spy).toHaveBeenCalledTimes(2);
-  });
-
-  it("polls every 2s while the menu is open", async () => {
-    const spy = stub(() => Promise.resolve([]));
-    renderHook(() => useBackgroundProcesses(true, true));
-    await advance(0);
-    await advance(2_000);
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
@@ -112,14 +104,12 @@ describe("useBackgroundProcesses", () => {
     expect(onError).toHaveBeenCalledTimes(2);
   });
 
-  it("switches from 5s to 2s polling when the menu opens", async () => {
+  it("keeps polling every 5s while ports are wanted", async () => {
     const spy = stub(() => Promise.resolve([]));
-    const { rerender } = renderHook(({ open }) => useBackgroundProcesses(true, open), { initialProps: { open: false } });
-    await advance(0);
-    rerender({ open: true });
+    renderHook(() => useBackgroundProcesses(true, true));
     await advance(0);
     const before = spy.mock.calls.length;
-    await advance(2_000);
+    await advance(5_000);
     expect(spy.mock.calls.length).toBe(before + 1);
   });
 
@@ -174,9 +164,9 @@ describe("useBackgroundProcesses", () => {
     await advance(0);
     expect(onError).toHaveBeenCalledTimes(1);
     fail = false;
-    await advance(2_000);
+    await advance(5_000);
     fail = true;
-    await advance(2_000);
+    await advance(5_000);
     expect(onError).toHaveBeenCalledTimes(2);
   });
 });

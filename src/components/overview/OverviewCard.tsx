@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import {
   Check,
   ChevronDown,
@@ -32,12 +32,13 @@ import { formatRelativeTime } from "../../lib/relative-time";
 import { newestVersion } from "../../lib/artifacts";
 import { pillParts, SECTION_CAP, type Overview, type OverviewTask } from "../../lib/session-overview";
 import { ImagePreviewDialog } from "../composer/ImagePreviewDialog";
+import { IconButton } from "../ui/IconButton";
 
 export interface OverviewCardProps {
   overview: Overview;
   agentName: string;
-  /** Lines added and removed against HEAD; null outside a repository. */
-  changes: { added: number; removed: number } | null;
+  /** Lines added and removed against HEAD; null outside a repository, undefined while they are read. */
+  changes: ChangeCountsOf | null | undefined;
   folderName?: string;
   branch?: string;
   /** The folder the file viewer shows: a file must be inside it to open there. */
@@ -49,6 +50,17 @@ export interface OverviewCardProps {
   onOpenPage: (artifactId: string) => void;
   onOpenFile: (relative: string) => void;
   onOpenUrl: (url: string) => void;
+}
+
+type ChangeCountsOf = { added: number; removed: number };
+
+/** "+42 −11" in the diff's colours. */
+function ChangeCounts({ added, removed }: ChangeCountsOf) {
+  return (
+    <span className="shrink-0 font-mono text-caption">
+      <span className="text-status-running">{`+${added}`}</span> <span className="text-danger">{`−${removed}`}</span>
+    </span>
+  );
 }
 
 const ROW =
@@ -251,20 +263,52 @@ export function OverviewCard({
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   // On a sheet too narrow for the card, its pill opens it floating over the chat.
   const [isFloating, setIsFloating] = useState(false);
-  if (isCollapsed) return <OverviewPill overview={overview} changes={changes} onExpand={onToggleCollapsed} />;
+  // The control that replaces the one just pressed takes the focus, so the keyboard does not fall back to the page.
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const collapseRef = useRef<HTMLButtonElement>(null);
+  const focusNextRef = useRef<"pill" | "collapse" | null>(null);
+  useEffect(() => {
+    if (!focusNextRef.current) return;
+    (focusNextRef.current === "pill" ? pillRef : collapseRef).current?.focus();
+    focusNextRef.current = null;
+  });
+
+  if (isCollapsed) {
+    return (
+      <OverviewPill
+        ref={pillRef}
+        overview={overview}
+        changes={changes}
+        onExpand={() => {
+          // Floating only takes effect on a narrow sheet; a wide one docks the card as before.
+          setIsFloating(true);
+          focusNextRef.current = "collapse";
+          onToggleCollapsed();
+        }}
+      />
+    );
+  }
+
+  /** A floating card only closes, back to its pill; a docked one folds to the pill. */
+  const close = (card: Element | null) => {
+    const isOverChat = card !== null && getComputedStyle(card).position === "absolute";
+    setIsFloating(false);
+    focusNextRef.current = "pill";
+    if (!isOverChat) onToggleCollapsed();
+  };
+  const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape" || getComputedStyle(event.currentTarget).position !== "absolute") return;
+    event.stopPropagation();
+    close(event.currentTarget);
+  };
 
   const environment = [
-    changes && (
+    changes !== null && (
       <button key="changes" type="button" onClick={() => onShowTab("changes")} className={ROW}>
         <FileDiff aria-hidden="true" className={ICON} />
         <Label name="Changes" />
-        {changes.added === 0 && changes.removed === 0 ? (
-          <span className={META}>None yet</span>
-        ) : (
-          <span className="shrink-0 font-mono text-caption">
-            <span className="text-status-running">{`+${changes.added}`}</span> <span className="text-danger">{`−${changes.removed}`}</span>
-          </span>
-        )}
+        {/* Nothing while the counts are read, so the row never says "None yet" of a session that changed things. */}
+        {changes && (changes.added === 0 && changes.removed === 0 ? <span className={META}>None yet</span> : <ChangeCounts {...changes} />)}
         <ChevronRight aria-hidden="true" className={ICON} />
       </button>
     ),
@@ -276,7 +320,7 @@ export function OverviewCard({
         <ChevronRight aria-hidden="true" className={ICON} />
       </button>
     ),
-    branch && changes && (
+    branch && changes !== null && (
       <button key="branch" type="button" onClick={() => onShowTab("changes")} className={ROW}>
         <GitBranch aria-hidden="true" className={ICON} />
         <Label name={branch} isMono />
@@ -305,11 +349,20 @@ export function OverviewCard({
       {/* Below 900px of sheet the card gives way to its pill, which opens it over the chat. */}
       {!isFloating && (
         <span className="flex self-start @min-[900px]:hidden">
-          <OverviewPill overview={overview} changes={changes} onExpand={() => setIsFloating(true)} />
+          <OverviewPill
+            ref={pillRef}
+            overview={overview}
+            changes={changes}
+            onExpand={() => {
+              setIsFloating(true);
+              focusNextRef.current = "collapse";
+            }}
+          />
         </span>
       )}
       <section
         aria-label="Session overview"
+        onKeyDown={closeOnEscape}
         className={`max-h-[calc(100%-2rem)] w-80 shrink-0 flex-col self-start overflow-y-auto rounded-xl border border-border bg-surface-2 ${
           // Floating only while the sheet is narrow: widened again, the open card docks beside the chat.
           isFloating
@@ -321,21 +374,15 @@ export function OverviewCard({
           id="overview-environment"
           title="Environment"
           aside={
-            <button
-              type="button"
-              aria-label="Collapse session overview"
-              aria-expanded="true"
-              onClick={(event) => {
-                // A floating card only closes; a docked one folds to its pill.
-                const card = event.currentTarget.closest("section[aria-label='Session overview']");
-                const isOverChat = card !== null && getComputedStyle(card).position === "absolute";
-                setIsFloating(false);
-                if (!isOverChat) onToggleCollapsed();
-              }}
-              className="focus-ring -mt-1 mr-0.5 flex size-6 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+            <IconButton
+              ref={collapseRef}
+              label="Collapse session overview"
+              size="sm"
+              className="-mt-1 mr-0.5"
+              onClick={(event) => close(event.currentTarget.closest("section[aria-label='Session overview']"))}
             >
               <ChevronUp aria-hidden="true" className="size-3.5" />
-            </button>
+            </IconButton>
           }
         >
           {environment}
@@ -381,12 +428,18 @@ export function OverviewCard({
 }
 
 /** The folded card: what runs and what changed, in one line; a click opens the card again. */
-function OverviewPill({ overview, changes, onExpand }: { overview: Overview; changes: OverviewCardProps["changes"]; onExpand: () => void }) {
-  const parts = pillParts(overview.runningCount, changes);
+function OverviewPill({ overview, changes, onExpand, ref }: {
+  overview: Overview;
+  changes: OverviewCardProps["changes"];
+  onExpand: () => void;
+  ref?: Ref<HTMLButtonElement>;
+}) {
+  const parts = pillParts(overview.runningCount, changes ?? null);
   const hasChanges = parts.added > 0 || parts.removed > 0;
   const said = [parts.running, hasChanges ? `${parts.added} lines added, ${parts.removed} removed` : null].filter(Boolean).join(", ");
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={said ? `Expand session overview: ${said}` : "Expand session overview"}
       aria-expanded="false"
@@ -396,11 +449,7 @@ function OverviewPill({ overview, changes, onExpand }: { overview: Overview; cha
       <PanelRight aria-hidden="true" className="size-3.5 text-fg-muted" />
       {parts.running ?? (hasChanges ? null : "Overview")}
       {parts.running && hasChanges && <span aria-hidden="true" className="h-3.5 w-px bg-border" />}
-      {hasChanges && (
-        <span className="font-mono text-caption">
-          <span className="text-status-running">{`+${parts.added}`}</span> <span className="text-danger">{`−${parts.removed}`}</span>
-        </span>
-      )}
+      {hasChanges && <ChangeCounts added={parts.added} removed={parts.removed} />}
       <ChevronDown aria-hidden="true" className="size-3.5 text-fg-muted" />
     </button>
   );
