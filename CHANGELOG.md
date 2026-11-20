@@ -8,6 +8,10 @@ All notable changes to Zorvo. Versions follow [Semantic Versioning](https://semv
 
 - **A browser beside the chat.** Open links or addresses in the Browser inspector tab, with session-isolated WebKit pages, navigation, console, snapshots and agent interactions. Browser tools ask for a session grant; sending files asks separately. Chromium debug opens an isolated installed Chrome or Brave window for full network, file, trace, CPU, heap and optional Lighthouse tools.
 
+### Changed
+
+- **A compact browser toolbar.** Navigation, the address and element selection share one row. Tabs, browser choices and debugging tools live in the menu, leaving more room for the page.
+
 ## [0.14.0] - 2026-11-20
 
 ### Changed

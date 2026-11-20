@@ -31,7 +31,17 @@ runtime behavior of this integration.
 - `useBrowser*` and `components/browser/`: normal Inspector tab, retained view
   placement, overlay hiding, address normalization, tools and permission dialogs.
   Navigation from UI never starts an ACP agent or a loopback HTTP server. Address
-  search submits to Google. The main Tauri CSP remains unchanged.
+  search submits to Google. The compact toolbar shows navigation, the address,
+  element selection and its menu. Tab management, engine choices and diagnostic
+  views are available from that menu. The main Tauri CSP remains unchanged.
+
+The manual element picker uses the fixed named-world helper, with no messages on
+hover or scroll. A trusted main-frame click returns bounded, quoted page context
+to the composer without sending a message. Its native view, document token and
+arm nonce are checked before accepting the selection. Cancellation is bound to
+the requesting UI's ID, so a late cleanup cannot cancel a replacement picker.
+Navigation, leaving the page and Escape cancel selection. Iframe selection is
+not currently supported by this manual picker.
 
 ## Operation groups
 
@@ -41,8 +51,8 @@ console. WebKit reads a bounded control snapshot and DOM text; it does not claim
 to expose closed shadow roots or trusted native input. Chromium adds full request
 inspection, approved workspace files, performance traces, CPU and heap operations,
 and Lighthouse. `browser_guide` returns the operation names and parameter schemas.
-Unsupported engine operations fail explicitly. The panel's Debug, Network,
-Console, Files and Performance tabs show actual operation results.
+Unsupported engine operations fail explicitly. Debug, Network, Console, Files
+and Performance views opened from the browser menu show actual operation results.
 
 Local HTML preview uses the existing artifact store and Review/Output flow.
 The Chromium adapter also has a bounded workspace image/text/PDF preview. Downloads
@@ -53,7 +63,7 @@ remain page-controlled data.
 
 ```sh
 pnpm lint
-pnpm vitest run src/test/browser.test.ts src/test/browser-panel.test.tsx src/test/browser-agent-tools.test.tsx
+pnpm vitest run src/test/browser.test.ts src/test/browser-panel.test.tsx src/test/browser-picker.test.tsx src/test/browser-agent-tools.test.tsx
 node --test src-tauri/resources/browser-cdp/runtime.test.mjs
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

@@ -39,6 +39,13 @@ pub(super) struct Tab {
     loading: bool,
     initial_url: String,
     dialog: Option<policy::Dialog>,
+    document: Option<String>,
+    picker: Option<Picker>,
+}
+pub(super) struct Picker {
+    document: String,
+    nonce: String,
+    request_id: String,
 }
 struct Session {
     store: Retained<WKWebsiteDataStore>,
@@ -183,6 +190,10 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                         tab.loading = matches!(event, wry::PageLoadEvent::Started);
                         if tab.loading {
                             tab.frames.clear();
+                            tab.document = None;
+                            if let Some(picker) = tab.picker.take() {
+                                let _ = app.emit("browser-element-picked", json!({"sessionId":sid,"tabId":tid,"requestId":picker.request_id,"cancelled":true}));
+                            }
                             if let Some(d) = tab.dialog.take() {
                                 d.dismiss();
                             }
@@ -214,6 +225,8 @@ fn create(app: &AppHandle, sid: &str, url: &str) -> Result<String, String> {
                 loading: true,
                 initial_url: url.into(),
                 dialog: None,
+                document: None,
+                picker: None,
             },
         ));
         session.active = Some(id.clone());
@@ -353,6 +366,51 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     let found = with_tab(sid, &tid, |tab| {
         let reply = reply.take().expect("one native operation");
         match operation {
+            "__manual_pick" => {
+                let enabled = args["enabled"] == true;
+                let request_id = args["requestId"].as_str().unwrap_or_default();
+                if !enabled {
+                    if tab
+                        .picker
+                        .as_ref()
+                        .is_none_or(|picker| picker.request_id != request_id)
+                    {
+                        let _ = reply.send(Ok(json!({"active":false})));
+                        return;
+                    }
+                    tab.picker = None;
+                    helper(&tab.view.webview(), None, &tab.frames, &args, reply);
+                    return;
+                }
+                if tab.loading {
+                    let _ = reply.send(Err(
+                        "Wait for the page to finish loading before selecting an element.".into(),
+                    ));
+                    return;
+                }
+                let Some(document) = tab.document.clone() else {
+                    let _ = reply.send(Err("Reload this page before selecting an element.".into()));
+                    return;
+                };
+                let mut nonce = [0u8; 16];
+                if getrandom::fill(&mut nonce).is_err() {
+                    let _ = reply.send(Err("The browser picker could not be started.".into()));
+                    return;
+                }
+                let nonce = nonce
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                tab.picker = Some(Picker {
+                    document: document.clone(),
+                    nonce: nonce.clone(),
+                    request_id: request_id.into(),
+                });
+                let mut args = args.clone();
+                args["document"] = json!(document);
+                args["nonce"] = json!(nonce);
+                helper(&tab.view.webview(), None, &tab.frames, &args, reply);
+            }
             "navigate" => {
                 let result = args
                     .get("url")

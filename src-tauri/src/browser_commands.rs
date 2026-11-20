@@ -215,6 +215,19 @@ async fn execute(
 }
 
 #[tauri::command]
+pub async fn browser_pick(
+    app: AppHandle,
+    session_id: String,
+    tab_id: String,
+    enabled: bool,
+    color: String,
+    request_id: String,
+) -> Result<Value, String> {
+    workspace(&app, &session_id)?;
+    crate::browser::pick(&app, session_id, tab_id, enabled, color, request_id).await
+}
+
+#[tauri::command]
 pub async fn browser_execute(
     app: AppHandle,
     session_id: String,
@@ -473,6 +486,7 @@ mod tests {
         for args in [
             json!({}),
             json!({"operation":"shell"}),
+            json!({"operation":"__manual_pick","enabled":true}),
             json!({"operation":"tabs.open","engine":"cef"}),
         ] {
             assert!(validate_args(&args).is_err());

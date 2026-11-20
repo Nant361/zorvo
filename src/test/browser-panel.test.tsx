@@ -15,17 +15,38 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); listeners.clear(); });
 const empty = { sessionId: "s1", tabs: [], activeTabId: null };
 
 describe("browser panel", () => {
+  it("keeps the page toolbar compact and puts tabs, engines and tools in its menu", async () => {
+    const state = { ...empty, tabs:[{id:"t1",url:"https://example.com/",title:"Example",loading:false,canGoBack:false,canGoForward:false}], activeTabId:"t1" };
+    vi.spyOn(internals(), "invoke").mockResolvedValue(state);
+    render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Address or search" }) as HTMLInputElement).value).toBe("https://example.com/"));
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Browser engine" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Go" })).toBeNull();
+    expect(screen.queryByText("WebKit")).toBeNull();
+    expect(screen.queryByText("Console")).toBeNull();
+    expect(screen.getByRole("button", { name: "Select an element to comment on" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Browser options" }));
+    for (const name of ["Example", "WebKit", "Chromium debug", "Page", "Console", "Network", "Files", "Performance", "Debug"]) {
+      expect(screen.getByRole("menuitemradio", { name })).not.toBeNull();
+    }
+    expect(screen.getByRole("menuitem", { name: "New tab" })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Close tab" })).not.toBeNull();
+  });
   it("hides the native page when a debug panel replaces it and restores the retained box", async () => {
     const state = { sessionId:"s1", tabs:[{id:"t1",url:"https://example.com/",title:"Example",loading:false,canGoBack:false,canGoForward:false}], activeTabId:"t1" };
     const invoke=vi.spyOn(internals(),"invoke").mockResolvedValue(state);
     render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
-    await screen.findByRole("button",{name:"Example"});
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Address or search" }) as HTMLInputElement).value).toBe("https://example.com/"));
     const box=document.querySelector("[data-browser-box]");
-    fireEvent.click(screen.getByRole("tab",{name:"Console"}));
+    fireEvent.click(screen.getByRole("button",{name:"Browser options"}));
+    await waitFor(()=>expect(invoke).toHaveBeenCalledWith("browser_bounds",{sessionId:"s1",tabId:"t1",bounds:null,visible:false},undefined));
+    fireEvent.click(screen.getByRole("menuitemradio",{name:"Console"}));
     await waitFor(()=>expect(invoke).toHaveBeenCalledWith("browser_bounds",{sessionId:"s1",tabId:"t1",bounds:null,visible:false},undefined));
     expect(document.querySelector("[data-browser-box]")).toBe(box);
     expect(box?.classList.contains("hidden")).toBe(true);
-    fireEvent.click(screen.getByRole("tab",{name:"Page"}));
+    fireEvent.click(screen.getByRole("button",{name:"Back to page"}));
     expect(document.querySelector("[data-browser-box]")).toBe(box);
     expect(box?.classList.contains("hidden")).toBe(false);
   });
@@ -33,8 +54,9 @@ describe("browser panel", () => {
     const invoke = vi.spyOn(internals(), "invoke").mockResolvedValue(empty);
     render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("browser_execute", { sessionId: "s1", args: { operation: "tabs.list", engine: "webkit" } }, undefined));
-    fireEvent.change(screen.getByRole("textbox", { name: "Address or search" }), { target: { value: "google" } });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go" })); });
+    const address = screen.getByRole("textbox", { name: "Address or search" });
+    fireEvent.change(address, { target: { value: "google" } });
+    await act(async () => { fireEvent.submit(address.closest("form")!); });
     expect(invoke).toHaveBeenCalledWith("browser_execute", { sessionId: "s1", args: { operation: "tabs.open", engine: "webkit", url: "https://www.google.com/search?q=google" } }, undefined);
     expect(invoke.mock.calls.every(([command]) => command.startsWith("browser_") || command.startsWith("plugin:event"))).toBe(true);
   });
@@ -49,14 +71,29 @@ describe("browser panel", () => {
       return opened ? state : { ...empty, engine: "chromium" };
     });
     render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Browser engine" }), { target: { value: "chromium" } });
+    fireEvent.click(screen.getByRole("button", { name: "Browser options" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Chromium debug" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("browser_execute", { sessionId: "s1", args: { operation: "tabs.list", engine: "chromium" } }, undefined));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "New browser tab" })); });
-    expect((await screen.findByRole("button", { name: "Debug example" })).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Browser options" }));
+    await act(async () => { fireEvent.click(screen.getByRole("menuitem", { name: "New tab" })); });
     expect(screen.getByText("Chromium debugging uses a separate browser window.")).not.toBeNull();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Close Debug example" })); });
-    expect(screen.queryByRole("button", { name: "Debug example" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Browser options" }));
+    expect(screen.getByRole("menuitemradio", { name: "Debug example" }).getAttribute("aria-checked")).toBe("true");
+    await act(async () => { fireEvent.click(screen.getByRole("menuitem", { name: "Close tab" })); });
     expect(screen.getByText("Enter an address or search to open a page.")).not.toBeNull();
+  });
+  it("hides the native page while site information is open without replacing its box", async () => {
+    const state = { ...empty, tabs:[{id:"t1",url:"https://example.com/",title:"Example",loading:false,canGoBack:false,canGoForward:false}], activeTabId:"t1" };
+    const invoke = vi.spyOn(internals(), "invoke").mockResolvedValue(state);
+    render(<BrowserPanel sessionId="s1" onError={vi.fn()} />);
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Address or search" }) as HTMLInputElement).value).toBe("https://example.com/"));
+    const box = document.querySelector("[data-browser-box]");
+    fireEvent.click(screen.getByRole("button", { name: "Site information" }));
+    expect(screen.getByRole("dialog", { name: "Site information" })).not.toBeNull();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("browser_bounds", { sessionId: "s1", tabId: "t1", bounds: null, visible: false }, undefined));
+    fireEvent.click(screen.getByRole("button", { name: "Site information" }));
+    expect(screen.queryByRole("dialog", { name: "Site information" })).toBeNull();
+    expect(document.querySelector("[data-browser-box]")).toBe(box);
   });
   it("uses the manual file approval receipt before transferring files", async () => {
     const execute = vi.fn().mockResolvedValue({ requiresFileApproval: { url: "https://example.com/upload", paths: ["/workspace/report.txt"], approvalId: "approval-1" } });

@@ -5,7 +5,60 @@
   const reverse = new WeakMap();
   const prefix = `b${crypto.getRandomValues(new Uint32Array(2)).join('')}-`;
   let next = 0;
+  let picker = null;
   const bounded = (value, limit = 1000) => String(value ?? '').slice(0, limit);
+  const pickText = (value, limit) => Array.from(String(value ?? '')).slice(0, limit).join('');
+  const post = data => window.webkit.messageHandlers.zorvoBrowserFrame.postMessage(JSON.stringify(data));
+  function stopPicker(cancelled = false) {
+    const current = picker;
+    picker = null;
+    if (!current) return;
+    clearTimeout(current.timer);
+    current.overlay.remove();
+    if (cancelled) post({kind:'picker-cancelled', document:prefix, nonce:current.nonce});
+  }
+  function pickTarget(event) {
+    return event.composedPath().find(node => node instanceof Element && node !== picker?.overlay);
+  }
+  function selectorFor(el) {
+    const levels = [];
+    for (let node = el; node instanceof Element && levels.length < 8; node = node.parentElement) {
+      let level = node.localName;
+      if (node.id) { levels.unshift(`${level}#${CSS.escape(pickText(node.id, 128))}`); break; }
+      const siblings = node.parentElement ? [...node.parentElement.children].filter(sibling => sibling.localName === node.localName) : [];
+      if (siblings.length > 1) level += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+      levels.unshift(level);
+    }
+    return pickText(levels.join(' > '), 2048);
+  }
+  // Capture handlers are installed at document start before page-authored handlers.
+  // Hover stays inside the native page; only a trusted final click crosses the data handler.
+  window.addEventListener('pointermove', event => {
+    if (!picker || !event.isTrusted) return;
+    const el = pickTarget(event);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    Object.assign(picker.overlay.style, {left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`});
+  }, true);
+  window.addEventListener('pointerdown', event => {
+    if (!picker || !event.isTrusted) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+  }, true);
+  window.addEventListener('click', event => {
+    if (!picker || !event.isTrusted) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const el = pickTarget(event);
+    if (!el) return;
+    const nonce = picker.nonce;
+    const selected = {kind:'picker-selected',document:prefix,nonce,selector:selectorFor(el),text:pickText(el.textContent || el.getAttribute('aria-label') || el.getAttribute('title'),4096).trim(),title:pickText(document.title,512)};
+    stopPicker();
+    post(selected);
+  }, true);
+  window.addEventListener('keydown', event => {
+    if (picker && event.isTrusted && event.key === 'Escape') {
+      event.preventDefault(); event.stopImmediatePropagation(); stopPicker(true);
+    }
+  }, true);
   const name = el => bounded(el.getAttribute('aria-label') || el.labels?.[0]?.textContent || el.getAttribute('alt') || el.getAttribute('title') || el.textContent || el.getAttribute('placeholder')) .trim();
   function ref(el) {
     let id = reverse.get(el);
@@ -49,6 +102,17 @@
         const a = JSON.parse(encoded);
         let el;
         switch (a.operation) {
+          case '__manual_pick': {
+            if (!a.enabled) { stopPicker(); return result({active:false}); }
+            if (window !== window.top || a.document !== prefix || typeof a.nonce !== 'string' || !CSS.supports('color', a.color)) throw new Error('The browser selection request is stale.');
+            stopPicker();
+            const overlay = document.createElement('div');
+            overlay.setAttribute('aria-hidden','true');
+            Object.assign(overlay.style,{position:'fixed',pointerEvents:'none',zIndex:'2147483647',boxSizing:'border-box',border:`2px solid ${a.color}`});
+            document.documentElement.append(overlay);
+            picker = {nonce:a.nonce,overlay,timer:setTimeout(() => stopPicker(true),60000)};
+            return result({active:true});
+          }
           case 'snapshot': return result({engine:'WebKit', url:location.href, title:document.title, controls:controls().map(describe), text:bounded(document.body?.innerText, 30000), documentHidden:document.hidden});
           case 'find': { const term = bounded(a.text ?? a.query).toLowerCase(); return result(controls().filter(e => name(e).toLowerCase().includes(term)).map(describe)); }
           case 'wait': {
@@ -106,5 +170,5 @@
       } catch (error) { return JSON.stringify({ok:false,error:bounded(error.message,2000)}); }
     }
   })});
-  window.webkit.messageHandlers.zorvoBrowserFrame.postMessage(true);
+  post({kind:'frame',document:prefix});
 })();

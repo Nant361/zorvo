@@ -2402,7 +2402,16 @@ export default function App() {
                   onOpenUrl={openLink}
                 />
               )}
-              {inspectorTab === "browser" && activeSession && <BrowserPanel key={activeSession.id} sessionId={activeSession.id} onError={reportError} />}
+              {inspectorTab === "browser" && activeSession && <BrowserPanel
+                key={activeSession.id}
+                sessionId={activeSession.id}
+                onError={reportError}
+                onAddContext={replyBlockedReason({ isComposerHidden, isComposerDisabled, isHeldElsewhere: review.isHeldFor(activeSessionId) })
+                  ? undefined
+                  : (text) => {
+                    if (activeSessionIdRef.current === activeSession.id) composerRef.current?.insertText(text);
+                  }}
+              />}
               {inspectorTab === "terminal" && filesFolder && (
                 <TerminalDrawer
                   folderPath={filesFolder.path}

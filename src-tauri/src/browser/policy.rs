@@ -14,7 +14,8 @@ use objc2_web_kit::{
 };
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
+use wry::WebViewExtMacOS;
 static NEXT_FRAME: AtomicU64 = AtomicU64::new(1);
 static NEXT_DIALOG: AtomicU64 = AtomicU64::new(1);
 
@@ -108,12 +109,39 @@ define_class!(
     unsafe impl WKScriptMessageHandler for BrowserDelegate {
         #[unsafe(method(userContentController:didReceiveScriptMessage:))]
         fn frame(&self,_controller:&WKUserContentController,message:&WKScriptMessage){
+            // SAFETY: WebKit supplies this live message on the main-thread delegate callback.
             // Only a fixed isolated-world handler reaches here, never a page-world IPC command.
             let frame=unsafe{message.frameInfo()};
+            let body=unsafe{message.body()};
+            let Some(raw)=body.downcast_ref::<NSString>().map(|text|text.to_string()) else{return;};
+            if raw.len()>40*1024{return;}
+            let Ok(data)=serde_json::from_str::<Value>(&raw) else{return;};
+            // SAFETY: the live message retains its world for this callback.
+            // Native sender identity and the named world remain mandatory even for data messages.
+            let valid_world=unsafe{message.world().name().is_some_and(|name|name.to_string()==super::WORLD)};
+            if !valid_world{return;}
             let sid=&self.ivars().session;let tid=&self.ivars().tab;
-            super::with_tab(sid,tid,|tab|{
-                if tab.frames.len()<100 && !tab.frames.iter().any(|(_,f)|std::ptr::eq(&**f,&*frame)){tab.frames.push((format!("frame_{}",NEXT_FRAME.fetch_add(1,Ordering::Relaxed)),frame));}
-            });
+            // SAFETY: with_tab keeps the native view alive on this main-thread callback.
+            let picked=super::with_tab(sid,tid,|tab|unsafe{
+                let sender=message.webView();
+                if sender.as_ref().is_none_or(|view|!std::ptr::eq(&**view,&**tab.view.webview())){return None;}
+                if data["kind"]=="frame" {
+                    let document=data["document"].as_str().filter(|value|document_token(value))?;
+                    if frame.isMainFrame(){tab.document=Some(document.into());}
+                    if tab.frames.len()<100 && !tab.frames.iter().any(|(_,f)|std::ptr::eq(&**f,&*frame)){tab.frames.push((format!("frame_{}",NEXT_FRAME.fetch_add(1,Ordering::Relaxed)),frame));}
+                    return None;
+                }
+                if !frame.isMainFrame() || tab.loading{return None;}
+                let arm=tab.picker.as_ref()?;
+                if tab.document.as_deref()!=Some(&arm.document){return None;}
+                let mut payload=picker_message(&data,&arm.document,&arm.nonce)?;
+                let url=tab.view.webview().URL().and_then(|url|url.absoluteString()).map(|url|url.to_string())?;
+                if super::navigation_url(&url).is_err(){return None;}
+                payload["sessionId"]=json!(sid);payload["tabId"]=json!(tid);payload["requestId"]=json!(arm.request_id);payload["url"]=json!(url);
+                tab.picker=None;
+                Some(payload)
+            }).flatten();
+            if let Some(picked)=picked{let _=self.ivars().app.emit("browser-element-picked",picked);}
         }
     }
     unsafe impl WKUIDelegate for BrowserDelegate {
@@ -149,6 +177,37 @@ define_class!(
         fn location(&self,_view:&WKWebView,_origin:&WKSecurityOrigin,_frame:&WKFrameInfo,decision:&Block<dyn Fn(WKPermissionDecision)>){decision.call((WKPermissionDecision::Deny,));}
     }
 );
+
+fn document_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 80
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn picker_message(data: &Value, document: &str, nonce: &str) -> Option<Value> {
+    if data["document"] != document || data["nonce"] != nonce {
+        return None;
+    }
+    if data["kind"] == "picker-cancelled" {
+        return Some(json!({"cancelled":true}));
+    }
+    if data["kind"] != "picker-selected" {
+        return None;
+    }
+    let selector = data["selector"].as_str()?;
+    let text = data["text"].as_str()?;
+    let title = data["title"].as_str()?;
+    if selector.is_empty()
+        || selector.chars().count() > 2048
+        || text.chars().count() > 4096
+        || title.chars().count() > 512
+    {
+        return None;
+    }
+    Some(json!({"selector":selector,"text":text,"title":title}))
+}
 
 impl BrowserDelegate {
     pub fn new(
@@ -206,5 +265,43 @@ impl BrowserDelegate {
                 super::changed(&handle, &sid);
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod picker_tests {
+    use super::*;
+
+    #[test]
+    fn selection_requires_the_armed_document_and_nonce() {
+        let value = json!({"kind":"picker-selected","document":"doc-a","nonce":"arm-a","selector":"button","text":"Selected","title":"Fixture"});
+        assert!(picker_message(&value, "doc-a", "arm-a").is_some());
+        assert!(picker_message(&value, "doc-b", "arm-a").is_none());
+        assert!(picker_message(&value, "doc-a", "arm-b").is_none());
+        assert!(picker_message(
+            &json!({"kind":"picker-cancelled","document":"doc-a","nonce":"arm-a"}),
+            "doc-a",
+            "arm-a"
+        )
+        .is_some());
+        assert!(picker_message(
+            &json!({"kind":"picker-cancelled","document":"doc-b","nonce":"arm-a"}),
+            "doc-a",
+            "arm-a"
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn selected_page_data_is_bounded_and_not_an_action() {
+        let mut value = json!({"kind":"picker-selected","document":"doc","nonce":"arm","selector":"#target","text":"literal \"page text\"","title":"Fixture","operation":"shell"});
+        let normalized = picker_message(&value, "doc", "arm").unwrap();
+        assert!(normalized.get("operation").is_none());
+        value["selector"] = json!("x".repeat(2049));
+        assert!(picker_message(&value, "doc", "arm").is_none());
+        value["selector"] = json!("#target");
+        value["text"] = json!("x".repeat(4097));
+        assert!(picker_message(&value, "doc", "arm").is_none());
+        assert!(!document_token("invalid\n"));
     }
 }

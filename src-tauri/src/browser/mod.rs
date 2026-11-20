@@ -34,6 +34,64 @@ pub fn navigation_url(raw: &str) -> Result<String, String> {
     Ok(url.into())
 }
 
+/// Manual UI only: the fixed isolated helper is never an agent tool operation.
+pub async fn pick(
+    app: &AppHandle,
+    session_id: String,
+    tab_id: String,
+    enabled: bool,
+    color: String,
+    request_id: String,
+) -> Result<Value, String> {
+    if !crate::artifacts::store::is_session_id(&session_id)
+        || tab_id.is_empty()
+        || tab_id.len() > 200
+        || request_id.is_empty()
+        || request_id.len() > 128
+        || !request_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err("Invalid browser picker request.".into());
+    }
+    if enabled && !picker_color(&color) {
+        return Err("The browser selection color is unavailable.".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        native::execute(
+            app,
+            session_id,
+            serde_json::json!({"operation":"__manual_pick","tabId":tab_id,"enabled":enabled,"color":color,"requestId":request_id}),
+        )
+        .await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, session_id, tab_id, enabled, color, request_id);
+        Err("The embedded browser requires macOS.".into())
+    }
+}
+
+fn picker_color(color: &str) -> bool {
+    !color.is_empty()
+        && color.len() <= 128
+        && (color.starts_with('#')
+            || [
+                "rgb(", "rgba(", "hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(",
+                "color(",
+            ]
+            .iter()
+            .any(|prefix| color.starts_with(prefix)))
+        && color.bytes().all(|b| {
+            b.is_ascii_alphanumeric()
+                || matches!(
+                    b,
+                    b' ' | b'(' | b')' | b',' | b'.' | b'%' | b'/' | b'#' | b'-'
+                )
+        })
+}
+
 /// Runs after the caller has granted access to the session. No view is
 /// allocated before that grant; manual UI calls have their own command.
 pub async fn execute(app: &AppHandle, session_id: String, args: Value) -> Result<Value, String> {
@@ -147,6 +205,22 @@ mod tests {
             "https://host/\n",
         ] {
             assert!(navigation_url(url).is_err(), "{url}");
+        }
+    }
+
+    #[test]
+    fn picker_color_accepts_computed_tokens_without_css_or_script_injection() {
+        for color in ["#fafafa", "rgb(20, 40, 60)", "oklch(0.65 0.2 250 / 90%)"] {
+            assert!(picker_color(color));
+        }
+        for color in [
+            "",
+            "red; background: url(https://host)",
+            "var(--page-color)",
+            "red\n",
+            "\";alert(1)",
+        ] {
+            assert!(!picker_color(color));
         }
     }
 }
