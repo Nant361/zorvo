@@ -266,6 +266,17 @@ export default function App() {
     [saveNow, flushTranscripts],
   );
   const appUpdate = useAppUpdate(reportError, writePendingBeforeRestart);
+  // macOS applies a newly allowed Screen Recording permission only after Zorvo restarts.
+  const restartZorvo = useCallback(() => {
+    writePendingBeforeRestart().then(
+      () => invoke("app_restart").catch(() => reportError("Zorvo could not restart. Quit and open it again.")),
+      () => reportError("Zorvo could not save your work, so it did not restart."),
+    );
+  }, [writePendingBeforeRestart, reportError]);
+  const computerUseSetting = useMemo(
+    () => ({ onRestart: restartZorvo, onError: reportError }),
+    [restartZorvo, reportError],
+  );
   const agentUpdates = useAgentUpdates({ catalog: agentCatalog.catalog, settings: state.settings, isLoaded, updateState });
   useAutoEnabledAgents(agents, isLoaded, updateState);
   const suggestedFolders = useSuggestedFolders();
@@ -2435,6 +2446,9 @@ export default function App() {
         onShowRecoveryCode={recoveryDialog.show}
         onRestoringChange={recoveryDialog.setIsRestoring}
         onOpenUrl={openLink}
+        // Development builds only until agents get the computer-use tools (the plan's Tasks 9 to 12):
+        // a release must not ship a switch that asks macOS for permissions and then does nothing.
+        computerUse={import.meta.env.DEV ? computerUseSetting : undefined}
       />
       <RecoveryCodeLayer
         credits={privateCredits}
