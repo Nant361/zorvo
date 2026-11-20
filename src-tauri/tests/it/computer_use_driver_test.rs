@@ -350,3 +350,23 @@ fn switch_off_does_not_wait_for_a_driver_that_is_starting() {
     assert_eq!(started.join().unwrap().err(), Some(NoDriver::Off));
     assert_eq!(state.driver().err(), Some(NoDriver::Off));
 }
+
+#[test]
+fn switch_off_during_a_lookup_still_ends_the_driver() {
+    // Many lookups race the switch: whichever side wins the lock, no driver
+    // may be left running once the switch is off and the lookups are done.
+    for _ in 0..20 {
+        let state = Arc::new(computer_use(true));
+        let pid = state.driver().unwrap().pid();
+        let looking = Arc::clone(&state);
+        let lookups = thread::spawn(move || {
+            for _ in 0..200 {
+                let _ = looking.driver();
+            }
+        });
+        state.set_enabled(false);
+        lookups.join().unwrap();
+        wait_until("the driver is gone", || !is_running(pid));
+        assert_eq!(state.driver().err(), Some(NoDriver::Off));
+    }
+}

@@ -26,8 +26,9 @@ pub type DriverStarter = Box<dyn Fn() -> Result<Arc<DriverClient>, NoDriver> + S
 pub struct ComputerUse {
     data_dir: PathBuf,
     /// The saved switch, kept in memory because every call reads it.
-    enabled: AtomicBool,
-    driver: Mutex<Option<Arc<DriverClient>>>,
+    enabled: Arc<AtomicBool>,
+    /// Shared, so a switch-off that finds the lock held can finish from a thread.
+    driver: Arc<Mutex<Option<Arc<DriverClient>>>>,
     starter: DriverStarter,
     /// The user asked macOS for Screen Recording in this run of Zorvo.
     asked_screen_recording: AtomicBool,
@@ -61,8 +62,8 @@ impl ComputerUse {
     pub fn with_starter(data_dir: PathBuf, enabled: bool, starter: DriverStarter) -> Self {
         Self {
             data_dir,
-            enabled: AtomicBool::new(enabled),
-            driver: Mutex::new(None),
+            enabled: Arc::new(AtomicBool::new(enabled)),
+            driver: Arc::new(Mutex::new(None)),
             starter,
             asked_screen_recording: AtomicBool::new(false),
         }
@@ -84,12 +85,27 @@ impl ComputerUse {
             return;
         }
         // Never wait here: this runs inside every state save, and a driver
-        // that is starting holds the lock for up to its startup timeout. That
-        // start sees the switch off when it ends and kills what it started.
+        // that is starting holds the lock for up to its startup timeout.
         let running = match self.driver.try_lock() {
             Ok(mut slot) => slot.take(),
             Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner().take(),
-            Err(std::sync::TryLockError::WouldBlock) => None,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // `driver()` holds the lock and may be about to hand out a
+                // driver it checked the switch for a moment ago. Finish once
+                // it lets go, unless the switch is back on by then.
+                let slot = Arc::clone(&self.driver);
+                let enabled = Arc::clone(&self.enabled);
+                std::thread::spawn(move || {
+                    let mut slot = slot.lock().unwrap_or_else(|e| e.into_inner());
+                    if enabled.load(Ordering::Acquire) {
+                        return;
+                    }
+                    if let Some(client) = slot.take() {
+                        client.kill();
+                    }
+                });
+                None
+            }
         };
         if let Some(client) = running {
             client.kill();

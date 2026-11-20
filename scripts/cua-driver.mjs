@@ -55,6 +55,13 @@ export const pickDriverRelease = (releasesJson, nowMs, minimum = MINIMUM) => {
   return chosen ? { version: chosen.version, released: chosen.published.slice(0, 10) } : null;
 };
 
+/** The releases in `gh api --jq` output, one JSON object per line. */
+export const parseReleaseLines = (text) =>
+  text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
+
 export const archiveName = (version) => `cua-driver-rs-${version}-darwin-universal-binary.tar.gz`;
 export const archiveUrl = (version) => `${RELEASES_URL}${TAG_PREFIX}${version}/${archiveName(version)}`;
 
@@ -151,11 +158,14 @@ const runFetch = async () => {
 };
 
 const runUpdate = async () => {
-  const listed = execFileSync("gh", ["api", "repos/trycua/cua/releases?per_page=100", "--paginate"], {
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  const picked = pickDriverRelease(JSON.parse(listed), Date.now());
+  // One release per line: `--paginate` prints each page as its own JSON document on some
+  // versions of gh, and `--jq` runs per page, so the lines parse the same on all of them.
+  const listed = execFileSync(
+    "gh",
+    ["api", "repos/trycua/cua/releases?per_page=100", "--paginate", "--jq", ".[] | {tag_name, published_at, draft, prerelease}"],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  const picked = pickDriverRelease(parseReleaseLines(listed), Date.now());
   if (!picked) {
     console.error(`No cua-driver release is both ${MINIMUM} or newer and at least 7 days old yet.`);
     process.exit(1);

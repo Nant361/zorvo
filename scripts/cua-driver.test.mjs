@@ -4,7 +4,15 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MINIMUM, archiveUrl, compareVersions, fetchDriver, pickDriverRelease, sha256OfFile } from "./cua-driver.mjs";
+import {
+  MINIMUM,
+  archiveUrl,
+  compareVersions,
+  fetchDriver,
+  parseReleaseLines,
+  pickDriverRelease,
+  sha256OfFile,
+} from "./cua-driver.mjs";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-11-30T12:00:00Z");
@@ -45,6 +53,14 @@ describe("pickDriverRelease", () => {
       release("0.63.0-rc.1", 20),
     ];
     expect(pickDriverRelease(releases, NOW)?.version).toBe("0.52.13");
+  });
+});
+
+describe("parseReleaseLines", () => {
+  it("reads one release per line, across pages", () => {
+    const pages = `${JSON.stringify(release("0.52.13", 13))}\n${JSON.stringify(release("0.52.4", 14))}\n\n`;
+    expect(pickDriverRelease(parseReleaseLines(pages), NOW)?.version).toBe("0.52.13");
+    expect(parseReleaseLines("")).toEqual([]);
   });
 });
 
