@@ -337,6 +337,12 @@ export function TopBar({
               onStartRename={() => setRenamingId(titleKey)}
               onEndRename={() => setRenamingId(null)}
             />
+          ) : isDraft && folderName ? (
+            // A draft in a folder has no title of its own in its column: this is the page's heading. Without a
+            // folder, the chat's place asks for one under its own heading.
+            <h1 data-tauri-drag-region className="min-w-12 truncate text-ui font-semibold text-fg">
+              {title}
+            </h1>
           ) : (
             <span data-tauri-drag-region className="min-w-12 truncate text-ui font-semibold text-fg">
               {title ?? "Zorvo"}

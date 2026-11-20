@@ -37,9 +37,10 @@ describe("which way the composer's menus open", () => {
           onChange: () => {},
           onPick: () => {},
         }}
-        controls={{ model: control(["Opus", "Sonnet"]), permission: control(["Default", "Plan"]), effort: control(["Low", "High"]), extras: [{ ...control(["Off", "On"]), id: "fast", label: "Fast mode" }] }}
+        controls={{ model: control(["Opus", "Sonnet"]), permission: control(["Default", "Plan"]), effort: control(["Low", "High"]), extras: [{ ...control(["Off", "On"]), id: "fast", label: "Fast mode" }, { ...control(["Build", "Plan"]), id: "agent", label: "Agent" }] }}
       />,
     );
+    // The model rides on the agent's chip in a draft; the row keeps three and puts the rest under More options.
     for (const name of [/^All agents$/, /^Model:/, /^Permission mode:/, /^Effort:/]) {
       const chip = screen.getByRole("button", { name });
       fireEvent.click(chip);

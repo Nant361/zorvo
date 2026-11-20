@@ -28,6 +28,10 @@ export interface PrivateWiringDeps {
   draftAgentProvider?: string;
   paymentSource?: PaymentSource;
   activeSession: Session | undefined;
+  /** Qwen Code is in use, so the draft's Private chip can pick it. */
+  canPickPrivateAgent?: boolean;
+  /** Turning the draft's Private chip on picks Qwen Code alone. */
+  onTurnOnPrivate?: () => void;
 }
 
 /**
@@ -43,6 +47,8 @@ export function usePrivateWiring({
   draftAgentProvider,
   paymentSource,
   activeSession,
+  canPickPrivateAgent,
+  onTurnOnPrivate,
 }: PrivateWiringDeps) {
   const credits = usePrivateCredits();
   usePrivateCreditedNotice(credits.flow, isTopupShown, offerNotice);
@@ -54,6 +60,8 @@ export function usePrivateWiring({
     agentName: draftAgentName,
     agentProvider: draftAgentProvider,
     paymentSource,
+    canPickPrivateAgent,
+    onTurnOn: onTurnOnPrivate,
   });
   return {
     credits,

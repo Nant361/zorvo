@@ -1,13 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi } from "vitest";
-import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ComposerDock } from "../components/ComposerDock";
-import { NewSessionBelow, NewSessionHeading } from "../components/workspace/NewSessionView";
-import { COMPARE_NOTE } from "../lib/composer-state";
+import { NewSessionAbove, NewSessionBelow } from "../components/workspace/NewSessionView";
+import { COMPARE_NOTE, DRAFT_COMPARE_HELPER } from "../lib/composer-state";
 import type { FolderControl } from "../components/composer/FolderPicker";
 
-/** The new-session draft as the `NewSession` artboard draws it. */
+/** The new-session draft as the `CalmHome` artboard draws it. */
 const folder: FolderControl = {
   folders: [{ name: "agent-desktop", path: "/w/agent-desktop" }],
   selectedPath: "/w/agent-desktop",
@@ -17,23 +16,15 @@ const folder: FolderControl = {
 };
 
 describe("the draft's column", () => {
-  it("heads the 720px column 64px down, left-aligned, at 20/28 600, with a place for the chips beside it", () => {
-    render(<NewSessionHeading />);
-    const heading = screen.getByRole("heading", { name: "New session" });
-    expect(heading).toHaveClass("text-xl", "font-semibold", "tracking-[-0.02em]", "flex-1", "min-w-[200px]");
-    // The title's row wraps, so the chips go under it in a narrow window.
-    const row = heading.parentElement!;
-    expect(row).toHaveClass("flex", "flex-wrap", "items-center", "gap-2");
-    expect(heading.nextElementSibling).toHaveAttribute("data-draft-chips-slot");
-    // As the artboard nests it: the 24px gutter outside the 720px column, so the heading lines up with the
-    // tiles, the card and the session list, whose gutters are outside their columns too.
-    const column = row.parentElement!;
-    expect(column).toHaveClass("mx-auto", "w-full", "max-w-draft");
-    expect(column).not.toHaveClass("px-6");
-    const gutter = column.parentElement!;
-    expect(gutter).toHaveClass("px-6", "pt-16", "pb-5");
-    expect(gutter).not.toHaveClass("flex-1");
-    expect(gutter).not.toHaveClass("items-center");
+  it("has no title of its own: the room above the card matches the room under it, so the card sits in the middle", () => {
+    const { container } = render(<NewSessionAbove />);
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(container.firstElementChild).toHaveClass("flex-1", "justify-end");
+  });
+
+  it("says why nothing can start right above the card, in the card's column", () => {
+    render(<NewSessionAbove unavailableReason="Install an agent first." />);
+    expect(screen.getByText("Install an agent first.")).toHaveClass("mx-auto", "w-full", "max-w-draft");
   });
 
   it("puts the agent's sessions 32px under the composer, in the same column", () => {
@@ -57,27 +48,23 @@ describe("the draft's column", () => {
     expect(container.firstElementChild).not.toHaveClass("min-h-40");
   });
 
-  it("draws the composer's chips in the heading's slot when it is given one, and above the card when not", () => {
-    function Draft() {
-      const [slot, setSlot] = useState<HTMLDivElement | null>(null);
-      return (
-        <>
-          <NewSessionHeading chipsSlot={setSlot} />
-          <ComposerDock onSendMessage={() => {}} folder={folder} chipsTarget={slot} />
-        </>
-      );
-    }
-    const { unmount } = render(<Draft />);
-    const inHeading = screen.getByRole("button", { name: /^Branch: main/ });
-    expect(inHeading.closest("[data-draft-chips-slot]")).not.toBeNull();
-    // Its menu still opens: a click in the slot is not a click outside the composer.
-    fireEvent.click(inHeading);
-    fireEvent.mouseDown(inHeading);
-    expect(inHeading).toHaveAttribute("aria-expanded", "true");
-    unmount();
+  it("draws the folder and branch chips in the card's bottom row, after attach", () => {
+    render(<ComposerDock onSendMessage={() => {}} folder={folder} onAttach={async () => []} />);
+    const branch = screen.getByRole("button", { name: /^Branch: main/ });
+    const row = branch.closest("[data-composer-row]");
+    expect(row).not.toBeNull();
+    expect(row?.closest("[data-composer-card]")).not.toBeNull();
+    const buttons = within(row as HTMLElement).getAllByRole("button");
+    expect(buttons.indexOf(screen.getByRole("button", { name: "Add attachment" }))).toBeLessThan(buttons.indexOf(branch));
+    fireEvent.click(branch);
+    expect(branch).toHaveAttribute("aria-expanded", "true");
+  });
 
-    render(<ComposerDock onSendMessage={() => {}} folder={folder} />);
-    expect(screen.getByRole("button", { name: /^Branch: main/ }).closest("[data-draft-chips]")).toHaveClass("mb-4", "flex-wrap");
+  it("says how a compare run starts under the card, until one is picked", () => {
+    render(<ComposerDock onSendMessage={() => {}} folder={folder} helper={DRAFT_COMPARE_HELPER} />);
+    const helper = screen.getByText(DRAFT_COMPARE_HELPER);
+    expect(helper).toHaveClass("text-caption", "text-fg-subtle", "mt-2");
+    expect(helper.previousElementSibling).toHaveAttribute("data-composer-card");
   });
 });
 
@@ -89,8 +76,8 @@ describe("the draft's chips", () => {
     expect(chip.className).not.toContain("surface-1");
     expect(within(chip).getByText("main")).toHaveClass("font-mono", "text-caption");
     expect(within(chip).getByText(/new worktree/)).toHaveClass("text-fg-subtle");
-    // The chip sits in its popover's wrapper; the chips row is around that.
-    expect(chip.closest(".flex-wrap")).toHaveClass("gap-2", "mb-4");
+    // The chip sits in the card's bottom row.
+    expect(chip.closest("[data-composer-row]")).not.toBeNull();
   });
 });
 

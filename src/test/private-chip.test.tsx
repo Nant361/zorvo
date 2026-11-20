@@ -146,6 +146,13 @@ function Draft({ credits, controls = { model: MODEL_CONTROL } }: { credits: Priv
       sendLabel={draft.isOn ? "Start private session" : undefined}
       note={draft.note}
       onSendMessage={vi.fn()}
+      agents={{
+        options: [{ value: "qwen-code", label: "Qwen Code", name: "Qwen Code", signIn: "ready" }],
+        selected: ["qwen-code"],
+        canTick: false,
+        onChange: vi.fn(),
+        onPick: vi.fn(),
+      }}
     />
   );
 }
@@ -172,7 +179,7 @@ describe("the Private chip in the draft", () => {
     expect(credits.loadCatalog).not.toHaveBeenCalled();
   });
 
-  it("turning it on loads the catalog exactly once and puts the private model menu in the model chip's place", async () => {
+  it("turning it on loads the catalog exactly once and joins the private model menu to Qwen Code's chip", async () => {
     const credits = fakeCredits();
     render(<Draft credits={credits} />);
 
@@ -180,9 +187,11 @@ describe("the Private chip in the draft", () => {
 
     expect(credits.loadCatalog).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Private · TEE" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Private model: Qwen 3.8 27B" })).toBeInTheDocument();
+    const privateModel = screen.getByRole("button", { name: "Private model: Qwen 3.8 27B" });
+    expect(privateModel.closest('[data-agent-group="qwen-code"]')).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Model: Qwen Max" })).toBeNull();
-    expect(screen.getByText("1,240 credits left")).toBeInTheDocument();
+    // Under the card, beside where the prompts go.
+    expect(screen.getByText("1,240 credits left").closest("[data-private-line]")).not.toBeNull();
   });
 
   it("an on chip without credits blocks Send and points it at the reason", async () => {

@@ -96,10 +96,11 @@ describe("the agent menu", () => {
 });
 
 describe("the All agents button", () => {
-  it("is a quiet 24px button that opens the list", () => {
+  it("is a quiet 28px plus that opens the list", () => {
     renderPicker([choice("claude-acp", "Claude Code"), choice("codex-acp", "Codex")], ["claude-acp"]);
     const button = screen.getByRole("button", { name: "All agents" });
-    expect(button).toHaveClass("h-6", "rounded-md", "px-1.5", "text-ui-sm", "text-fg-muted");
+    expect(button).toHaveClass("size-7", "rounded-md", "text-fg-muted");
+    expect(button.querySelector("svg.lucide-plus")).not.toBeNull();
     expect(button).toHaveAttribute("aria-haspopup", "dialog");
     expect(button).toHaveAttribute("aria-expanded", "false");
   });

@@ -86,6 +86,26 @@ describe("privateDraftState: the chip", () => {
       canStart: true,
     });
   });
+  it("stays on offer while Qwen Code is in use, whatever is picked: turning it on picks Qwen Code", () => {
+    const off = { chip: "off", canStart: true };
+    expect(privateDraftState({ agentIds: ["claude-acp"], on: false, status: null, models: null, canPickPrivateAgent: true })).toEqual(off);
+    expect(
+      privateDraftState({ agentIds: ["qwen-code", "codex-acp"], on: false, status: status(), models: MODELS, canPickPrivateAgent: true }),
+    ).toEqual(off);
+  });
+
+  it("is still disabled with the reason when Qwen Code is not in use", () => {
+    expect(privateDraftState({ agentIds: ["claude-acp"], on: false, status: null, models: null, canPickPrivateAgent: false })).toMatchObject({
+      chip: "disabled",
+      reason: "Private mode works with Qwen Code for now. Claude Code sends your code to Anthropic.",
+    });
+  });
+
+  it("drops an on chip whose draft no longer holds Qwen Code alone, so the choice is not kept beside another agent", () => {
+    expect(
+      privateDraftState({ agentIds: ["claude-acp"], on: true, status: status(), models: MODELS, canPickPrivateAgent: true }),
+    ).toMatchObject({ chip: "disabled" });
+  });
 });
 
 describe("privateDraftState: what an on chip waits for", () => {

@@ -146,7 +146,7 @@ describe("a private draft in the app", () => {
     await turnOnPrivate();
 
     expect(privateCatalogCalls().map((call) => call.cmd).sort()).toEqual(["private_models", "private_stock"]);
-    expect(await screen.findByRole("heading", { name: "New private session" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Private · TEE" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByRole("button", { name: "Private model: Qwen 3.8 27B" })).toBeInTheDocument();
     expect(screen.getByText("1,240 credits left")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start private session" })).toBeInTheDocument();
@@ -241,9 +241,31 @@ describe("a private draft in the app", () => {
     expect(screen.queryByText(/PRIVATE_CREDITS/)).toBeNull();
   });
 
-  it("is disabled, with its reason, for another agent", async () => {
+  it("turned on from another agent, picks Qwen Code alone and holds the other agents with the reason", async () => {
     withCredits();
     fakeStore().state.settings.defaultAgentId = "claude-acp";
+    vi.spyOn(tauriInternals(), "invoke");
+    await act(async () => {
+      render(<App />);
+    });
+    const agents = () => screen.getByRole("group", { name: "Agents for this task" });
+    expect(within(agents()).getByRole("button", { name: "Claude Code" })).toHaveAttribute("aria-pressed", "true");
+    const chip = await screen.findByRole("button", { name: "Private · TEE" });
+    expect(chip).not.toHaveAttribute("aria-disabled");
+
+    await act(async () => fireEvent.click(chip));
+
+    expect(screen.getByRole("button", { name: "Private · TEE" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(agents()).getByRole("button", { name: /^Qwen Code/ })).toHaveAttribute("aria-pressed", "true");
+    const claude = within(agents()).getByRole("button", { name: "Claude Code" });
+    expect(claude).toHaveAttribute("aria-disabled", "true");
+    expect(claude).toHaveAttribute("title", "Private runs Qwen Code alone. Turn Private off to pick another agent.");
+  });
+
+  it("is disabled, with its reason, while Qwen Code is not in use", async () => {
+    withCredits();
+    fakeStore().state.settings.defaultAgentId = "claude-acp";
+    fakeStore().state.settings.enabledAgents = ["claude-acp"];
     vi.spyOn(tauriInternals(), "invoke");
     await act(async () => {
       render(<App />);

@@ -23,6 +23,8 @@ export interface FakeTauriStore {
       onboardingCompleted: boolean;
       secretGuard?: boolean;
       paymentSource?: 'credits' | 'ownKey';
+      /** The agents in use; absent means the defaults. */
+      enabledAgents?: string[];
     };
     recentFolders: unknown[];
     sessions: unknown[];

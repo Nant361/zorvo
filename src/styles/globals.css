@@ -52,7 +52,7 @@
   /* The chat's column: messages, cards, notices and the composer share it. */
   --container-chat: 720px;
   /* The new-session draft's column, and the compare run's columns side by side. */
-  --container-draft: 720px;
+  --container-draft: 780px;
   --container-compare: 1040px;
   --radius-panel: 10px;
 

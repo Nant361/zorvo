@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { loadTranscript } from "./lib/persistence";
+import { canonicalAgentId, loadTranscript } from "./lib/persistence";
+import { PRIVATE_AGENT_ID, PRIVATE_DRAFT_TEXT } from "./lib/private-draft";
 import { savedThenLive } from "./lib/agent-tools";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
@@ -31,7 +32,7 @@ import { PrivateInspector } from "./components/private/PrivateInspector";
 import { PrivateLowBalanceRow } from "./components/private/PrivateLowBalanceRow";
 import { AgentInstallPanel } from "./components/AgentInstallPanel";
 import { installPanelAgentOf } from "./lib/install-panel";
-import { NewSessionBelow, NewSessionHeading } from "./components/workspace/NewSessionView";
+import { NewSessionAbove, NewSessionBelow } from "./components/workspace/NewSessionView";
 import { ChangesPanel } from "./components/changes/ChangesPanel";
 import { DiffView } from "./components/changes/DiffView";
 import { totalsOf } from "./lib/diff-stats";
@@ -168,7 +169,7 @@ import {
 import { compareModelControls } from "./lib/compare-models";
 import { lastOfRun, runOf } from "./lib/compare-run";
 import { compareAgentOptions } from "./lib/composer-controls";
-import { COMPARE_NOTE, composerCommandsFor, composerNote, composerPlaceholder, composerStateFor } from "./lib/composer-state";
+import { COMPARE_NOTE, DRAFT_COMPARE_HELPER, composerCommandsFor, composerNote, composerPlaceholder, composerStateFor } from "./lib/composer-state";
 import {
   NO_CHOICES,
   rememberedChoice,
@@ -314,7 +315,6 @@ export default function App() {
   const [draftSignInSlotElement, setDraftSignInSlotElement] = useState<HTMLDivElement | null>(null);
   const draftBlockerSlots = useMemo(() => ({ install: setDraftInstallSlotElement, signIn: setDraftSignInSlotElement }), []);
   // The draft's folder and branch chips are the composer's, drawn beside the heading.
-  const [draftChipsSlotElement, setDraftChipsSlotElement] = useState<HTMLDivElement | null>(null);
   // An agent not installed yet is offered too: picking it shows its Install panel.
   const pickableAgents = agentsInUse;
   const defaultAgentId = resolveDraftAgentId(agentsInUse, state.settings.defaultAgentId, pickableAgents);
@@ -355,6 +355,8 @@ export default function App() {
     onSingle: setPickedAgentId,
   });
   const newSessionAgent = agents.find((a) => a.id === (compare.agentIds[0] ?? primaryAgentId));
+  // The one agent that runs privately, when it is in use: turning Private on picks it alone.
+  const privateAgentId = pickableAgents.find((agent) => canonicalAgentId(agent.id) === PRIVATE_AGENT_ID)?.id;
   const {
     credits: privateCredits,
     recoveryDialog,
@@ -370,6 +372,12 @@ export default function App() {
     draftAgentName: isNewSessionDraft ? newSessionAgent?.name : undefined,
     paymentSource: state.settings.paymentSource ?? "credits",
     activeSession,
+    canPickPrivateAgent: privateAgentId !== undefined,
+    onTurnOnPrivate: () => {
+      if (privateAgentId === undefined) return;
+      compare.reset();
+      setPickedAgentId(privateAgentId);
+    },
   });
   const topupRequests = usePrivateTopupRequests();
   const [chatTopupSession, setChatTopupSession] = useState<string | null>(null);
@@ -1957,10 +1965,8 @@ export default function App() {
                       onEndAgent={() => void acp.endAgent(activeSessionId)}
                     />
                   ) : draftWorkspace ? (
-                    // The draft's heading, then its chips and card (the composer, below), then its sessions.
-                    <NewSessionHeading
-                      chipsSlot={setDraftChipsSlotElement}
-                      isPrivate={privateDraft.isOn}
+                    // Room above the draft's card (the composer, below), as much as under it, so the card sits in the middle.
+                    <NewSessionAbove
                       unavailableReason={areAgentsLoaded && !agentsInUse.some(isAgentReady) ? noAgentNotice(agentsInUse) : undefined}
                     />
                   ) : isNewSessionDraft ? (
@@ -2139,7 +2145,7 @@ export default function App() {
                       // While the draft asks its agent what it offers, its chips show as skeletons in the row.
                       isLoadingControls={Boolean(!isActiveRunning && draftAgent && agentCheck.isProbing(draftAgent.id))}
                       aboveCardSlots={draftBlockerSlots}
-                      chipsTarget={isNewSessionDraft && draftWorkspace ? draftChipsSlotElement : null}
+                      helper={canCompare && !privateDraft.isOn ? DRAFT_COMPARE_HELPER : undefined}
                       contextUsage={isActiveRunning ? acp.info[activeSessionId]?.usage : undefined}
                       onOpenContext={() => inspector.show("context")}
                       mentions={filesFolder ? { root: filesFolder.path, loadFiles: () => shell.loadWorkspaceFiles(filesFolder.path) } : undefined}
@@ -2176,19 +2182,15 @@ export default function App() {
                                 compare.reset();
                                 setPickedAgentId(agentId);
                               },
+                              lockedTo:
+                                privateDraft.isOn && privateAgentId !== undefined
+                                  ? { agentId: privateAgentId, reason: PRIVATE_DRAFT_TEXT.agentLocked }
+                                  : undefined,
                             }
                           : undefined
                       }
                     />
                   </div>
-                  {isNewSessionDraft && privateDraft.isOn && (
-                    <div className="px-6">
-                      <p className="mx-auto w-full max-w-draft pt-1 text-ui-sm text-fg-subtle">
-                        Qwen Code sends your prompts straight to NEAR AI. Each answer comes with a signature
-                        from the secure hardware, so you can check where it ran.
-                      </p>
-                    </div>
-                  )}
                   {/* After the composer's slot, never around it: the composer keeps its place in the tree, and its text. */}
                   {isNewSessionDraft && <NewSessionBelow sessionList={draftSessionList.sessionList} />}
                 </div>

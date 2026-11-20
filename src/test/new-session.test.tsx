@@ -18,7 +18,7 @@ const openDialog = vi.fn();
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: (...args: unknown[]) => openDialog(...args) }));
 
 import App from "../App";
-import { NewSessionBelow, NewSessionHeading } from "../components/workspace/NewSessionView";
+import { NewSessionAbove, NewSessionBelow } from "../components/workspace/NewSessionView";
 
 type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
 
@@ -27,14 +27,14 @@ function tauriInternals(): TauriInternals {
 }
 
 describe("The new-session heading", () => {
-  it("reads New session; the folder is on its chip", () => {
-    render(<NewSessionHeading />);
+  it("has no title of its own: the top bar's breadcrumb says New session", () => {
+    render(<NewSessionAbove />);
 
-    expect(screen.getByRole("heading", { name: "New session" })).toBeDefined();
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 
   it("says why nothing can start when no agent is ready", () => {
-    render(<NewSessionHeading unavailableReason="Install an agent first." />);
+    render(<NewSessionAbove unavailableReason="Install an agent first." />);
 
     expect(screen.getByText("Install an agent first.")).toBeDefined();
   });
@@ -184,9 +184,9 @@ describe("Starting a new session", () => {
     const prompt = screen.getByRole("textbox", { name: "Prompt" }) as HTMLTextAreaElement;
     expect(heading.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(card.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Under the draft's chips, not between the heading and them.
+    // Above the whole card, whose bottom row holds the folder chip.
     const folderChip = screen.getByRole("button", { name: /^Folder:/ });
-    expect(folderChip.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(folderChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(prompt.disabled).toBe(false);
     // As wide as the composer's card: the draft's 720px column with its 24px gutter outside it.
     const column = card.closest(".max-w-draft")!;

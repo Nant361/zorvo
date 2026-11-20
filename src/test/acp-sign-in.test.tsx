@@ -540,12 +540,12 @@ describe("signing in to an ACP agent from the app", () => {
       fireEvent.click(screen.getByRole("button", { name: "New session" }));
     });
 
-    // In the draft the panel moves under its chips, right above the card it holds back.
+    // In the draft the panel sits right above the card it holds back, whose bottom row has the folder chip.
     const region = screen.getByRole("region", { name: "Sign in to Qwen Code" });
     const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(region.closest("[data-above-card]")).not.toBeNull();
-    expect(follows(screen.getByRole("button", { name: /^Folder:/ }), region)).toBe(true);
     expect(follows(region, prompt())).toBe(true);
+    expect(follows(region, screen.getByRole("button", { name: /^Folder:/ }))).toBe(true);
 
     await signInInTerminal(spy, within(region));
 

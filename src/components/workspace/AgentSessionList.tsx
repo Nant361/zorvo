@@ -21,25 +21,20 @@ function relativeTime(updatedAt: string | undefined): string | null {
 }
 
 /**
- * One of the agent's sessions, as the canvas draws it: a plain 44px row with its title and time, and Continue
- * on the hovered or focused row. The row is the one button; Continue only says what it does.
+ * One of the agent's sessions, as the canvas draws it (`CalmHome`): a plain 36px row with its title and time, a
+ * hairline under it and no box on hover, only brighter text. The row is the one button; the heading says it continues.
  */
 function SessionRow({ listed, onImport }: { listed: ListedSession; onImport: (listed: ListedSession) => void }) {
   const time = relativeTime(listed.updatedAt);
+  const title = listed.title ?? 'Untitled session';
   return (
     <button
       type="button"
       onClick={() => onImport(listed)}
-      className="group focus-ring flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-ui text-fg-secondary transition-colors hover:bg-surface-hover hover:text-fg"
+      className="group focus-ring flex h-9 w-full items-center gap-3 rounded-sm px-1 text-left text-ui text-fg-secondary transition-colors hover:text-fg"
     >
-      <span className="min-w-0 flex-1 truncate">{listed.title ?? 'Untitled session'}</span>
-      {time && <span className="shrink-0 text-caption text-fg-subtle group-hover:text-fg-muted">{time}</span>}
-      <span
-        aria-hidden="true"
-        className="hidden h-6.5 shrink-0 items-center rounded-md border border-border-strong px-2.5 text-ui-sm text-fg group-hover:inline-flex group-focus-visible:inline-flex"
-      >
-        Continue
-      </span>
+      <span className="min-w-0 flex-1 truncate">{title}</span>
+      {time && <span className="shrink-0 text-caption text-fg-muted">{time}</span>}
     </button>
   );
 }
@@ -66,13 +61,12 @@ export function AgentSessionList({ agentName, state, importError, onLoad, onImpo
             <p className="text-ui text-fg-muted">{agentName} has no other sessions in this folder.</p>
           ) : (
             <div>
-              <div className="flex items-center gap-2 px-3 pb-1.5">
-                <span className="flex-1 text-caption font-medium text-fg-muted">Continue a session from {agentName}</span>
-                <span className="text-caption text-fg-subtle">{state.sessions.length} in this folder</span>
-              </div>
-              <ul className="flex flex-col gap-1">
+              <h3 className="px-1 pb-1.5 text-caption font-medium text-fg-muted">
+                Or continue one of {agentName}'s sessions in this folder
+              </h3>
+              <ul className="flex flex-col">
                 {state.sessions.map((listed) => (
-                  <li key={listed.acpSessionId}>
+                  <li key={listed.acpSessionId} className="border-b border-border last:border-b-0">
                     <SessionRow listed={listed} onImport={onImport} />
                   </li>
                 ))}
