@@ -1,41 +1,22 @@
-import type { ReactNode, Ref } from "react";
-
-export interface NewSessionHeadingProps {
-  /** The draft is private: the title says so. */
-  isPrivate?: boolean;
-  /** Why no session can start in the folder (no agent is ready). */
-  unavailableReason?: string;
-  /** Where the composer draws the draft's folder and branch chips, beside the title. */
-  chipsSlot?: Ref<HTMLDivElement>;
-}
+import type { ReactNode } from "react";
 
 /**
- * The top of the draft's 720px column, 64px down, as the canvas draws it: the title with the folder and branch
- * chips beside it (they wrap under it in a narrow window), and a line only when something stops the session
- * from starting. It is not centred: content that arrives below (the agent's sessions, a sign-in panel) would
- * make it jump.
+ * Above the draft's card: the room that, matched by the room under it (`NewSessionBelow`), puts the card in the
+ * middle of the column. There is no title of its own: the top bar's breadcrumb says New session. A line shows only
+ * when something stops a session from starting, right above the card.
  */
-export function NewSessionHeading({ isPrivate = false, unavailableReason, chipsSlot }: NewSessionHeadingProps) {
+export function NewSessionAbove({ unavailableReason }: { unavailableReason?: string }) {
   return (
-    // The gutter outside the column, as the composer's and the session list's are, so all of them line up.
-    <div className="px-6 pt-16 pb-5">
-      <div className="mx-auto w-full max-w-draft">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="min-w-[200px] flex-1 break-words text-xl font-semibold tracking-[-0.02em] text-fg">
-            {isPrivate ? "New private session" : "New session"}
-          </h1>
-          <div ref={chipsSlot} data-draft-chips-slot="" className="flex flex-wrap items-center gap-2 empty:hidden" />
-        </div>
-        {unavailableReason && <p className="mt-1 text-ui text-fg-muted">{unavailableReason}</p>}
-      </div>
+    <div data-new-session-above="" className="flex min-h-6 flex-1 flex-col justify-end px-6 pb-4">
+      {unavailableReason && <p className="mx-auto w-full max-w-draft text-ui text-fg-muted">{unavailableReason}</p>}
     </div>
   );
 }
 
 /**
- * Under the draft's composer, in the same column: the agent's other sessions in the folder, to continue one. A
- * long list scrolls inside it, so the heading, chips and card above stay put. It keeps at least 160px: when the
- * window is too short for the rest, the main column scrolls to it rather than squeezing it to nothing.
+ * Under the draft's composer, in the same column: the agent's other sessions in the folder, to continue one. It
+ * takes as much room as the space above the card, so the card stays put when the list arrives; a long list
+ * scrolls inside it. It keeps at least 160px: when the window is too short, the main column scrolls to it.
  */
 export function NewSessionBelow({ sessionList }: { sessionList?: ReactNode }) {
   return (

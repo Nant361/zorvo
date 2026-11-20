@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { AgentTile } from "../ui/AgentTile";
 import { Popover, PopoverHeader } from "../ui/Popover";
 import { MAX_COMPARE_AGENTS } from "../../lib/compare-run";
@@ -88,13 +88,14 @@ export function AgentMultiPicker({ options, selected, isOpen, onToggle, onClose 
       trigger={
         <button
           type="button"
+          aria-label="All agents"
+          title="All agents"
           aria-haspopup="dialog"
           aria-expanded={isOpen}
           onClick={onToggle}
-          className="focus-ring flex h-6 items-center gap-1 rounded-md px-1.5 text-ui-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg aria-expanded:bg-surface-hover aria-expanded:text-fg"
+          className="focus-ring flex size-7 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg aria-expanded:bg-surface-hover aria-expanded:text-fg"
         >
-          All agents
-          <ChevronDown size={12} aria-hidden="true" className="shrink-0" />
+          <Plus size={14} aria-hidden="true" />
         </button>
       }
     >

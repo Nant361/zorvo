@@ -11,6 +11,10 @@ export interface PrivateDraftDeps {
   agentName?: string;
   agentProvider?: string;
   paymentSource?: PaymentSource;
+  /** Qwen Code is in use: the chip stays on offer whatever the draft has picked, and turning it on picks Qwen Code. */
+  canPickPrivateAgent?: boolean;
+  /** Turning the chip on: the parent picks Qwen Code alone, in the same click. */
+  onTurnOn?: () => void;
 }
 
 export interface PrivateChipControl {
@@ -79,6 +83,8 @@ export function usePrivateDraft({
   agentName,
   agentProvider,
   paymentSource = 'credits',
+  canPickPrivateAgent = false,
+  onTurnOn,
 }: PrivateDraftDeps): PrivateDraft {
   const [isTurnedOn, setIsTurnedOn] = useState(false);
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
@@ -110,6 +116,7 @@ export function usePrivateDraft({
     models,
     isLoadingModels,
     paymentSource,
+    canPickPrivateAgent,
   });
   const isOn = state.chip === 'on';
 
@@ -135,7 +142,11 @@ export function usePrivateDraft({
   }, [loadModels, refresh]);
 
   const onToggle = () => {
-    if (state.chip === 'off') turnOn();
+    if (state.chip === 'off') {
+      // Picks Qwen Code alone in the same click, so the draft never shows Private on beside another agent.
+      onTurnOn?.();
+      turnOn();
+    }
     else if (state.chip === 'on') setIsTurnedOn(false);
   };
 

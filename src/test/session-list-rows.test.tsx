@@ -27,54 +27,21 @@ function renderLoaded() {
 }
 
 describe("the agent's sessions", () => {
-  it("are headed by whose they are and how many there are", () => {
+  it("are headed by whose they are", () => {
     renderLoaded();
-    const title = screen.getByText("Continue a session from Claude Code");
-    expect(title).toHaveClass("flex-1", "text-caption", "font-medium", "text-fg-muted");
-    const count = screen.getByText("3 in this folder");
-    expect(count).toHaveClass("text-caption", "text-fg-subtle");
-    expect(title.parentElement).toHaveClass("px-3", "pb-1.5");
+    const title = screen.getByRole("heading", { name: "Or continue one of Claude Code's sessions in this folder" });
+    expect(title).toHaveClass("text-caption", "font-medium", "text-fg-muted");
+    expect(screen.queryByText("3 in this folder")).toBeNull();
   });
 
-  it("are plain 44px rows, in a 4px-spaced list", () => {
+  it("are plain 36px rows with a hairline between them and no box on hover", () => {
     renderLoaded();
     const row = screen.getByRole("button", { name: /Refactor the composer dock/ });
-    expect(row).toHaveClass(
-      "group",
-      "flex",
-      "h-11",
-      "items-center",
-      "gap-3",
-      "rounded-lg",
-      "px-3",
-      "text-ui",
-      "text-fg-secondary",
-      "hover:bg-surface-hover",
-      "hover:text-fg",
-      "focus-ring",
-    );
-    expect(row.closest("ul")).toHaveClass("flex", "flex-col", "gap-1");
+    expect(row).toHaveClass("flex", "h-9", "items-center", "gap-3", "text-ui", "text-fg-secondary", "hover:text-fg", "focus-ring");
+    expect(row.className).not.toMatch(/hover:bg-/);
+    expect(row.closest("li")).toHaveClass("border-b", "border-border", "last:border-b-0");
+    expect(within(row).queryByText("Continue")).toBeNull();
     const time = within(row).getByText(/ago|yesterday|1d/i);
-    expect(time).toHaveClass("text-caption", "text-fg-subtle", "group-hover:text-fg-muted");
-  });
-
-  it("Continue shows on focus and is not read twice", () => {
-    renderLoaded();
-    const row = screen.getByRole("button", { name: /Refactor the composer dock/ });
-    const label = within(row).getByText("Continue");
-    expect(label).toHaveAttribute("aria-hidden", "true");
-    expect(label).toHaveClass(
-      "hidden",
-      "group-hover:inline-flex",
-      "group-focus-visible:inline-flex",
-      "h-6.5",
-      "rounded-md",
-      "border",
-      "border-border-strong",
-      "px-2.5",
-      "text-ui-sm",
-      "text-fg",
-    );
-    expect(row).not.toHaveAccessibleName(/Continue/);
+    expect(time).toHaveClass("text-caption", "text-fg-muted");
   });
 });

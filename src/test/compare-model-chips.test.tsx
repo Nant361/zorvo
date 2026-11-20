@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ComposerDock } from "../components/ComposerDock";
 import type { CompareModelControl } from "../lib/compare-models";
 
-/** A compare draft's composer row: one model chip per agent, each with its logo. */
+/** A compare draft's agent chips: each picked agent's model picker joined to its chip. */
 const opus: CompareModelControl = {
   profileId: "claude-acp",
   name: "Claude Code",
@@ -14,28 +14,28 @@ const opus: CompareModelControl = {
 const codex = (state: CompareModelControl["state"]): CompareModelControl => ({ profileId: "codex", name: "Codex", state });
 
 function renderDock(compareModels: CompareModelControl[], onOpenCompareModel = vi.fn()) {
+  const options = compareModels.map((entry) => ({ value: entry.profileId, label: entry.name, name: entry.name }));
   render(
     <ComposerDock
       onSendMessage={() => {}}
       onAttach={async () => []}
       compareModels={compareModels}
       onOpenCompareModel={onOpenCompareModel}
+      agents={{ options, selected: options.map((option) => option.value), canTick: true, onChange: vi.fn(), onPick: vi.fn() }}
     />,
   );
   return onOpenCompareModel;
 }
 
-const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-
 describe("a compare draft's model chips", () => {
-  it("shows one chip per agent, each with its logo, after attach", () => {
+  it("joins one model picker per picked agent to its chip, none in the bottom row", () => {
     renderDock([opus, codex("unknown")]);
     const claude = screen.getByRole("button", { name: "Claude Code model: Opus" });
     const codexChip = screen.getByRole("button", { name: "Codex model: Default" });
-    for (const chip of [claude, codexChip]) {
-      expect(chip.querySelector("[aria-hidden='true']")).not.toBeNull();
-      expect(follows(screen.getByRole("button", { name: "Add attachment" }), chip)).toBe(true);
-    }
+    expect(claude.closest('[data-agent-group="claude-acp"]')).not.toBeNull();
+    expect(codexChip.closest('[data-agent-group="codex"]')).not.toBeNull();
+    expect(claude.closest("[data-composer-row]")).toBeNull();
+    expect(claude).toHaveClass("border-l", "rounded-l-none");
   });
 
   it("asks an unknown agent when its chip opens", () => {

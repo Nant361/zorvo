@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { usePrivateDraft, type PrivateDraftDeps } from "../hooks/usePrivateDraft";
 import type { ModelPrice, PrivateStatus } from "../lib/private-credits";
@@ -185,5 +186,29 @@ describe("usePrivateDraft", () => {
     const loaded = renderDraft({ credits: credits(), agentIds: ["qwen-code"] });
     await act(async () => loaded.result.current.chip?.onToggle());
     expect(loaded.result.current.chip?.onRetry).toBeUndefined();
+  });
+});
+
+describe("turning Private on from another agent", () => {
+  it("asks the parent to pick Qwen Code in the same click, and is on with it alone", async () => {
+    const draftCredits = credits();
+    // As App does: the parent's pick and the chip's own state change in one click, so they render together.
+    const { result } = renderHook(() => {
+      const [agentIds, setAgentIds] = useState<string[]>(["claude-acp"]);
+      const draft = usePrivateDraft({
+        credits: draftCredits,
+        agentIds,
+        canPickPrivateAgent: true,
+        onTurnOn: () => setAgentIds(["qwen-code"]),
+      });
+      return { draft, agentIds };
+    });
+    expect(result.current.draft.chip?.kind).toBe("off");
+
+    await act(async () => result.current.draft.chip?.onToggle());
+
+    expect(result.current.agentIds).toEqual(["qwen-code"]);
+    expect(result.current.draft.isOn).toBe(true);
+    expect(draftCredits.loadCatalog).toHaveBeenCalledTimes(1);
   });
 });

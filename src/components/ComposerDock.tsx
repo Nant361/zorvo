@@ -1,9 +1,7 @@
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { createPortal } from "react-dom";
 import { ArrowUp, KeyRound, Paperclip, ShieldAlert, Square } from "lucide-react";
 import { CompareModelStatus } from "./composer/CompareModelStatus";
 import type { CompareModelControl } from "../lib/compare-models";
-import { AgentLogo } from "./AgentLogo";
 import { AgentTile } from "./ui/AgentTile";
 import { Button } from "./ui/Button";
 import { IconButton } from "./ui/IconButton";
@@ -11,7 +9,7 @@ import { OptionDropdown } from "./composer/OptionDropdown";
 import { MoreControls } from "./composer/MoreControls";
 import { splitControls } from "../lib/composer-overflow";
 import { useAfter } from "../hooks/useAfter";
-import { AgentTiles, type AgentTilesProps } from "./composer/AgentTiles";
+import { AgentChipRow, JOINED_MODEL_CHIP, type AgentChipRowProps } from "./composer/AgentChipRow";
 import type { FolderControl } from "./composer/FolderPicker";
 import { DraftChips } from "./composer/DraftChips";
 import { PrivateChip } from "./private/PrivateChip";
@@ -172,22 +170,26 @@ export interface ComposerDockProps {
    * (two portals into one node would keep the order they mounted in). The slot takes no room while both are empty.
    */
   aboveCardSlots?: { install: Ref<HTMLDivElement>; signIn: Ref<HTMLDivElement> };
-  /** Where a draft's folder and branch chips are drawn (beside its heading); without it they sit above the card. */
-  chipsTarget?: HTMLElement | null;
-  /** Before a new session starts: the folder it starts in. */
+  /** Before a new session starts: the folder it starts in, drawn with its branch in the card's bottom row. */
   folder?: FolderControl;
-  /** Before a new session starts: its agents as tiles, ticked for a compare run where the folder is a repository. */
-  agents?: Omit<AgentTilesProps, "isOpen" | "onToggle" | "onClose">;
-  /** A running session's agent, named first in the row; drafts show theirs as tiles. */
+  /**
+   * Before a new session starts: its agents as a row of chips at the top of the card, ticked for a compare run where
+   * the folder is a repository. A picked agent's chip carries its model picker.
+   */
+  agents?: Omit<AgentChipRowProps, "isOpen" | "onToggle" | "onClose" | "modelOf">;
+  /** A sentence under a draft's card: how a compare run starts, until one is picked. */
+  helper?: string;
+  /** A running session's agent, named first in the row; drafts show theirs as chips. */
   sessionAgent?: { profileId: string; name: string };
   /**
-   * Before a new session starts: the Private chip after the agent chip and, while it is on, the private model
-   * menu after it and the credits left in the row. The parent drops the agent's own model chip meanwhile.
+   * Before a new session starts: the Private chip after the branch's and, while it is on, the private model menu
+   * joined to Qwen Code's chip, the session limit chip, and the credits left under the card. The parent drops the
+   * agent's own model chip meanwhile.
    */
   privateDraft?: Pick<PrivateDraft, "chip" | "modelMenu" | "creditsLine" | "paymentLine" | "paymentKey" | "sessionLimit">;
   /** "34 of 200 credits this session", left of Send while a capped private session runs. */
   privateSessionLine?: string;
-  /** In a compare draft: one model chip per ticked agent, in the run's order. */
+  /** In a compare draft: one model picker per ticked agent, joined to its chip. */
   compareModels?: CompareModelControl[];
   /** A compare chip whose agent's models are unknown was opened (or its Try again pressed): ask that agent. */
   onOpenCompareModel?: (profileId: string) => void;
@@ -242,7 +244,7 @@ export function ComposerDock({
   noteInRow = false,
   isLoadingControls = false,
   aboveCardSlots,
-  chipsTarget,
+  helper,
   folder,
   agents,
   sessionAgent,
@@ -280,7 +282,7 @@ export function ComposerDock({
   const onDelegationMentionChangeRef = useLatest(onDelegationMentionChange);
 
   // The draft's chips are drawn beside the heading, outside this footer: a click in them is not outside.
-  useDismiss(containerRef, openDropdown !== null, () => setOpenDropdown(null), chipsTarget);
+  useDismiss(containerRef, openDropdown !== null, () => setOpenDropdown(null));
 
   useLayoutEffect(() => {
     if (!shouldFitRef.current || !textareaRef.current) return;
@@ -560,49 +562,70 @@ export function ComposerDock({
       }),
     ),
   ];
-  const { inline: inlineControls, overflow: overflowControls } = splitControls(agentControls);
+  // A draft's model rides on its agent's chip; a session's stays in the row.
+  const rowControls = agents ? agentControls.filter((entry) => entry.id !== "model") : agentControls;
+  const { inline: inlineControls, overflow: overflowControls } = splitControls(rowControls);
   const isShowingSkeletons = Boolean(isLoadingControls) && agentControls.length === 0;
   const isSlowLoad = useAfter(isShowingSkeletons, SLOW_LOAD_MS);
   // A draft's composer sits near the top of its column with room below; a session's sits at the window's bottom.
   const isDraft = Boolean(folder || agents);
   const menuSide = isDraft ? "bottom" : "top";
-  const inHeading = (chips: ReactNode) => (chipsTarget ? createPortal(chips, chipsTarget) : chips);
+  const closeDropdown = (name: string) => setOpenDropdown((current) => (current === name ? null : current));
+
+  /** A compare agent's model picker; while its models are unknown, opening it asks the agent. */
+  const compareModelPicker = (entry: CompareModelControl) => {
+    const key = `model:${entry.profileId}` as const;
+    const shared = { label: `${entry.name} model`, align: "left" as const, side: "bottom" as const, chipClassName: JOINED_MODEL_CHIP };
+    if (entry.state === "known" && entry.control) {
+      return <OptionDropdown key={key} {...shared} {...dropdownProps(key, entry.control)} />;
+    }
+    const ask = () => onOpenCompareModel?.(entry.profileId);
+    return (
+      <OptionDropdown
+        key={key}
+        {...shared}
+        options={DEFAULT_MODEL_OPTIONS}
+        selected={undefined}
+        isOpen={openDropdown === key}
+        onToggle={() => toggle(key)}
+        onClose={() => closeDropdown(key)}
+        onSelect={() => setOpenDropdown(null)}
+        onOpen={ask}
+        // Not yet asked: the plain "Default" row, until the ask this opening starts shows its skeleton.
+        status={entry.state === "unknown" ? undefined : <CompareModelStatus name={entry.name} state={entry.state} onRetry={ask} />}
+      />
+    );
+  };
+
+  /** The model picker joined to a picked agent's chip: the private models, a compare agent's, or the draft agent's own. */
+  const modelOf = (agentId: string): ReactNode => {
+    if (privateDraft?.modelMenu) {
+      return (
+        <PrivateModelMenu
+          {...privateDraft.modelMenu}
+          chipClassName={JOINED_MODEL_CHIP}
+          onSelect={(modelId) => {
+            privateDraft.modelMenu?.onSelect(modelId);
+            setOpenDropdown(null);
+          }}
+          isOpen={openDropdown === "private-model"}
+          onToggle={() => toggle("private-model")}
+          onClose={() => closeDropdown("private-model")}
+        />
+      );
+    }
+    if (compareModels) {
+      const entry = compareModels.find((candidate) => candidate.profileId === agentId);
+      return entry ? compareModelPicker(entry) : undefined;
+    }
+    if (!model) return undefined;
+    return (
+      <OptionDropdown label="Model" align="left" side={menuSide} chipClassName={JOINED_MODEL_CHIP} {...dropdownProps("model", model)} />
+    );
+  };
 
   return (
     <footer ref={containerRef} className={`w-full ${isDraft ? "max-w-draft" : "max-w-chat"} flex flex-col items-center select-none`}>
-      {folder &&
-        inHeading(
-          <DraftChips
-            className={chipsTarget ? "contents" : "mb-4 flex w-full flex-wrap items-center gap-2"}
-            folder={folder}
-            isOpen={(name) => openDropdown === name}
-            onToggle={toggle}
-            onClose={(name) => setOpenDropdown((current) => (current === name ? null : current))}
-          >
-            {privateDraft?.chip && <PrivateChip {...privateDraft.chip} />}
-            {privateDraft?.modelMenu && (
-              <PrivateModelMenu
-                {...privateDraft.modelMenu}
-                onSelect={(modelId) => {
-                  privateDraft.modelMenu?.onSelect(modelId);
-                  setOpenDropdown(null);
-                }}
-                isOpen={openDropdown === "private-model"}
-                onToggle={() => toggle("private-model")}
-                onClose={() => setOpenDropdown((current) => (current === "private-model" ? null : current))}
-              />
-            )}
-            {privateDraft?.sessionLimit && <PrivateSessionLimitMenu {...privateDraft.sessionLimit} />}
-          </DraftChips>,
-        )}
-      {agents && (
-        <AgentTiles
-          {...agents}
-          isOpen={openDropdown === "agent"}
-          onToggle={() => toggle("agent")}
-          onClose={() => setOpenDropdown((current) => (current === "agent" ? null : current))}
-        />
-      )}
       {aboveCardSlots && (
         // Hidden while neither place holds a panel; `empty:` no longer applies, since the two places are always there.
         <div data-above-card="" className="mb-3 flex w-full flex-col gap-3 [&:not(:has(>:not(:empty)))]:hidden">
@@ -614,6 +637,15 @@ export function ComposerDock({
         data-composer-card=""
         className="relative flex w-full flex-col gap-2.5 rounded-[14px] border border-border bg-surface-2 p-3 transition-all focus-within:border-border-strong"
       >
+        {agents && (
+          <AgentChipRow
+            {...agents}
+            modelOf={modelOf}
+            isOpen={openDropdown === "agent"}
+            onToggle={() => toggle("agent")}
+            onClose={() => closeDropdown("agent")}
+          />
+        )}
         {attachments.length > 0 && (
           <AttachmentChips
             paths={attachments}
@@ -696,6 +728,19 @@ export function ComposerDock({
               </IconButton>
             )}
 
+            {folder && (
+              <DraftChips
+                className="contents"
+                folder={folder}
+                isOpen={(name) => openDropdown === name}
+                onToggle={toggle}
+                onClose={closeDropdown}
+              >
+                {privateDraft?.chip && <PrivateChip {...privateDraft.chip} />}
+                {privateDraft?.sessionLimit && <PrivateSessionLimitMenu {...privateDraft.sessionLimit} />}
+              </DraftChips>
+            )}
+
             {sessionAgent && !agents && (
               // A running session's agent, named first: a label, since a session cannot change its agent.
               <span data-agent-chip="" className="inline-flex h-6.5 min-w-0 items-center gap-1.5 pl-0.5 pr-1.5 text-ui-sm text-fg-secondary">
@@ -719,38 +764,6 @@ export function ComposerDock({
                   className={`h-6.5 ${width} rounded-md bg-chip motion-safe:animate-pulse`}
                 />
               ))}
-
-            {compareModels?.map((entry) => {
-              const key = `model:${entry.profileId}` as const;
-              const shared = {
-                label: `${entry.name} model`,
-                align: "left" as const,
-                side: "bottom" as const,
-                icon: <AgentLogo profileId={entry.profileId} name="" size={16} />,
-              };
-              if (entry.state === "known" && entry.control) {
-                return <OptionDropdown key={key} {...shared} {...dropdownProps(key, entry.control)} />;
-              }
-              // Its models are not known yet: opening it asks the agent, and the menu says so meanwhile.
-              const ask = () => onOpenCompareModel?.(entry.profileId);
-              return (
-                <OptionDropdown
-                  key={key}
-                  {...shared}
-                  options={DEFAULT_MODEL_OPTIONS}
-                  selected={undefined}
-                  isOpen={openDropdown === key}
-                  onToggle={() => toggle(key)}
-                  onClose={() => setOpenDropdown((current) => (current === key ? null : current))}
-                  onSelect={() => setOpenDropdown(null)}
-                  onOpen={ask}
-                  // Not yet asked: the plain "Default" row, until the ask this opening starts shows its skeleton.
-                  status={
-                    entry.state === "unknown" ? undefined : <CompareModelStatus name={entry.name} state={entry.state} onRetry={ask} />
-                  }
-                />
-              );
-            })}
 
             {inlineControls.map((entry) => (
               <OptionDropdown
@@ -777,9 +790,6 @@ export function ComposerDock({
               />
             )}
 
-            {privateDraft?.creditsLine && !(shownNote && noteInRow) && (
-              <span className="pl-1 text-caption text-fg-subtle">{privateDraft.creditsLine}</span>
-            )}
           </div>
 
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -829,10 +839,21 @@ export function ComposerDock({
         )}
       </div>
       {/* A compare run's note sits under the card, as drawn; why Send is blocked is a sentence inside it. */}
-      {shownNote && noteInRow && (
+      {shownNote && noteInRow ? (
         <p id={noteId} data-note-below="" className="mt-2 w-full px-1 text-caption text-fg-subtle">
           {shownNote}
         </p>
+      ) : privateDraft?.modelMenu ? (
+        // Under a private draft's card: where the prompts go, and the credits left.
+        <div data-private-line="" className="mt-2 flex w-full items-start gap-4 px-1 text-caption text-fg-subtle">
+          <span className="min-w-0 flex-1">
+            Qwen Code sends your prompts straight to NEAR AI. Each answer comes with a signature from the secure hardware,
+            so you can check where it ran.
+          </span>
+          {privateDraft.creditsLine && <span className="shrink-0">{privateDraft.creditsLine}</span>}
+        </div>
+      ) : (
+        helper && <p data-draft-helper="" className="mt-2 w-full px-1 text-caption text-fg-subtle">{helper}</p>
       )}
       {/* Said in words once the wait is long. Hidden from a screen reader, which heard it from the status when it began. */}
       {isSlowLoad && (

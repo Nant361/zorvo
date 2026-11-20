@@ -8,6 +8,7 @@ export const PRIVATE_AGENT_ID = 'qwen-code';
 
 export const PRIVATE_DRAFT_TEXT = {
   oneAgent: 'Private sessions run one agent.',
+  agentLocked: 'Private runs Qwen Code alone. Turn Private off to pick another agent.',
   checking: 'Checking your credits…',
   statusFailed: "Couldn't check your credits. Try again.",
   moved: 'Your credits moved to another Mac.',
@@ -37,6 +38,8 @@ export interface PrivateDraftInput {
   isLoadingModels?: boolean;
   /** `ownKey` skips the Zorvo credit checks; the key must still be saved. */
   paymentSource?: PaymentSource;
+  /** Qwen Code is in use, so turning Private on can pick it whatever the draft has picked now. */
+  canPickPrivateAgent?: boolean;
 }
 
 export interface PrivateDraftState {
@@ -85,13 +88,15 @@ function waitingFor(input: PrivateDraftInput): string | undefined {
 }
 
 /**
- * The draft's Private chip: shown for Qwen Code alone, disabled (with the reason) for another agent or a
- * compare run, and, while on, what the private start still waits for. An off or disabled chip changes
- * nothing about the draft.
+ * The draft's Private chip. Off while Qwen Code can be picked (turning it on picks Qwen Code alone), disabled with
+ * the reason when another agent is the only possible pick or a compare run holds no Qwen Code, and, while on, what
+ * the private start still waits for. An off or disabled chip changes nothing about the draft.
  */
 export function privateDraftState(input: PrivateDraftInput): PrivateDraftState {
   const { agentIds } = input;
   if (agentIds.length === 0) return { chip: 'hidden', canStart: true };
+  const isPrivateAgentAlone = agentIds.length === 1 && canonicalAgentId(agentIds[0]) === PRIVATE_AGENT_ID;
+  if (!input.on && input.canPickPrivateAgent && !isPrivateAgentAlone) return { chip: 'off', canStart: true };
   if (agentIds.length > 1) return { chip: 'disabled', reason: PRIVATE_DRAFT_TEXT.oneAgent, canStart: true };
   const agentId = canonicalAgentId(agentIds[0]);
   if (agentId !== PRIVATE_AGENT_ID) {

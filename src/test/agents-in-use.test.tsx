@@ -59,8 +59,8 @@ function notReadyProfiles() {
 }
 
 function newSessionView(): HTMLElement {
-  // The heading sits in a row with the chips; the notice under it is in the column around that row.
-  const view = screen.getByRole("heading", { name: /^New session/ }).closest<HTMLElement>(".max-w-draft");
+  // The room above the draft's card, where a notice says why nothing can start.
+  const view = document.querySelector<HTMLElement>("[data-new-session-above]");
   if (!view) throw new Error("the new-session view has no container");
   return view;
 }

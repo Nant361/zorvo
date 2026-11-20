@@ -29,12 +29,13 @@ function renderDraft(folder: FolderControl, agents?: AgentChoice[]) {
 }
 
 describe("the draft's chips", () => {
-  it("sit above the composer's card, outside its bottom row", () => {
+  it("sit in the card's bottom row, under the prompt", () => {
     renderDraft(folderControl({ branch: branchControl() }));
 
     const chip = screen.getByRole("button", { name: "Folder: agent-desktop" });
     const prompt = screen.getByRole("textbox", { name: "Prompt" });
-    expect(chip.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(prompt.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chip.closest("[data-composer-row]")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Branch: main" })).toHaveClass("h-6.5", "bg-transparent");
   });
 });

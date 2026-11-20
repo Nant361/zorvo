@@ -15,10 +15,12 @@ export interface PrivateModelMenuProps extends PrivateModelChoice {
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  /** The trigger's look; the composer chip's by default, the joined one on Qwen Code's chip. */
+  chipClassName?: string;
 }
 
-/** The private models a draft can run, in the place of the agent's model chip while the Private chip is on. */
-export function PrivateModelMenu({ models, selected, onSelect, isOpen, onToggle, onClose }: PrivateModelMenuProps) {
+/** The private models a draft can run, joined to Qwen Code's chip while the Private chip is on. */
+export function PrivateModelMenu({ models, selected, onSelect, isOpen, onToggle, onClose, chipClassName = COMPOSER_CHIP }: PrivateModelMenuProps) {
   const current = models.find((model) => model.id === selected) ?? models[0];
   const currentLabel = current ? modelLabel(current.id) : "";
   return (
@@ -38,7 +40,7 @@ export function PrivateModelMenu({ models, selected, onSelect, isOpen, onToggle,
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           onClick={onToggle}
-          className={COMPOSER_CHIP}
+          className={chipClassName}
         >
           <span className="max-w-[160px] truncate">{currentLabel}</span>
           <ChevronDown size={12} aria-hidden="true" className="shrink-0 text-fg-muted" />
