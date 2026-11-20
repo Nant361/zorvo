@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 
 #[derive(Default)]
 pub struct DebugBrowsers(Mutex<HashMap<String, Arc<WorkerSlot>>>);
+static LIGHTHOUSE_INSTALL: Mutex<()> = Mutex::new(());
 
 struct WorkerSlot {
     closed: AtomicBool,
@@ -285,6 +286,9 @@ pub fn browser_runtime_status(app: AppHandle) -> Result<Value, String> {
 #[tauri::command]
 pub async fn browser_runtime_install(app: AppHandle) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _install = LIGHTHOUSE_INSTALL
+            .lock()
+            .map_err(|_| "The audit installer is unavailable.")?;
         let (node, env) = node()?;
         let runtime = resource(&app)?.join("lighthouse-runtime");
         let destination = app
@@ -300,7 +304,10 @@ pub async fn browser_runtime_install(app: AppHandle) -> Result<Value, String> {
             .parent()
             .ok_or("Node installation is incomplete.")?
             .join("npm");
-        let mut command = crate::spawn::command(npm);
+        let npm = std::fs::canonicalize(npm)
+            .map_err(|_| "npm is missing from this Node.js installation.")?;
+        let mut command = crate::spawn::command(node);
+        command.arg(npm);
         command
             .args([
                 "ci",
