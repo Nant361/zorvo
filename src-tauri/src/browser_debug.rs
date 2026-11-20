@@ -361,8 +361,15 @@ pub fn sweep(app: &AppHandle) {
     });
 }
 
-#[tauri::command(async)]
-pub fn browser_runtime_status(app: AppHandle) -> Result<Value, String> {
+// Plain Rust helpers only. An approved integration must add authenticated
+// asynchronous IPC wrappers; this proposal declares no Tauri commands.
+pub async fn runtime_status(app: AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || read_runtime_status(&app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn read_runtime_status(app: &AppHandle) -> Result<Value, String> {
     let root = app
         .path()
         .app_data_dir()
@@ -373,8 +380,7 @@ pub fn browser_runtime_status(app: AppHandle) -> Result<Value, String> {
     )
 }
 
-#[tauri::command]
-pub async fn browser_runtime_install(app: AppHandle) -> Result<Value, String> {
+pub async fn install_runtime(app: AppHandle) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _install = LIGHTHOUSE_INSTALL
             .lock()
@@ -430,7 +436,7 @@ pub async fn browser_runtime_install(app: AppHandle) -> Result<Value, String> {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        browser_runtime_status(app)
+        read_runtime_status(&app)
     })
     .await
     .map_err(|e| e.to_string())?

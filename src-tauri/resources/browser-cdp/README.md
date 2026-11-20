@@ -5,6 +5,9 @@ The maintainer has not decided to add this engine. This branch is based on
 `main` independently of the WebKit panel PR: it contains the Chromium worker,
 its Rust supervisor and focused tests only. It has no browser-panel UI, agent
 tool registration, Tauri command registration or release resource-bundle entry.
+The runtime status and installer are plain async Rust helpers, with filesystem
+work in blocking tasks. Future IPC wrappers must be authenticated, asynchronous
+and registered together with their approved integration.
 An installed application cannot select this engine or install Lighthouse.
 
 The worker opens an installed Chrome, Chromium or Brave in its own window and
