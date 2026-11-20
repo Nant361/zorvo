@@ -175,7 +175,8 @@ pub struct ComputerUseStatus {
     pub screen_recording: &'static str,
     /// "allowed" or "not-allowed".
     pub accessibility: &'static str,
-    /// Both permissions were lost to an update: offer "Allow again".
+    /// Both permissions were lost to an update: offer "Allow again". Settings
+    /// shows it only while its switch is on.
     pub after_update: bool,
     /// Screen Recording was asked for in this run and still reads not allowed:
     /// macOS applies it to Zorvo only after a restart.
@@ -185,7 +186,6 @@ pub struct ComputerUseStatus {
 /// Everything `status_of` decides from.
 #[derive(Debug, Clone, Default)]
 pub struct StatusFacts {
-    pub enabled: bool,
     pub in_applications: bool,
     pub driver: Option<DriverUnavailable>,
     pub screen_recording: bool,
@@ -206,8 +206,7 @@ fn word(allowed: bool) -> &'static str {
 
 pub fn status_of(facts: &StatusFacts) -> ComputerUseStatus {
     let neither = !facts.screen_recording && !facts.accessibility;
-    let after_update = facts.enabled
-        && neither
+    let after_update = neither
         && facts
             .last_allowed
             .as_deref()
@@ -236,21 +235,16 @@ pub fn runs_from_applications(exe: Option<&Path>) -> bool {
 }
 
 /// Reads the facts from this process and this Mac.
-pub fn read_status(
-    data_dir: &Path,
-    enabled: bool,
-    asked_screen_recording: bool,
-) -> ComputerUseStatus {
+pub fn read_status(data_dir: &Path, asked_screen_recording: bool) -> ComputerUseStatus {
     let running = env!("CARGO_PKG_VERSION");
     let (screen, accessible) = (screen_recording(), accessibility());
     if screen && accessible {
         remember_allowed(data_dir, running);
     }
     let driver = driver::locate()
-        .and_then(|path| driver::check(&path, driver::pinned()))
+        .and_then(|path| driver::check_for_status(&path, driver::pinned()))
         .err();
     status_of(&StatusFacts {
-        enabled,
         in_applications: runs_from_applications(std::env::current_exe().ok().as_deref()),
         driver,
         screen_recording: screen,
@@ -267,7 +261,6 @@ mod tests {
 
     fn facts() -> StatusFacts {
         StatusFacts {
-            enabled: true,
             in_applications: true,
             driver: None,
             screen_recording: true,
@@ -328,15 +321,9 @@ mod tests {
         // Never allowed before: a first setup, not an update.
         let first = StatusFacts {
             last_allowed: None,
-            ..lost.clone()
-        };
-        assert!(!status_of(&first).after_update);
-        // With the switch off nothing is offered.
-        let off = StatusFacts {
-            enabled: false,
             ..lost
         };
-        assert!(!status_of(&off).after_update);
+        assert!(!status_of(&first).after_update);
     }
 
     #[test]

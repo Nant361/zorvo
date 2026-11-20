@@ -9,11 +9,7 @@ use super::permissions::{self, ComputerUseStatus};
 use super::state::ComputerUse;
 
 fn status(state: &ComputerUse) -> ComputerUseStatus {
-    permissions::read_status(
-        state.data_dir(),
-        state.is_enabled(),
-        state.asked_screen_recording(),
-    )
+    permissions::read_status(state.data_dir(), state.asked_screen_recording())
 }
 
 /// What the Computer use group shows. Asks macOS nothing.
@@ -51,7 +47,12 @@ pub fn computer_use_reset_permissions(
     app: AppHandle,
     state: State<'_, Arc<ComputerUse>>,
 ) -> ComputerUseStatus {
-    permissions::reset(&app.config().identifier);
+    // A debug build shares the installed Zorvo's bundle id, and under
+    // `pnpm tauri dev` the permissions belong to the terminal anyway: a reset
+    // here would only take the installed app's permissions away.
+    if !cfg!(debug_assertions) {
+        permissions::reset(&app.config().identifier);
+    }
     permissions::request();
     state.note_screen_recording_asked();
     status(&state)

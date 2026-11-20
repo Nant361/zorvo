@@ -83,7 +83,6 @@ struct Inner {
 
 pub struct DriverClient {
     inner: Arc<Inner>,
-    /// The worker's own pid, from its `initialize` answer.
     pid: u32,
 }
 
@@ -195,6 +194,7 @@ fn read_line(reader: &mut impl BufRead, line: &mut Vec<u8>) -> Result<Option<()>
         let available = match reader.fill_buf() {
             Ok([]) => return Ok(None),
             Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => return Ok(None),
         };
         let (take, done) = match available.iter().position(|byte| *byte == b'\n') {
@@ -248,6 +248,8 @@ impl DriverClient {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|_| DriverError::Exited)?;
+        // The pid of the process Zorvo started, never the one the worker reports.
+        let pid = child.id();
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
             let _ = child.wait();
@@ -278,10 +280,10 @@ impl DriverClient {
             },
             "host_bundle_id": options.host_bundle_id,
         });
-        let mut client = DriverClient { inner, pid: 0 };
+        let client = DriverClient { inner, pid };
         // `initialize` must be request 0, and it is: nothing was queued before.
         let call = client.begin("initialize", None, Some(initialize), None);
-        let ready = match client.wait_until(call, Instant::now() + STARTUP_TIMEOUT) {
+        let ready = match client.wait_for(call, Some(Instant::now() + STARTUP_TIMEOUT)) {
             Ok(ready) => ready,
             Err(error) => {
                 client.inner.kill();
@@ -302,15 +304,10 @@ impl DriverClient {
             client.inner.kill();
             return Err(DriverError::Protocol(problem));
         }
-        client.pid = ready
-            .get("pid")
-            .and_then(Value::as_u64)
-            .and_then(|pid| u32::try_from(pid).ok())
-            .unwrap_or_default();
         Ok(Arc::new(client))
     }
 
-    /// The worker's pid, as it reported it.
+    /// The pid of the worker process Zorvo started.
     pub fn pid(&self) -> u32 {
         self.pid
     }
@@ -356,7 +353,8 @@ impl DriverClient {
         CallId(id)
     }
 
-    fn wait_until(&self, call: CallId, deadline: Instant) -> Result<Value, DriverError> {
+    /// Waits for `call`'s answer, for ever or until `deadline`.
+    fn wait_for(&self, call: CallId, deadline: Option<Instant>) -> Result<Value, DriverError> {
         let mut state = self.inner.state();
         loop {
             if let Some(answer) = state.answers.remove(&call.0) {
@@ -365,36 +363,28 @@ impl DriverClient {
             if let Some(error) = &state.dead {
                 return Err(error.clone());
             }
-            let left = deadline.saturating_duration_since(Instant::now());
-            if left.is_zero() {
-                return Err(DriverError::Exited);
+            state = match deadline {
+                None => self.inner.changed.wait(state),
+                Some(deadline) => {
+                    let left = deadline.saturating_duration_since(Instant::now());
+                    if left.is_zero() {
+                        return Err(DriverError::Exited);
+                    }
+                    self.inner
+                        .changed
+                        .wait_timeout(state, left)
+                        .map(|(state, _)| state)
+                        .map_err(|e| std::sync::PoisonError::new(e.into_inner().0))
+                }
             }
-            state = self
-                .inner
-                .changed
-                .wait_timeout(state, left)
-                .unwrap_or_else(|e| e.into_inner())
-                .0;
+            .unwrap_or_else(|e| e.into_inner());
         }
     }
 
     /// Blocks until `call` has its answer. The caller owns the time limit and
     /// ends a call that takes too long with `abandon`.
     pub fn wait(&self, call: CallId) -> Result<Value, DriverError> {
-        let mut state = self.inner.state();
-        loop {
-            if let Some(answer) = state.answers.remove(&call.0) {
-                return answer;
-            }
-            if let Some(error) = &state.dead {
-                return Err(error.clone());
-            }
-            state = self
-                .inner
-                .changed
-                .wait(state)
-                .unwrap_or_else(|e| e.into_inner());
-        }
+        self.wait_for(call, None)
     }
 
     /// The worker's tool list.

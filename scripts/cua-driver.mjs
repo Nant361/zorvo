@@ -1,6 +1,7 @@
 // Fetches and pins trycua's cua-driver, the computer-use engine Zorvo ships inside Zorvo.app.
 //
 //   node scripts/cua-driver.mjs fetch    download the pinned release into src-tauri/binaries/
+//                                        (--optional: warn and go on when it cannot, for `tauri dev`)
 //   node scripts/cua-driver.mjs update   rewrite the pin to the newest release that qualifies
 //
 // The pin is src-tauri/resources/cua-driver.json. `update` is run by hand and its diff is read:
@@ -139,8 +140,14 @@ const isSignedBy = (path, team) => {
 
 const runFetch = async () => {
   const pin = JSON.parse(readFileSync(PIN_PATH, "utf8"));
-  const outcome = await fetchDriver({ pin, dest: BINARY_PATH, download: downloadTo });
-  console.log(outcome === "kept" ? `cua-driver ${pin.version} is already in place.` : `Fetched cua-driver ${pin.version}.`);
+  try {
+    const outcome = await fetchDriver({ pin, dest: BINARY_PATH, download: downloadTo });
+    console.log(outcome === "kept" ? `cua-driver ${pin.version} is already in place.` : `Fetched cua-driver ${pin.version}.`);
+  } catch (error) {
+    // A development build runs without the driver; only computer use needs it. A bundle does not.
+    if (!process.argv.includes("--optional")) throw error;
+    console.warn(`cua-driver was not fetched: ${error.message} Computer use will not work in this build.`);
+  }
 };
 
 const runUpdate = async () => {

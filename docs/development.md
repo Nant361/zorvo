@@ -79,7 +79,8 @@ the one file taken from it.
   `github.com/trycua/cua` releases into `src-tauri/binaries/` (git-ignored),
   checks both hashes and keeps only `cua-driver`. `pnpm tauri dev` and
   `pnpm tauri build` run it first; it does nothing when the file is already
-  the pinned one.
+  the pinned one. A development build starts even when the download fails
+  (only computer use is missing then); a production build does not.
 - `pnpm cua-driver:update` rewrites the pin to the newest release that is at
   least 7 days old and not older than 0.52.1. Run it by hand and read the
   diff: trycua publishes several releases a day, and a new pin can change the

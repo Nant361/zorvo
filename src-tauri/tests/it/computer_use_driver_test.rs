@@ -325,3 +325,28 @@ fn switch_off_kills_the_driver() {
     state.set_enabled(true);
     assert!(is_running(state.driver().unwrap().pid()));
 }
+
+#[test]
+fn switch_off_does_not_wait_for_a_driver_that_is_starting() {
+    // The starter takes a while, as a driver stuck in `initialize` would.
+    let state = Arc::new(ComputerUse::with_starter(
+        scratch("slow-start"),
+        true,
+        Box::new(|| {
+            thread::sleep(Duration::from_millis(600));
+            DriverClient::start(fake(&[]), options(Some("0.52.13"))).map_err(NoDriver::Failed)
+        }),
+    ));
+    let starting = Arc::clone(&state);
+    let started = thread::spawn(move || starting.driver().map(|client| client.pid()));
+    thread::sleep(Duration::from_millis(150));
+    let before = Instant::now();
+    state.set_enabled(false);
+    assert!(
+        before.elapsed() < Duration::from_millis(300),
+        "the switch waited for the start"
+    );
+    // The start ends with the switch off: no driver is handed out or left running.
+    assert_eq!(started.join().unwrap().err(), Some(NoDriver::Off));
+    assert_eq!(state.driver().err(), Some(NoDriver::Off));
+}

@@ -101,7 +101,12 @@ pub fn short_version(info_plist: &str) -> Option<String> {
 
 /// The version of the app bundle `driver` sits in, when it sits in one.
 fn bundle_version(driver: &Path) -> Option<String> {
-    let info = driver.parent()?.parent()?.join("Info.plist");
+    // Only `<app>/Contents/MacOS/cua-driver`: a debug build's driver sits in
+    // `src-tauri/binaries`, two levels under the `Info.plist` Tauri merges in.
+    let macos = driver
+        .parent()
+        .filter(|dir| dir.ends_with("Contents/MacOS"))?;
+    let info = macos.parent()?.join("Info.plist");
     short_version(&fs::read_to_string(info).ok()?)
 }
 
@@ -180,6 +185,30 @@ pub fn check(path: &Path, pin: &DriverPin) -> Result<(), DriverUnavailable> {
     } else {
         Err(DriverUnavailable::Changed)
     }
+}
+
+/// `check` for Settings' status line, which is read every time the window gets
+/// focus: the answer for a file whose path, size and modification time have
+/// not changed is reused, so the 52 MB file is not hashed and `codesign` is
+/// not started each time. A start never uses this: it calls `check`.
+pub fn check_for_status(path: &Path, pin: &DriverPin) -> Result<(), DriverUnavailable> {
+    type Seen = (PathBuf, u64, Option<std::time::SystemTime>);
+    static LAST: std::sync::Mutex<Option<(Seen, Result<(), DriverUnavailable>)>> =
+        std::sync::Mutex::new(None);
+    let Ok(meta) = fs::metadata(path) else {
+        return Err(DriverUnavailable::Missing);
+    };
+    let seen: Seen = (path.to_path_buf(), meta.len(), meta.modified().ok());
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, verdict)) = last.as_ref().filter(|(key, _)| *key == seen) {
+        // An update waiting for a restart changes the app's version, not this file.
+        if bundle_version(path).is_none_or(|version| version == env!("CARGO_PKG_VERSION")) {
+            return *verdict;
+        }
+    }
+    let verdict = check(path, pin);
+    *last = Some((seen, verdict));
+    verdict
 }
 
 /// The driver's whole environment: what it needs and nothing of the user's.
@@ -317,6 +346,45 @@ mod tests {
             Err(DriverUnavailable::UpdatePending)
         );
         assert_eq!(check_file(&path, &pin, Some("1.0.0"), "1.0.0"), Ok(()));
+    }
+
+    #[test]
+    fn only_a_driver_inside_an_app_bundle_has_a_bundle_version() {
+        let root = std::env::temp_dir().join(format!("zorvo-bundle-{}", std::process::id()));
+        let plist = "<dict><key>CFBundleShortVersionString</key><string>9.9.9</string></dict>";
+        // A debug build's layout: src-tauri/Info.plist and src-tauri/binaries/cua-driver.
+        let binaries = root.join("src-tauri/binaries");
+        fs::create_dir_all(&binaries).unwrap();
+        fs::write(root.join("src-tauri/Info.plist"), plist).unwrap();
+        assert_eq!(bundle_version(&binaries.join("cua-driver")), None);
+        // An app bundle's layout.
+        let macos = root.join("Zorvo.app/Contents/MacOS");
+        fs::create_dir_all(&macos).unwrap();
+        fs::write(root.join("Zorvo.app/Contents/Info.plist"), plist).unwrap();
+        assert_eq!(
+            bundle_version(&macos.join("cua-driver")).as_deref(),
+            Some("9.9.9")
+        );
+    }
+
+    #[test]
+    fn the_status_check_reuses_its_answer_until_the_file_changes() {
+        let path = temp_file("status", "driver");
+        let pin = pin_for(&path);
+        // Not signed by the pinned team, so the full check says changed, twice.
+        assert_eq!(
+            check_for_status(&path, &pin),
+            Err(DriverUnavailable::Changed)
+        );
+        assert_eq!(
+            check_for_status(&path, &pin),
+            Err(DriverUnavailable::Changed)
+        );
+        fs::remove_file(&path).unwrap();
+        assert_eq!(
+            check_for_status(&path, &pin),
+            Err(DriverUnavailable::Missing)
+        );
     }
 
     #[test]

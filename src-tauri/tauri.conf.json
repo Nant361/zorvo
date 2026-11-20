@@ -4,7 +4,7 @@
   "version": "0.14.1",
   "identifier": "xyz.zorvo.desktop",
   "build": {
-    "beforeDevCommand": "pnpm cua-driver:fetch && pnpm dev",
+    "beforeDevCommand": "pnpm cua-driver:fetch --optional && pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm cua-driver:fetch && pnpm build",
     "frontendDist": "../dist"

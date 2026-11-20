@@ -268,9 +268,10 @@ export default function App() {
   const appUpdate = useAppUpdate(reportError, writePendingBeforeRestart);
   // macOS applies a newly allowed Screen Recording permission only after Zorvo restarts.
   const restartZorvo = useCallback(() => {
-    writePendingBeforeRestart()
-      .then(() => invoke("app_restart"))
-      .catch(() => reportError("Zorvo could not save your work, so it did not restart."));
+    writePendingBeforeRestart().then(
+      () => invoke("app_restart").catch(() => reportError("Zorvo could not restart. Quit and open it again.")),
+      () => reportError("Zorvo could not save your work, so it did not restart."),
+    );
   }, [writePendingBeforeRestart, reportError]);
   const computerUseSetting = useMemo(
     () => ({ onRestart: restartZorvo, onError: reportError }),

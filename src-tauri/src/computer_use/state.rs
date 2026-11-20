@@ -80,8 +80,19 @@ impl ComputerUse {
     /// the driver is killed, which ends every call in flight.
     pub fn set_enabled(&self, on: bool) {
         self.enabled.store(on, Ordering::Release);
-        if !on {
-            self.stop_driver();
+        if on {
+            return;
+        }
+        // Never wait here: this runs inside every state save, and a driver
+        // that is starting holds the lock for up to its startup timeout. That
+        // start sees the switch off when it ends and kills what it started.
+        let running = match self.driver.try_lock() {
+            Ok(mut slot) => slot.take(),
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner().take(),
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        };
+        if let Some(client) = running {
+            client.kill();
         }
     }
 
@@ -104,6 +115,12 @@ impl ComputerUse {
             return Ok(Arc::clone(client));
         }
         let client = (self.starter)()?;
+        // The switch went off while the driver started: `set_enabled` did not
+        // wait for this lock, so the new driver ends here.
+        if !self.is_enabled() {
+            client.kill();
+            return Err(NoDriver::Off);
+        }
         *slot = Some(Arc::clone(&client));
         Ok(client)
     }
