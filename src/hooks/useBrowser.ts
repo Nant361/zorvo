@@ -9,6 +9,7 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const refreshId = useRef(0);
+  const executions = useRef(new Map<number, number>());
 
   const refresh = useCallback(async () => {
     const epoch = generation.current;
@@ -21,6 +22,7 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
 
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const epoch = ++generation.current;
     setState({ sessionId, tabs: [], activeTabId: null });
     setError(null);
@@ -33,10 +35,22 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
         setState(next);
       }
     }).catch(reason => { if (active) setError(String(reason)); return () => {}; });
+    const read = async () => {
+      if (!active) return;
+      try {
+        if (engine === "webkit" || !executions.current.has(epoch)) await refresh();
+      } catch (reason) { if (active) setError(String(reason)); }
+      finally {
+        // Chromium can navigate or close from its separate window or an agent.
+        // Read metadata only, and wait for each read before scheduling another.
+        if (active && engine === "chromium") timer = setTimeout(() => { void read(); }, 2_000);
+      }
+    };
     // Subscribe before reading, so an open-tab event cannot be lost during mount.
-    void unlisten.then(async () => { if (active) await refresh(); }).catch(reason => { if (active) setError(String(reason)); });
+    void unlisten.then(read);
     return () => {
       active = false;
+      clearTimeout(timer);
       generation.current = epoch + 1;
       void unlisten.then(stop => stop());
     };
@@ -44,6 +58,7 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
 
   const execute = useCallback(async (args: Record<string, unknown>) => {
     const epoch = generation.current;
+    executions.current.set(epoch, (executions.current.get(epoch) ?? 0) + 1);
     setBusy(true);
     setError(null);
     try {
@@ -55,7 +70,10 @@ export function useBrowser(sessionId: string, engine: BrowserEngine) {
       if (epoch === generation.current) setError(String(reason));
       throw reason;
     } finally {
-      if (epoch === generation.current) setBusy(false);
+      const remaining = (executions.current.get(epoch) ?? 1) - 1;
+      if (remaining) executions.current.set(epoch, remaining);
+      else executions.current.delete(epoch);
+      if (epoch === generation.current) setBusy(remaining > 0);
     }
   }, [sessionId, engine, refresh]);
 

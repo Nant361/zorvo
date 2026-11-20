@@ -210,7 +210,11 @@ async function forget(id) {
     sessions.delete(session);
     owners.delete(session);
   }
-  if (focused === id) focused = null;
+  if (focused === id) {
+    focused = null;
+    const next = tabs.keys().next().value;
+    if (next) await focus(next).catch(() => {});
+  }
   if (preview?.tabID === id) preview = null;
   if (tab.cpu?.timer) clearTimeout(tab.cpu.timer);
   if (trace?.tabID === id) {

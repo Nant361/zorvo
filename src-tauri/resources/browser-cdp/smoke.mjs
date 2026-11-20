@@ -110,6 +110,12 @@ try {
   await call('back'); await call('wait',{condition:'load'}); await call('forward'); await call('wait',{condition:'load'});
   await call('reload'); await call('wait',{condition:'load'}); await call('stop');
   if(process.env.ZORVO_LIGHTHOUSE_PATH) { const audit=await call('lighthouse'); assert.ok(audit.scores.performance>=0); }
+  const extra = await send('tabs.open',{url});
+  const last = await send('tabs.open',{url});
+  await send('tabs.close',{tabID:last.id});
+  assert.equal((await send('tabs.list')).activeTabId,tabID);
+  await send('tabs.close',{tabID:extra.id});
+  assert.equal((await send('tabs.list')).activeTabId,tabID);
   await call('tabs.close'); assert.equal((await send('tabs.list')).tabs.length,0);
   const expected=Object.keys(catalog.operations).filter(name=>name!=='lighthouse'||process.env.ZORVO_LIGHTHOUSE_PATH);
   assert.deepEqual(expected.filter(name=>!completed.has(name)),[]);

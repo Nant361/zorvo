@@ -276,11 +276,10 @@ pub async fn execute(
                 Ok(value)
             }
         });
-        let idle = closing_last
-            && result
-                .as_ref()
-                .is_ok_and(|value| value["remainingTabs"] == 0);
-        drop(worker);
+        let idle = result.as_ref().is_ok_and(|value| {
+            (closing_last && value["remainingTabs"] == 0)
+                || (listing && value["tabs"].as_array().is_some_and(Vec::is_empty))
+        });
         if idle {
             let mut workers = state
                 .0
@@ -294,6 +293,7 @@ pub async fn execute(
                 workers.remove(&session);
             }
         }
+        drop(worker);
         result
     })
     .await
