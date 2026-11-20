@@ -28,6 +28,17 @@ Each snapshot has its own bundle identifier. The test launches with
 `open -W -n` so it runs as its own application, instead of inheriting the
 launching terminal or Codex app's privacy identity.
 
+For a direct-child comparison, use `--direct`. The same prepared signed
+binary can be tested through both paths. Its report names the parent and
+responsible application (a guarded diagnostic SPI), without recording their
+paths. Direct launch records the usage-string boundary separately from the
+denial result. For this third capture run, an authorized parent must expose
+`mediaDevices` and `getUserMedia`; absent APIs cannot satisfy it. The screen
+API must still be absent and each media request must reach the public denying
+delegate. The current direct recording identifies ChatGPT/Codex as responsible,
+with camera and microphone authorization active. A parent without those grants
+does not exercise this launch condition.
+
 Prepare an app once, approve its OS permissions, then reuse the exact
 signed binary for the canonical Screen Recording precondition:
 
@@ -37,13 +48,15 @@ node experiments/browser-wk/run.mjs --prepare --usage-strings
 # Use each printed snapshot directory separately:
 node experiments/browser-wk/run.mjs --reuse '<snapshot directory>' --request-permissions
 node experiments/browser-wk/run.mjs --reuse '<snapshot directory>'
+node experiments/browser-wk/run.mjs --reuse '<snapshot directory>' --direct
+node experiments/browser-wk/run.mjs --reuse '<snapshot directory>' --long-hidden
 ```
 
 Preparation uses a separate directory under
 `~/Library/Application Support/Zorvo Browser Spike/`, with a build manifest
 and LaunchServices registration. A rebuild gets a fresh identity. Reuse
-checks the current and snapshotted sources, binary, plist, compiled fixture
-and code signature before launch. It refuses a snapshot whose native
+checks the snapshotted sources, binary, plist, compiled fixture and code
+signature before launch. It refuses a snapshot whose native
 process is already running, without ending that process.
 
 `--request-permissions` is an explicit setup step, with no page loaded and
@@ -92,13 +105,27 @@ window is miniaturizable, and its actual minimized and occlusion states are
 recorded.
 
 Each condition records about five seconds of completed 100 ms timers,
-animation callbacks and completed fetches from a 200 ms retry loop. Each
+an independently started 100 ms `setInterval`, animation callbacks and
+completed fetches from a loop that schedules a 200 ms timer after each
+awaited response. These are four different scheduling paths. Each
 counter is rendered by React. A command snapshot must read the incremented
 button state, and a native `takeSnapshot` must change within one second
 of the click. Cropped before/after PNGs isolate the React counter from the
 activity counters; their hashes and capture times are recorded.
-The report distinguishes direct hidden/covered results from the same-window
-cover fallback. It records CPU time and resident bytes for the host and main
+The hidden gate requires hidden, covered and minimized observations; a
+separate gate reports the same-window cover fallback. A fallback success
+cannot hide a direct failure. On macOS 27 the location gate also requires
+exactly one public callback per realm; below 27 it requires zero.
+
+`--long-hidden` adds two more conditions. Each leaves the hidden or minimized
+view alone for 180 seconds, without any native page commands, then repeats
+the click and snapshots. A bounded page-side history records every counter
+update and supplies the final five seconds of the quiet period before the
+first command. The report also retains the usual five seconds after the
+click. Quiet duration and actual visibility flags are recorded; the long
+gate is independent of the short and fallback gates.
+
+The report records CPU time and resident bytes for the host and main
 view's WebContent PID, excluding GPU and other WebContent processes. These
 are short local samples, not full-app memory or scrolling benchmarks.
 Another Space and a fully integrated browser remain untested.
@@ -114,12 +141,34 @@ the spike report even when the narrower observation set passes.
 
 Source files are copied into an immutable snapshot before compilation. The
 compiled React fixture, native sources, plist, runner and validator are
-hashed in every report, together with the architecture, deployment target,
-Node version and actual bundle plist. SIGINT/SIGTERM abort the launch and
+hashed in every report, with the source commit, architecture, deployment
+target, Node version and actual bundle plist. Collection requires committed
+probe sources. A reused binary retains its original `sourceCommit` and hashes;
+`collectorCommit` and `collectorSources` identify the runner used for that
+collection. LaunchServices resolution is a boolean and a snapshot-relative
+two-component path; no collector home path is recorded.
+SIGINT/SIGTERM abort the launch and
 terminate only the recorded test PID after verifying its executable path.
-The runner has a three-minute subprocess deadline. Its fixture connections
-and listener close in `finally`; temporary source, app, PNGs and reports
-remain available for inspection.
+The runner has a three-minute launch deadline, or nine minutes for the
+long-hidden collection. Script replies have a five-second native deadline.
+Fixture connections and listeners close in `finally`. Every collection
+unregisters its app with LaunchServices, including failed and reused runs;
+`--prepare` alone keeps the registration for permission setup. Files remain
+available as evidence until explicitly cleaned.
+
+After exporting results and revoking any test grants, remove a prepared app:
+
+```sh
+node experiments/browser-wk/run.mjs --clean '<snapshot directory>'
+```
+
+Cleanup checks the root, snapshot name and manifest, refuses symlinks and a
+running native process, unregisters the exact app, then deletes only that
+snapshot. An already-absent LaunchServices entry (`-10814`) permits cleanup;
+other unregister failures preserve its files. The command cannot
+remove an arbitrary directory, a temporary collection outside the prepared
+root, or an installed application. It does not revoke OS grants itself;
+revoke those before unregistering and deleting a permission-test app.
 
 The loopback server serves only synthetic fixture routes and cookies on
 `127.0.0.1`, at an OS-selected port, accepting that host and `localhost`.
@@ -127,13 +176,20 @@ It is temporary test infrastructure; ordinary browser navigation needs no
 HTTP server and no background terminal task.
 
 ```sh
-node --test experiments/browser-wk/report.test.mjs experiments/browser-wk/fixture.test.mjs experiments/browser-wk/scroll/timing.test.mjs
-pnpm test
+node --test experiments/browser-wk/report.test.mjs experiments/browser-wk/fixture.test.mjs experiments/browser-wk/snapshot.test.mjs experiments/browser-wk/scroll/timing.test.mjs
+pnpm vitest run src/test/browser-permission-boundary.test.ts
 ```
 
 CI runs the Node suites separately. Vitest excludes `experiments/**`
-because these suites use `node:test`. A Vitest guard keeps device usage
-strings out of the real app and ordinary probe plist.
+because these suites use `node:test`. The app's Vitest guard reads only
+`src-tauri/Info.plist`; the experiment's Node suite checks its own plist.
+CI validates report structure, assessment and attachments. Hashes remain
+facts about the named source commit, without being compared with the current
+checkout. Editing the probe does not require collecting historical evidence
+again. Schema 1 recordings retain their original gate set; schema 2 separates
+hidden/fallback gates and validates the location callback counts. Schema 3
+also checks the API expectation for the launch path, including the required
+inherited media API in the authorized direct-child case.
 
 The named content world separates script globals; the DOM remains shared
 and page controlled. Typed fill data and a hostile page's replacement of

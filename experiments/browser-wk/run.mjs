@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
-import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot } from "./snapshot.mjs";
+import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const run = promisify(execFile);
@@ -44,11 +44,10 @@ async function main() {
   const cli = parseArguments(process.argv.slice(2));
   const { prepare, requestPermissions, direct, longHidden } = cli;
   const reuse = cli.reuse !== null;
-  keepRegistration = prepare;
   if (cli.clean) {
     const result = await removePreparedSnapshot(cli.clean, {
       isRunning: async root => (await recordedProcess(root)) !== null,
-      unregister: async app => { await run(launchServices, ["-u", app], options); },
+      unregister: app => unregisterApplication(app, run),
     });
     console.log(JSON.stringify(result));
     return;
@@ -140,10 +139,11 @@ async function main() {
   }
 
   if (longHidden && manifest.mode !== "zorvo") throw new Error("Long hidden measurements require the ordinary mode.");
-  await run(launchServices, ["-f", app], options);
   registered = true;
+  await run(launchServices, ["-f", app], options);
 
   if (prepare) {
+    keepRegistration = true;
     console.log("Prepared app: " + app);
     console.log("Reuse snapshot: " + outputDirectory);
   } else {
@@ -209,7 +209,7 @@ try {
     } catch (error) { console.error("Test process cleanup failed. " + error.message); }
   }
   if (registered && !keepRegistration) {
-    try { await run(launchServices, ["-u", path.join(outputDirectory, appName)], { timeout: 10_000 }); }
+    try { await unregisterApplication(path.join(outputDirectory, appName), run); }
     catch (error) { console.error("LaunchServices cleanup failed. " + error.message); process.exitCode = 1; }
   }
   if (fixture) {

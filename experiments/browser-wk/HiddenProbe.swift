@@ -169,7 +169,9 @@ extension Probe {
         && beforeImage["sha256"] as? String != afterImage["sha256"] as? String
       let reactionPassed =
         observed == expected && stateLatency <= 1000 && visualLatency <= 1000 && changed
-      let documentHidden = try await js(view, "document.hidden") as? Bool ?? true
+      guard let documentHidden = try await js(view, "document.hidden") as? Bool else {
+        throw ProbeFailure("WebKit returned no actual document visibility flag.")
+      }
       measurements.append([
         "mode": mode, "elapsedMs": elapsed * 1000, "documentHidden": documentHidden,
         "quietDurationMs": quietDuration, "lastFiveSecondsOfQuiet": quietWindow,

@@ -99,6 +99,12 @@ test("recorded reports validate and identify the source commit without pinning t
     const recorded = JSON.parse(await readFile(new URL("./results/" + name, import.meta.url), "utf8"));
     assert.deepEqual(recorded.assessment, assessReport(recorded, recorded.mode));
     assert.match(recorded.harness.sourceCommit, /^[a-f0-9]{40}$/);
+    if (recorded.schemaVersion >= 3) {
+      assert.match(recorded.harness.collectorCommit, /^[a-f0-9]{40}$/);
+      for (const source of ["run.mjs", "snapshot.mjs"]) {
+        assert.match(recorded.harness.collectorSources[source], /^[a-f0-9]{64}$/);
+      }
+    }
     for (const source of sources) {
       assert.match(recorded.harness.sources[source], /^[a-f0-9]{64}$/);
     }
@@ -211,6 +217,54 @@ test("recorded hidden, covered and minimized native captures match the measured 
     assert.equal(measurement.documentHidden, true);
     for (const image of [measurement.beforeImage, measurement.afterImage]) {
       const png = await readFile(new URL("./results/2026-11-20-background/" + image.file, import.meta.url));
+      assert.equal(createHash("sha256").update(png).digest("hex"), image.sha256);
+    }
+  }
+});
+
+test("the authorized direct launch and independent launch used the same signed snapshot", async () => {
+  const recordings = await Promise.all(["direct", "launchservices"].map(async launch =>
+    JSON.parse(await readFile(new URL(`./results/2026-11-20-${launch}.json`, import.meta.url), "utf8"))));
+  const [direct, independent] = recordings;
+  for (const key of ["sourceCommit", "binarySha256", "bundleInfoSha256", "buildManifestSha256", "identifier"]) {
+    assert.equal(direct.harness[key], independent.harness[key]);
+  }
+  assert.equal(direct.launchContext.launch, "direct");
+  assert.equal(independent.launchContext.launch, "launchservices");
+  assert.deepEqual(direct.mediaAuthorization, { camera: "authorized", microphone: "authorized" });
+  assert.notEqual(direct.launchContext.responsibleApplication.bundleIdentifier, direct.bundleIdentifier);
+  assert.equal(independent.launchContext.responsibleApplication.bundleIdentifier, independent.bundleIdentifier);
+  assert.equal(direct.assessment.status, "pass");
+  const denials = direct.results.filter(row => /^(camera|microphone) denied in /.test(row.gate));
+  assert.equal(denials.length, 6);
+  for (const row of denials) {
+    assert.equal(row.status, "pass");
+    assert.deepEqual(row.evidence, { callbacks: 1, result: "NotAllowedError" });
+  }
+  for (const recording of recordings) {
+    for (const row of recording.results.filter(row => row.gate.startsWith("capture APIs in "))) {
+      assert.equal(row.evidence.screen, "undefined");
+      assert.equal(row.evidence.usageStringBoundaryHolds, recording === independent);
+    }
+  }
+});
+
+test("long hidden captures follow both quiet windows and retain all four counter paths", async () => {
+  const recorded = JSON.parse(await readFile(new URL("./results/2026-11-20-long-hidden.json", import.meta.url), "utf8"));
+  const measurements = recorded.results.find(row => row.gate === "hidden lifecycle measurements").evidence;
+  assert.equal(hiddenInteractionPass(measurements, true), true);
+  for (const gate of ["hidden React interaction", "visible-window fallback interaction", "long hidden React interaction"]) {
+    assert.equal(recorded.results.find(row => row.gate === gate).status, "pass");
+  }
+  for (const mode of ["hidden-after-idle", "minimized-after-idle"]) {
+    const row = measurements.find(item => item.mode === mode);
+    for (const counter of ["timeouts", "intervals", "animationFrames", "fetches"]) {
+      assert.ok(Number.isInteger(row[counter]) && row[counter] >= 0);
+      assert.ok(Number.isInteger(row.lastFiveSecondsOfQuiet.counts[counter]) && row.lastFiveSecondsOfQuiet.counts[counter] >= 0);
+    }
+    assert.ok(row.lastFiveSecondsOfQuiet.sampleAgeMs >= 0);
+    for (const image of [row.beforeImage, row.afterImage]) {
+      const png = await readFile(new URL("./results/2026-11-20-long-hidden/" + image.file, import.meta.url));
       assert.equal(createHash("sha256").update(png).digest("hex"), image.sha256);
     }
   }

@@ -25,11 +25,11 @@ version is unchanged; the canonical browser minimum is macOS 12 at runtime.
 | --- | --- | --- |
 | **1. Store per session — partial** | Three independently configured Swift views use two non-persistent stores. Two views share `alpha`; the other session cannot read or overwrite it and retains `beta`. | The wry configuration path, `window.open`, scripts installed once, IPC after closing a sibling tab and absence of disk remnants. No store-by-identifier fallback is selected here. |
 | **2. Script boundary — partial** | Typed fill data remains literal. A forged global plus replacements of `document.querySelector`, `Element.prototype.matches` and `JSON.stringify` leave the isolated snapshot's input and serialized proof intact. The page cannot reach the isolated native frame handler. | This is Swift, not Rust. wry's IPC and Rust checks, hostile navigation generations and production element references remain untested. The DOM is shared and untrusted. |
-| **3. Hidden tab — observed pass for the standalone React case** | A scripted click changes React state and both the command snapshot and native image show the increment within one second, hidden, covered and minimized. Seven conditions measure timers, RAF, fetch, CPU and resident memory below. | Integration with the app, another Space, more page workloads and sustained cost. Hidden/minimized RAF stops; visible-window fallback measurements are below, with their limits. |
+| **3. Hidden tab — observed pass for the standalone React case** | The short hidden, covered and minimized cases pass independently of the visible fallback. After 190.7 seconds hidden and 180.6 seconds minimized without page commands, click plus state/native snapshots complete in 41.6 and 160.6 ms. Four counter paths and their last five quiet seconds are recorded below. | Integration with the app, another Space, more page workloads and sustained cost. Hidden/minimized RAF stops; visible-window fallback measurements are below, with their limits. |
 | **4. Usable snapshot — not exercised** | The local React fixture and native identities for same-origin and cross-origin frames are available. | The five real pages, accessible control names, open shadow roots, a full tree and references surviving until navigation. The probe's small state object is not that snapshot engine. |
 | **5. Input — partial** | An isolated-world native value setter and input event update a real React controlled input; button clicks trigger a React re-render. | A native `select` and sites that reject script events. These events do not become trusted user input. |
 | **6. Looping page — not exercised** | Normal temporary-app and loopback-fixture teardown is checked. | Five live tabs, `while (true) {}`, responsive Zorvo, ending that tab's WebContent process and memory reclamation. Normal exit does not prove this gate. |
-| **7. No capture — pass on macOS 27, OS matrix incomplete** | Zorvo-matching plist; ordinary JavaScript; guarded screen preference disabled before all three view creations. With the app's own Screen Recording grant, no `mediaDevices` in the top document or either iframe. Location returns error 1 through one public denial callback per realm. The two-string run keeps screen API absent and denies all six media requests through public callbacks. | An actual runtime below macOS 27 and integration into wry. Compilation for macOS 12 is not runtime coverage. |
+| **7. No capture — launch-dependent layer 1, OS matrix incomplete** | With independent LaunchServices launches, a Zorvo-matching plist exposes no `mediaDevices`; with two strings, public callbacks deny all media requests. In a direct-child run of the same signed binary, media APIs return but the screen preference still removes `getDisplayMedia`, and public delegates deny all six media and three location requests. | Direct shell/development/release launches cannot assume layer 1. The feature spec needs that limit, older-OS runtime coverage and integration into wry. Compilation for macOS 12 is not runtime evidence. |
 | **8. What loads — partial** | The fixture loads HTTP on both `127.0.0.1` and `localhost`. | The note's public HTTPS, public HTTP and `app.test` cases, under the real app's ATS policy. |
 | **9. Dialogs and file picker — not exercised** | No dialogs or file picker are implemented by this probe. | User and agent clicks, and outcomes for alert, confirm, prompt and file input. |
 | **10. Artifact/browser coexistence — not exercised** | The experiment is a separate native app. | Inspector placement coordination, switching between artifacts and browser, overlays and composer focus. |
@@ -57,7 +57,8 @@ is not part of these diagnostics.
 
 | Bundle declarations | mediaDevices, all three realms | getUserMedia | getDisplayMedia | Location |
 | --- | --- | --- | --- | --- |
-| None, matching Zorvo | undefined | undefined | undefined | error 1; one public callback per realm |
+| None, independent app matching Zorvo | undefined | undefined | undefined | error 1; one public callback per realm |
+| None, same signed binary as a direct Node child under ChatGPT/Codex responsibility | object | function | undefined | error 1; one public callback per realm |
 | Camera and microphone | object | function | undefined | error 1; one public callback per realm |
 | Camera only | object | function | undefined | error 1; one public callback per realm |
 | Microphone only | object | function | undefined | error 1; one public callback per realm |
@@ -97,23 +98,59 @@ revoked after collection. System Settings no longer lists the probe under
 Screen & System Audio Recording. The recorded results describe the granted
 test condition, not a permission left enabled on the developer's Mac.
 
-The tests launch via LaunchServices as independent applications. A direct
-child launch earlier in diagnosis inherited the launching app's privacy
-context and exposed APIs even without descriptions, so that run is not used
-as evidence for Zorvo's bundle policy. Source and bundle hashes, launch mode,
+The [recorded direct-child run](../../../experiments/browser-wk/results/2026-11-20-direct.json)
+names ChatGPT (`com.openai.codex`) as the responsible app. The launcher is the
+Node harness; the native parent PID is recorded without a resolved GUI app
+identity. Both camera and microphone authorization are `authorized` in this
+launch, and Screen Recording is granted through the parent context. It uses
+exactly the same signed binary as the new
+[LaunchServices comparison](../../../experiments/browser-wk/results/2026-11-20-launchservices.json),
+at source commit `98903abc`, with no camera, microphone or location
+description. All three direct-run realms expose `mediaDevices` and `getUserMedia`, while
+`getDisplayMedia` remains undefined. Each camera/microphone request returns
+`NotAllowedError` through one public callback, and location returns error 1
+through one public callback. WebAssembly and dynamic JavaScript still work.
+
+This is evidence against an unconditional layer-1 claim, including direct
+terminal starts of a development or release executable. The direct recording
+explicitly marks `usageStringBoundaryHolds: false`. Its launch-specific gate
+requires the inherited media API to be present before counting the public
+denials, so a no-grant parent with absent APIs cannot pass this third run.
+The narrower direct assessment passes. The paired independent launch has
+undetermined camera/microphone authorization and no `mediaDevices`; it is
+unverified only for its own Screen Recording grant. The earlier granted
+independent-app recording above covers that separate precondition. Other
+parent apps and older OS versions remain untested;
+the maintainer's [canonical-note update in #270](https://github.com/zakyirsyaad/zorvo/pull/270)
+records this limit rather than assuming declarations alone cover every launch.
+That separate update also adds this as the third launch required by spike 7.
+
+Source and bundle hashes, launch mode,
 OS authorizations, assessment scope and deployment target accompany the
 current reports. Intel compilation passes with a macOS 12 target; Intel
 runtime and any runtime below 27 remain unverified.
 
 The earlier [public, screen-SPI and restricted reports](../../../experiments/browser-wk/results/historical/)
 retain their original hashes as historical evidence. They are superseded
-configurations, not validation of the selected policy. CI now checks the
-current reports against the committed native source, fixture, plist,
-runner and validator so a stale public report fails.
+configurations, not validation of the selected policy. Each report names the
+commit that supplied its probe and hashes. CI validates its schema and
+assessment, leaving source comparison to that named commit rather than
+requiring new recordings after every later source edit. New collections also
+name the collector commit independently of the prepared binary's source.
+LaunchServices resolution now records only a boolean and the snapshot/app
+names; the earlier reports' absolute home paths have been removed.
+
+Every non-preparation run unregisters its temporary application in `finally`,
+including failures and reused snapshots. `--clean` validates a prepared
+snapshot, refuses a running process or linked paths, unregisters it and removes
+only that snapshot. Registration cleanup was also applied to the older local
+probe entries. These commands do not change installed applications or revoke
+OS grants; permission-test grants are revoked before cleanup.
 
 ## Hidden and covered React measurements
 
-One sequential run; each condition lasts about five seconds. The page
+The original granted-permission recording, at `f09ca7a3`, has one sequential
+run; each condition lasts about five seconds. The page
 renders a 100 ms timeout counter, an animation-frame counter and completed
 fetches from a loop with a 200 ms delay. Counts measure progress over the
 actual recorded interval, not a promised background frequency.
@@ -136,14 +173,67 @@ and [3 to 4 while minimized](../../../experiments/browser-wk/results/2026-11-20-
 Their corresponding before images are in the same folder, and CI verifies
 all six image hashes against the native report.
 
-**Background behavior:** the tested React click and snapshot work directly,
-but hidden/minimized views pause RAF and throttle timers to about once a
-second. A wait that depends on animation frames cannot assume progress
-there. Zero alpha, offscreen placement and a same-window cover retained
+**Background behavior:** the tested React click and snapshot work directly.
+The chained 100 ms timeout advances about once a second when hidden or
+minimized. The fetch loop's 200 ms timer, scheduled after an awaited response,
+advances much more often: 19 completed fetches in each approximately
+five-second hidden/minimized interval in this recording. RAF stops in those
+two states. A wait based on self-rearming timer polling, awaited network
+responses or animation frames therefore has three different progress
+patterns. Where the timer is scheduled may explain the difference, but this
+report does not establish WebKit's cause. The updated fixture also measures a
+plain 100 ms `setInterval` deliberately and records it separately below.
+Zero alpha, offscreen placement and a same-window cover retained
 roughly 60 RAF callbacks/s in this run, providing candidates when such
 progress is required. They were measured with the host window visible;
 they do not demonstrate foreground-rate scheduling while that window is
 minimized or on another Space. The feature spec must account for that limit.
+
+### Plain interval and longer hidden runs
+
+The [updated recording](../../../experiments/browser-wk/results/2026-11-20-long-hidden.json)
+uses source commit `4a6ce3f5`, with a fourth counter started by a plain 100 ms
+`setInterval`. Its short conditions record the following progress after each
+click, with the new counter shown separately:
+
+| Condition | Seconds | Chained 100 ms timeout | Plain 100 ms interval | RAF | Fetch completions |
+| --- | --- | --- | --- | --- | --- |
+| Visible | 5.06 | 49 | 49 | 303 | 25 |
+| Hidden | 5.25 | 5 | 5 | 0 | 16 |
+| Covered | 5.25 | 7 | 7 | 6 | 16 |
+| Minimized | 5.15 | 6 | 6 | 0 | 17 |
+
+This plain interval is also slowed in the hidden/minimized cases on this
+Mac; it does not justify treating every timer as a one-second timer. The
+fetch loop still progresses more frequently, while RAF stops in the hidden
+and minimized cases. Each wait must account for the path it uses.
+
+Two additional conditions leave the page alone for at least three minutes.
+No native page command runs during the quiet interval. Bounded page-side
+history records the four counters, then supplies their changes over the
+last five seconds before the first command. The pre-idle image and state
+are read before the quiet interval; the click and updated command/native
+snapshots follow it.
+
+| Condition | Actual quiet duration | Chained timeout / plain interval / RAF / fetch, last 5 quiet seconds | Click to command snapshot | Click to updated native image |
+| --- | --- | --- | --- | --- |
+| Hidden after idle | 190.67 s | 5 / 5 / 0 / 12 | 37.85 ms | 41.62 ms |
+| Minimized after idle | 180.64 s | 5 / 5 / 0 / 13 | 155.58 ms | 160.62 ms |
+
+Both conditions retain `documentHidden: true`; the second also records
+`windowMiniaturized: true`. The longer actual wakeup times are recorded,
+not rounded down to the requested 180 seconds. All short hidden conditions,
+the visible fallback and these long conditions have separate gates. A
+successful fallback never turns a failed hidden/minimized gate into a pass.
+The [four long-run crops](../../../experiments/browser-wk/results/2026-11-20-long-hidden/)
+show the React counter changing after each idle period.
+
+This collection has no independent Screen Recording grant. Its overall
+assessment therefore remains unverified for that permission precondition;
+the hidden-interaction gates themselves pass. The earlier granted capture
+recordings remain separate evidence. Another Space and longer workloads
+are still untested. Resource samples in the long rows cover the five seconds
+after the click, not the whole three-minute quiet period.
 
 The CPU values sum process CPU-time deltas for the host and the main view's
 WebContent PID over the recorded interval. Resident memory is a point
@@ -268,16 +358,21 @@ focused changes, after their own tests.
 
 ## Validation and next work
 
-Local checks: `pnpm lint`, the full `pnpm test` (344 files, 4,948 tests),
-`pnpm build`, and 18 Node regression tests pass. Swift compiles with
-warnings as errors for arm64 and x86_64, both targeting macOS 12.
+For this review update, `pnpm lint`, the app's permission-boundary Vitest
+file and 32 Node regression tests pass. The earlier full `pnpm test`
+(344 files, 4,948 tests) and `pnpm build` passed at `f09ca7a3`; CI runs the
+full app checks again on the updated head. Swift compiles with warnings as
+errors for arm64 and x86_64, both targeting macOS 12.
 No Rust runtime source changed, so no Rust check was rerun locally.
 SIGTERM cancellation was exercised: the exact native test PID ended and
 its loopback listener refused new connections afterward.
 
 The Node step is separate from Vitest; `experiments/**` is excluded from
-Vitest's default file discovery. Current-report source hashes and native
-PNG hashes are checked in CI as well as the validator and fixture behavior.
+Vitest's default file discovery. Reports name their source commit and retain
+source hashes as recorded evidence. CI checks structure, assessment and PNG
+attachments, without comparing source hashes with the checkout. A future
+probe or summary-script edit can merge without collecting old reports again.
+The app suite guards only the app plist; the experiment suite guards its own.
 
 The next work is completion and review of the canonical gate evidence,
 particularly older-OS coverage and the remaining wry paths, then the feature

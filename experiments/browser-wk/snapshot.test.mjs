@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, realpath, writeFile, access, symlink, rm } fr
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { appName, parseArguments, removePreparedSnapshot } from "./snapshot.mjs";
+import { appName, launchServices, parseArguments, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
 
 test("direct and long-hidden runs can reuse one prepared signed binary", () => {
   const options = parseArguments(["--reuse", "/tmp/example", "--direct", "--long-hidden"]);
@@ -55,6 +55,23 @@ test("a running snapshot or unregister error preserves every file", async t => {
     }), running ? /still running/ : /unregister failed/);
     assert.match(await readFile(path.join(directory, "build.json"), "utf8"), /xyz.zorvo/);
   }
+});
+
+test("an already-unregistered app can be cleaned but other LaunchServices errors remain failures", async t => {
+  const { root, directory } = await fixture(t);
+  const absent = Object.assign(new Error("already absent"), { code: 1, stderr: "failed to scan app: -10814\n from spotlight\n" });
+  for (const error of [new Error("access denied"), { ...absent, code: 2 }, { ...absent, signal: "SIGTERM" }, { ...absent, killed: true }]) {
+    await assert.rejects(unregisterApplication("test.app", async () => { throw error; }));
+  }
+  await removePreparedSnapshot(directory, {
+    root, isRunning: async () => false,
+    unregister: app => unregisterApplication(app, async (command, args) => {
+      assert.equal(command, launchServices);
+      assert.deepEqual(args, ["-u", path.join(directory, appName)]);
+      throw absent;
+    }),
+  });
+  await assert.rejects(access(directory));
 });
 
 test("outside roots, forged manifests and linked snapshots cannot be cleaned", async t => {

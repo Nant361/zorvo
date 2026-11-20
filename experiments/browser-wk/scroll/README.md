@@ -64,6 +64,9 @@ Once the selected runs finish, validate and summarize them.
 node experiments/browser-wk/scroll/summarize.mjs '<results directory>' opencode wk wk-split
 ```
 
+The summary records the summary source commit and its hashes as evidence,
+not a pin against later checkout edits. CI validates the saved structure and
+calculations without requiring a new recording after a script edit.
 The summary includes raw-file hashes, per-round frame-interval counts, the median,
 nearest-rank p95/p99 values, counts above 33.34 ms, and counts and percentages
 above 1.5 times each round's own median. It rejects hidden, interrupted or

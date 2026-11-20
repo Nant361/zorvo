@@ -1,0 +1,977 @@
+{
+  "bundleIdentifier": "xyz.zorvo.browser-spike.zorvo.zorvo-browser-wk-qjuj1o",
+  "launchContext": {
+    "application": {
+      "bundleIdentifier": "xyz.zorvo.browser-spike.zorvo.zorvo-browser-wk-qjuj1o",
+      "name": "Zorvo Browser Spike (zorvo)",
+      "pid": 23457
+    },
+    "launch": "launchservices",
+    "parent": {
+      "bundleIdentifier": "unresolved",
+      "name": "unresolved",
+      "pid": 1
+    },
+    "responsibleApplication": {
+      "bundleIdentifier": "xyz.zorvo.browser-spike.zorvo.zorvo-browser-wk-qjuj1o",
+      "name": "Zorvo Browser Spike (zorvo)",
+      "pid": 23457
+    }
+  },
+  "longHidden": true,
+  "mediaAuthorization": {
+    "camera": "not determined",
+    "microphone": "not determined"
+  },
+  "mode": "zorvo",
+  "os": "Version 27.0.1 (Build 26A434)",
+  "registeredApplication": {
+    "resolved": true,
+    "snapshotRelativePath": "zorvo-browser-wk-qjuj1o/Zorvo Browser Spike.app"
+  },
+  "results": [
+    {
+      "evidence": {
+        "otherSession": "",
+        "sameSession": "session=alpha"
+      },
+      "gate": "cookies per session",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "storeA": "alpha",
+        "storeB": "beta"
+      },
+      "gate": "no cookie overwrite across sessions",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "count": 1,
+        "input": "'); globalThis.__zorvoProbe = null; //",
+        "proof": "{\"isInput\":true}",
+        "source": "trusted",
+        "state": "0",
+        "title": "WK browser spike"
+      },
+      "gate": "isolated content world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "renderedValue": "'); globalThis.__zorvoProbe = null; //"
+      },
+      "gate": "React controlled input",
+      "status": "pass"
+    },
+    {
+      "evidence": "undefined,undefined",
+      "gate": "no app bridge in page world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "checkedConfigurations": 3,
+        "enabled": [
+          false,
+          false,
+          false
+        ]
+      },
+      "gate": "screen capture preference disabled",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "camera": false,
+        "location": false,
+        "microphone": false
+      },
+      "gate": "bundle usage declarations",
+      "status": "pass"
+    },
+    {
+      "evidence": "Canonical spike 7 also requires the test app's own Screen Recording grant.",
+      "gate": "screen recording grant precondition",
+      "status": "unverified"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "undefined",
+        "documentHasFocus": true,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "undefined",
+        "origin": "http://127.0.0.1:57198",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "camera denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "microphone denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "undefined",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "undefined",
+        "origin": "http://127.0.0.1:57198",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "camera denied in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "microphone denied in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "undefined",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "undefined",
+        "origin": "http://localhost:57198",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "camera denied in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 0,
+        "result": "unavailable"
+      },
+      "gate": "microphone denied in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": [
+        {
+          "afterImage": {
+            "elapsedMs": 3.0675000161863863,
+            "file": "visible-after.png",
+            "height": 90,
+            "sha256": "513e7dccf5fa0edac41156a577cf79f67f950eaf39185e4cea92d81d5b56b117",
+            "width": 340
+          },
+          "animationFrames": 303,
+          "beforeImage": {
+            "elapsedMs": 5.328041617758572,
+            "file": "visible-before.png",
+            "height": 90,
+            "sha256": "ba5a0521b3b90adc75ebd7c1bbb6032c6eda27a155bb6862a4df8b2f0edb3ce1",
+            "width": 340
+          },
+          "documentHidden": false,
+          "elapsedMs": 5060.193458339199,
+          "expectedState": "1",
+          "fetches": 25,
+          "intervals": 49,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "visible",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 17335714,
+                "pid": 23457,
+                "residentBytes": 104169472
+              },
+              {
+                "cpuNanoseconds": 24217852,
+                "pid": 23460,
+                "residentBytes": 65519616
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 10741608,
+                "pid": 23457,
+                "residentBytes": 104792064
+              },
+              {
+                "cpuNanoseconds": 8231714,
+                "pid": 23460,
+                "residentBytes": 58081280
+              }
+            ],
+            "cpuPercentOfOneCore": 0.4462328206600038,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "1",
+          "stateLatencyMs": 1.5073333634063601,
+          "timeouts": 49,
+          "visualLatencyMs": 4.656250006519258,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 3.2907500280998647,
+            "file": "hidden-after.png",
+            "height": 90,
+            "sha256": "41d6901c52e1df5641192d8f738af919027a8419925001348e85509b0aff6fb5",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 2.991125045809895,
+            "file": "hidden-before.png",
+            "height": 90,
+            "sha256": "513e7dccf5fa0edac41156a577cf79f67f950eaf39185e4cea92d81d5b56b117",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5246.724458353128,
+          "expectedState": "2",
+          "fetches": 16,
+          "intervals": 5,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "hidden",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 20635862,
+                "pid": 23457,
+                "residentBytes": 97075200
+              },
+              {
+                "cpuNanoseconds": 27043157,
+                "pid": 23460,
+                "residentBytes": 65650688
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 18154858,
+                "pid": 23457,
+                "residentBytes": 104251392
+              },
+              {
+                "cpuNanoseconds": 25322422,
+                "pid": 23460,
+                "residentBytes": 65667072
+              }
+            ],
+            "cpuPercentOfOneCore": 0.08008308866516817,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "2",
+          "stateLatencyMs": 5.250625021290034,
+          "timeouts": 5,
+          "visualLatencyMs": 8.611500030383468,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 3.2529582967981696,
+            "file": "covered-after.png",
+            "height": 90,
+            "sha256": "496e93ca33b2417a693a67c6298dda11225a2d2cfd3ce60e8a76d916b35f5a78",
+            "width": 340
+          },
+          "animationFrames": 6,
+          "beforeImage": {
+            "elapsedMs": 4.4104583212174475,
+            "file": "covered-before.png",
+            "height": 90,
+            "sha256": "41d6901c52e1df5641192d8f738af919027a8419925001348e85509b0aff6fb5",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5248.704458295833,
+          "expectedState": "3",
+          "fetches": 16,
+          "intervals": 7,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "covered",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 24841602,
+                "pid": 23457,
+                "residentBytes": 99762176
+              },
+              {
+                "cpuNanoseconds": 30517099,
+                "pid": 23460,
+                "residentBytes": 66076672
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 21888937,
+                "pid": 23457,
+                "residentBytes": 97189888
+              },
+              {
+                "cpuNanoseconds": 28367544,
+                "pid": 23460,
+                "residentBytes": 65765376
+              }
+            ],
+            "cpuPercentOfOneCore": 0.09720913113969853,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "3",
+          "stateLatencyMs": 4.523416631855071,
+          "timeouts": 7,
+          "visualLatencyMs": 7.871249981690198,
+          "windowMiniaturized": false,
+          "windowVisible": false
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 23.357333324383944,
+            "file": "minimized-after.png",
+            "height": 90,
+            "sha256": "cf59f28c143361b53fe31f3e5abfe6eac4f720e4c901547125d17c4c347ea592",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 5.47620834549889,
+            "file": "minimized-before.png",
+            "height": 90,
+            "sha256": "496e93ca33b2417a693a67c6298dda11225a2d2cfd3ce60e8a76d916b35f5a78",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5150.016500032507,
+          "expectedState": "4",
+          "fetches": 17,
+          "intervals": 6,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "minimized",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 28644870,
+                "pid": 23457,
+                "residentBytes": 100139008
+              },
+              {
+                "cpuNanoseconds": 32697572,
+                "pid": 23460,
+                "residentBytes": 57212928
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 25748430,
+                "pid": 23457,
+                "residentBytes": 100237312
+              },
+              {
+                "cpuNanoseconds": 31038566,
+                "pid": 23460,
+                "residentBytes": 58540032
+              }
+            ],
+            "cpuPercentOfOneCore": 0.08845497873591757,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "4",
+          "stateLatencyMs": 9.065291669685394,
+          "timeouts": 6,
+          "visualLatencyMs": 33.925208321306854,
+          "windowMiniaturized": true,
+          "windowVisible": false
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 2.8331250068731606,
+            "file": "zero-alpha-after.png",
+            "height": 90,
+            "sha256": "0d654a524760c079aa284853c60c7a6c92059f4fac351fe6cca148b668cd680e",
+            "width": 340
+          },
+          "animationFrames": 315,
+          "beforeImage": {
+            "elapsedMs": 3.2259583240374923,
+            "file": "zero-alpha-before.png",
+            "height": 90,
+            "sha256": "cf59f28c143361b53fe31f3e5abfe6eac4f720e4c901547125d17c4c347ea592",
+            "width": 340
+          },
+          "documentHidden": false,
+          "elapsedMs": 5246.703125012573,
+          "expectedState": "5",
+          "fetches": 25,
+          "intervals": 50,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "zero-alpha",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 37876125,
+                "pid": 23457,
+                "residentBytes": 99270656
+              },
+              {
+                "cpuNanoseconds": 52383474,
+                "pid": 23460,
+                "residentBytes": 77021184
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 29766231,
+                "pid": 23457,
+                "residentBytes": 100286464
+              },
+              {
+                "cpuNanoseconds": 33891396,
+                "pid": 23460,
+                "residentBytes": 57065472
+              }
+            ],
+            "cpuPercentOfOneCore": 0.5070226267078195,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "5",
+          "stateLatencyMs": 0.8945832960307598,
+          "timeouts": 50,
+          "visualLatencyMs": 3.79333330783993,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 4.788874997757375,
+            "file": "offscreen-after.png",
+            "height": 90,
+            "sha256": "e95f661030c5dcf85411b6e46719cf22e93cac26c76b89211db9c98fdf80e31c",
+            "width": 340
+          },
+          "animationFrames": 305,
+          "beforeImage": {
+            "elapsedMs": 3.793916665017605,
+            "file": "offscreen-before.png",
+            "height": 90,
+            "sha256": "0d654a524760c079aa284853c60c7a6c92059f4fac351fe6cca148b668cd680e",
+            "width": 340
+          },
+          "documentHidden": false,
+          "elapsedMs": 5153.218333318364,
+          "expectedState": "6",
+          "fetches": 25,
+          "intervals": 50,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "offscreen",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 46516096,
+                "pid": 23457,
+                "residentBytes": 99352576
+              },
+              {
+                "cpuNanoseconds": 70776372,
+                "pid": 23460,
+                "residentBytes": 81199104
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 38937441,
+                "pid": 23457,
+                "residentBytes": 99352576
+              },
+              {
+                "cpuNanoseconds": 54854054,
+                "pid": 23460,
+                "residentBytes": 77938688
+              }
+            ],
+            "cpuPercentOfOneCore": 0.45604458185001406,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "6",
+          "stateLatencyMs": 1.1558749829418957,
+          "timeouts": 50,
+          "visualLatencyMs": 6.07299996772781,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 3.484208311419934,
+            "file": "same-window-cover-after.png",
+            "height": 90,
+            "sha256": "96fadcbc9b1ea92adc08effce27d6a4e3eb70102ec324092c9acaa11a73e6feb",
+            "width": 340
+          },
+          "animationFrames": 314,
+          "beforeImage": {
+            "elapsedMs": 3.7913332926109433,
+            "file": "same-window-cover-before.png",
+            "height": 90,
+            "sha256": "e95f661030c5dcf85411b6e46719cf22e93cac26c76b89211db9c98fdf80e31c",
+            "width": 340
+          },
+          "documentHidden": false,
+          "elapsedMs": 5245.429750008043,
+          "expectedState": "7",
+          "fetches": 26,
+          "intervals": 50,
+          "lastFiveSecondsOfQuiet": {},
+          "mode": "same-window-cover",
+          "quietDurationMs": 0,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 54807769,
+                "pid": 23457,
+                "residentBytes": 99713024
+              },
+              {
+                "cpuNanoseconds": 88277483,
+                "pid": 23460,
+                "residentBytes": 82821120
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 47502644,
+                "pid": 23457,
+                "residentBytes": 99713024
+              },
+              {
+                "cpuNanoseconds": 72606921,
+                "pid": 23460,
+                "residentBytes": 81412096
+              }
+            ],
+            "cpuPercentOfOneCore": 0.43801343445624774,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "7",
+          "stateLatencyMs": 1.0452917194925249,
+          "timeouts": 50,
+          "visualLatencyMs": 4.608000046573579,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 3.682416630908847,
+            "file": "hidden-after-idle-after.png",
+            "height": 90,
+            "sha256": "22540cf7132b5a32ad452fd06aa969bf113d03d6ac4212b238e46aa56c498718",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 4.321166663430631,
+            "file": "hidden-after-idle-before.png",
+            "height": 90,
+            "sha256": "96fadcbc9b1ea92adc08effce27d6a4e3eb70102ec324092c9acaa11a73e6feb",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5247.1538333338685,
+          "expectedState": "8",
+          "fetches": 17,
+          "intervals": 6,
+          "lastFiveSecondsOfQuiet": {
+            "counts": {
+              "animationFrames": 0,
+              "fetches": 12,
+              "intervals": 5,
+              "timeouts": 5
+            },
+            "sampleAgeMs": 471,
+            "windowMs": 5000
+          },
+          "mode": "hidden-after-idle",
+          "quietDurationMs": 190673.36562497076,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 136514382,
+                "pid": 23457,
+                "residentBytes": 84918272
+              },
+              {
+                "cpuNanoseconds": 131132599,
+                "pid": 23460,
+                "residentBytes": 57491456
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 134178967,
+                "pid": 23457,
+                "residentBytes": 83476480
+              },
+              {
+                "cpuNanoseconds": 129789926,
+                "pid": 23460,
+                "residentBytes": 55984128
+              }
+            ],
+            "cpuPercentOfOneCore": 0.07009682042546604,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "8",
+          "stateLatencyMs": 37.84974996233359,
+          "timeouts": 6,
+          "visualLatencyMs": 41.61937499884516,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 4.943291656672955,
+            "file": "minimized-after-idle-after.png",
+            "height": 90,
+            "sha256": "fdcf13f0a7c00c157b029b6d49c70f60723b918eb9e45849d5f4962bb18b1ce7",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 2.996958326548338,
+            "file": "minimized-after-idle-before.png",
+            "height": 90,
+            "sha256": "22540cf7132b5a32ad452fd06aa969bf113d03d6ac4212b238e46aa56c498718",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5246.8797083129175,
+          "expectedState": "9",
+          "fetches": 14,
+          "intervals": 5,
+          "lastFiveSecondsOfQuiet": {
+            "counts": {
+              "animationFrames": 0,
+              "fetches": 13,
+              "intervals": 5,
+              "timeouts": 5
+            },
+            "sampleAgeMs": 166,
+            "windowMs": 5000
+          },
+          "mode": "minimized-after-idle",
+          "quietDurationMs": 180643.81033327663,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 165849198,
+                "pid": 23457,
+                "residentBytes": 81149952
+              },
+              {
+                "cpuNanoseconds": 172074836,
+                "pid": 23460,
+                "residentBytes": 43646976
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 164918868,
+                "pid": 23457,
+                "residentBytes": 79331328
+              },
+              {
+                "cpuNanoseconds": 170473107,
+                "pid": 23460,
+                "residentBytes": 35930112
+              }
+            ],
+            "cpuPercentOfOneCore": 0.0482583771834586,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "9",
+          "stateLatencyMs": 155.58033331763,
+          "timeouts": 5,
+          "visualLatencyMs": 160.61708331108093,
+          "windowMiniaturized": true,
+          "windowVisible": false
+        }
+      ],
+      "gate": "hidden lifecycle measurements",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "hiddenCoveredAndMinimizedPass": true
+      },
+      "gate": "hidden React interaction",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "sameWindowCoverPass": true
+      },
+      "gate": "visible-window fallback interaction",
+      "status": "pass"
+    },
+    {
+      "evidence": [
+        {
+          "afterImage": {
+            "elapsedMs": 3.682416630908847,
+            "file": "hidden-after-idle-after.png",
+            "height": 90,
+            "sha256": "22540cf7132b5a32ad452fd06aa969bf113d03d6ac4212b238e46aa56c498718",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 4.321166663430631,
+            "file": "hidden-after-idle-before.png",
+            "height": 90,
+            "sha256": "96fadcbc9b1ea92adc08effce27d6a4e3eb70102ec324092c9acaa11a73e6feb",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5247.1538333338685,
+          "expectedState": "8",
+          "fetches": 17,
+          "intervals": 6,
+          "lastFiveSecondsOfQuiet": {
+            "counts": {
+              "animationFrames": 0,
+              "fetches": 12,
+              "intervals": 5,
+              "timeouts": 5
+            },
+            "sampleAgeMs": 471,
+            "windowMs": 5000
+          },
+          "mode": "hidden-after-idle",
+          "quietDurationMs": 190673.36562497076,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 136514382,
+                "pid": 23457,
+                "residentBytes": 84918272
+              },
+              {
+                "cpuNanoseconds": 131132599,
+                "pid": 23460,
+                "residentBytes": 57491456
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 134178967,
+                "pid": 23457,
+                "residentBytes": 83476480
+              },
+              {
+                "cpuNanoseconds": 129789926,
+                "pid": 23460,
+                "residentBytes": 55984128
+              }
+            ],
+            "cpuPercentOfOneCore": 0.07009682042546604,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "8",
+          "stateLatencyMs": 37.84974996233359,
+          "timeouts": 6,
+          "visualLatencyMs": 41.61937499884516,
+          "windowMiniaturized": false,
+          "windowVisible": true
+        },
+        {
+          "afterImage": {
+            "elapsedMs": 4.943291656672955,
+            "file": "minimized-after-idle-after.png",
+            "height": 90,
+            "sha256": "fdcf13f0a7c00c157b029b6d49c70f60723b918eb9e45849d5f4962bb18b1ce7",
+            "width": 340
+          },
+          "animationFrames": 0,
+          "beforeImage": {
+            "elapsedMs": 2.996958326548338,
+            "file": "minimized-after-idle-before.png",
+            "height": 90,
+            "sha256": "22540cf7132b5a32ad452fd06aa969bf113d03d6ac4212b238e46aa56c498718",
+            "width": 340
+          },
+          "documentHidden": true,
+          "elapsedMs": 5246.8797083129175,
+          "expectedState": "9",
+          "fetches": 14,
+          "intervals": 5,
+          "lastFiveSecondsOfQuiet": {
+            "counts": {
+              "animationFrames": 0,
+              "fetches": 13,
+              "intervals": 5,
+              "timeouts": 5
+            },
+            "sampleAgeMs": 166,
+            "windowMs": 5000
+          },
+          "mode": "minimized-after-idle",
+          "quietDurationMs": 180643.81033327663,
+          "reactAndSnapshotWithinOneSecond": true,
+          "resources": {
+            "after": [
+              {
+                "cpuNanoseconds": 165849198,
+                "pid": 23457,
+                "residentBytes": 81149952
+              },
+              {
+                "cpuNanoseconds": 172074836,
+                "pid": 23460,
+                "residentBytes": 43646976
+              }
+            ],
+            "before": [
+              {
+                "cpuNanoseconds": 164918868,
+                "pid": 23457,
+                "residentBytes": 79331328
+              },
+              {
+                "cpuNanoseconds": 170473107,
+                "pid": 23460,
+                "residentBytes": 35930112
+              }
+            ],
+            "cpuPercentOfOneCore": 0.0482583771834586,
+            "scope": "Host and the main view's WebContent PID; GPU and other WebContent processes excluded"
+          },
+          "snapshotState": "9",
+          "stateLatencyMs": 155.58033331763,
+          "timeouts": 5,
+          "visualLatencyMs": 160.61708331108093,
+          "windowMiniaturized": true,
+          "windowVisible": false
+        }
+      ],
+      "gate": "long hidden React interaction",
+      "status": "pass"
+    }
+  ],
+  "schemaVersion": 2,
+  "screenRecordingGranted": false,
+  "assessment": {
+    "scope": "Standalone Zorvo-configuration observations for engine spikes 1, 2, 3 and 7",
+    "status": "unverified"
+  },
+  "harness": {
+    "collectedAt": "2026-11-20T12:00:59.113Z",
+    "node": "v22.23.5",
+    "mode": "zorvo",
+    "identifier": "xyz.zorvo.browser-spike.zorvo.zorvo-browser-wk-qjuj1o",
+    "sourceCommit": "4a6ce3f5e1ce0b6c251b901e914534c1b15736a6",
+    "arch": "arm64",
+    "target": "arm64-apple-macosx12.0",
+    "sources": {
+      "Probe.swift": "34eb6c980774d6360c53b6860d0621ac4f44d71cc701767aaee85000c6c0276a",
+      "HiddenProbe.swift": "252ee923d9a16450f492b6c153781e936fc3da6914f28f78f5ef643d058af4eb",
+      "Fixture.tsx": "2625dc5712abd9291633a61db076b71717223ea2e3eb10d8a6b962bc20d5e586",
+      "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
+      "Info.plist": "7a8a948bd4d2913257630a2da02817d40cc346dcb94bbbba704080a5c692191c",
+      "run.mjs": "79780337cdb071f9706c9685396523a4a23c86234d194bb0ebe558a32800cd3d",
+      "report.mjs": "bec43d1e42619fc879eba5ef473e432091e5df7b8805328ab2b919f2a95a4f5f",
+      "snapshot.mjs": "4e249f0fdfc66d67760a7235b114c769bde0dc4ba5a22ec7868ebe8dc8c7a783",
+      "fixture.bundle.js": "3f756ee47534a34d0f39f94f5a85f95ee52b912cf4a7ad2dbb4060f19d4d8932"
+    },
+    "usageStrings": [],
+    "binarySha256": "ede94ad4059a926806e732c7c4144564c6067ee3e4e8b1d5041b302784fd2e32",
+    "bundleInfoSha256": "79a75c2db2c8d446b7aafba11a764abca0f4349dc1fff0e0350997b166cf5497",
+    "buildManifestSha256": "0d3cceeae0364722e1cc6fbda859ed14483b0797e5b91b64ab4b9fdfe22733ec",
+    "reusedBinary": true,
+    "launch": "LaunchServices via open -W -n"
+  }
+}

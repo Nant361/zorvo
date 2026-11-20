@@ -36,6 +36,16 @@ export function parseArguments(args) {
   return options;
 }
 
+export async function unregisterApplication(app, execute) {
+  try {
+    await execute(launchServices, ["-u", app], { timeout: 10_000 });
+  } catch (error) {
+    // kLSApplicationNotFoundErr is the desired state after an earlier unregister.
+    if (error.code !== 1 || error.killed || error.signal ||
+      !/:\s*-10814(?:\s|$)/.test((error.stdout ?? "") + "\n" + (error.stderr ?? ""))) throw error;
+  }
+}
+
 export async function removePreparedSnapshot(directory, { unregister, isRunning, root = preparedRoot }) {
   // A cleanup request can delete only one real snapshot directly below our own root.
   const location = path.resolve(directory);
