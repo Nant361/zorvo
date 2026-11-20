@@ -123,7 +123,7 @@ export function ContextMeter({ used, size, cost, onOpen }: ContextMeterProps) {
           </dl>
           {percent !== null && percent >= WARN_AT && (
             <p className="mt-2 text-caption text-status-attention">
-              The window is nearly full; the agent may summarize or drop older context.
+              The window is nearly full. The agent may summarize older messages on its own.
             </p>
           )}
         </div>

@@ -194,6 +194,15 @@ describe("the Private chip in the draft", () => {
     expect(screen.getByText("1,240 credits left").closest("[data-private-line]")).not.toBeNull();
   });
 
+  it("says where the prompts go as soon as it is on, before the private models arrive", async () => {
+    render(<Draft credits={fakeCredits({ models: null, loadCatalog: vi.fn(() => new Promise<void>(() => {})) })} />);
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Private · TEE" })));
+
+    expect(screen.queryByRole("button", { name: /^Private model/ })).toBeNull();
+    expect(screen.getByText(/Qwen Code sends your prompts straight to NEAR AI\./).closest("[data-private-line]")).not.toBeNull();
+  });
+
   it("an on chip without credits blocks Send and points it at the reason", async () => {
     render(<Draft credits={fakeCredits({ status: { ...READY, balance: null } })} />);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Private · TEE" })));

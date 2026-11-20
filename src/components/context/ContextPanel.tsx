@@ -1,7 +1,7 @@
-import { useId, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronRight, RotateCw } from "lucide-react";
 import type { ChatMessage, ContextUsage } from "../../types";
-import { useContextBreakdown } from "../../hooks/useContextBreakdown";
+import { REPORTS_BREAKDOWN, useContextBreakdown } from "../../hooks/useContextBreakdown";
 import {
   agentFills,
   barParts,
@@ -150,13 +150,16 @@ export function ContextPanel(props: ContextPanelProps) {
   const { breakdown, files, isLoading, refresh } = useContextBreakdown(sessionId, agentId, cwd, turnsEnded);
   const totals = contextTotals(usage);
   const bar = barParts(totals, bufferOf(breakdown));
-  const fills = breakdown ? agentFills(breakdown) : totals.size > 0 ? zorvoFills(totals.used, transcriptChars(messages), files) : [];
+  // The chat's size changes with its messages, not with every streamed frame that renders the panel.
+  const messageChars = useMemo(() => transcriptChars(messages), [messages]);
+  const fills = breakdown ? agentFills(breakdown) : totals.size > 0 ? zorvoFills(totals.used, messageChars, files) : [];
+  const canRefresh = agentId === REPORTS_BREAKDOWN;
   const model = breakdown?.modelName;
 
   return (
     <aside aria-label="Context panel" className="flex h-full min-h-0 flex-1 flex-col text-ui text-fg-secondary">
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-5">
-        {(compactCommand || agentId === "qwen-code") && (
+        {(compactCommand || canRefresh) && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               {compactCommand && (
@@ -170,7 +173,7 @@ export function ContextPanel(props: ContextPanelProps) {
                   {compactCommand === "compress" ? "Compress context" : "Compact context"}
                 </Button>
               )}
-              {agentId === "qwen-code" && (
+              {canRefresh && (
                 <IconButton label="Refresh" size="sm" disabled={isLoading} onClick={refresh} className="ml-auto">
                   <RotateCw aria-hidden="true" className="size-3.5" />
                 </IconButton>

@@ -13,3 +13,7 @@ export function pluralOf(label: string): string {
   const lower = label.toLowerCase();
   return lower.endsWith("s") ? lower : `${lower}s`;
 }
+
+/** The model picker's look when it is joined to its agent's chip: no fill of its own, a hairline before it. */
+export const JOINED_MODEL_CHIP =
+  "focus-ring inline-flex h-7 max-w-[180px] items-center gap-1 whitespace-nowrap rounded-l-none rounded-r-md border-l border-border bg-transparent px-2 text-ui-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg aria-expanded:bg-surface-hover aria-expanded:text-fg";
