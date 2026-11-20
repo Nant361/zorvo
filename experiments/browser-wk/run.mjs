@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
 import { appName, launchServices, modes, parseArguments, preparedRoot, removePreparedSnapshot, unregisterApplication } from "./snapshot.mjs";
+import { assessReport as assessCurrentReport } from "./report.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const run = promisify(execFile);
@@ -44,6 +45,9 @@ async function main() {
   const cli = parseArguments(process.argv.slice(2));
   const { prepare, requestPermissions, direct, longHidden } = cli;
   const reuse = cli.reuse !== null;
+  // Prepared identities remain resolvable while macOS setup/approval and
+  // revocation happen outside this process. --clean owns their unregister.
+  keepRegistration = reuse;
   if (cli.clean) {
     const result = await removePreparedSnapshot(cli.clean, {
       isRunning: async root => (await recordedProcess(root)) !== null,
@@ -150,6 +154,7 @@ async function main() {
     if (await recordedProcess()) throw new Error("This snapshot's native probe is already running.");
     await rm(path.join(outputDirectory, "probe.pid"), { force: true });
     if (requestPermissions) {
+      keepRegistration = true;
       const resultPath = path.join(outputDirectory, "permission-setup.json");
       console.log("Permission setup: " + resultPath);
       launched = true;
@@ -181,7 +186,12 @@ async function main() {
       if (child.stdout) process.stdout.write(child.stdout);
       if (child.stderr) process.stderr.write(child.stderr);
       const report = JSON.parse(await readFile(resultPath, "utf8"));
+      if (report.longHidden !== longHidden || report.launchContext?.launch !== (direct ? "direct" : "launchservices")) {
+        throw new Error("Snapshot at source commit " + manifest.sourceCommit + " did not report the requested launch/hidden mode. Prepare a current snapshot.");
+      }
       report.assessment = assessReport(report, manifest.mode);
+      const currentAssessment = assessCurrentReport(report, manifest.mode);
+      if (JSON.stringify(currentAssessment) !== JSON.stringify(report.assessment)) throw new Error("The current validator disagrees with snapshot " + manifest.sourceCommit);
       report.harness = {
         collectedAt: new Date().toISOString(), node: process.version, ...manifest,
         collectorCommit: collectorCommit.trim(), collectorSources,

@@ -95,6 +95,18 @@ test("recorded reports validate and identify the source commit without pinning t
   const sources = ["Probe.swift", "HiddenProbe.swift", "Fixture.tsx", "fixture.mjs", "Info.plist", "run.mjs", "report.mjs"];
   const names = (await readdir(new URL("./results/", import.meta.url))).filter(name => name.endsWith(".json") && !name.includes("scroll"));
   assert.ok(names.length >= 4);
+  const expected = {
+    "2026-11-20-public.json": ["zorvo", 1], "2026-11-20-usage-strings.json": ["usage-strings", 1],
+    "2026-11-20-camera-only.json": ["camera-only", 1], "2026-11-20-microphone-only.json": ["microphone-only", 1],
+    "2026-11-20-direct.json": ["zorvo", 3], "2026-11-20-launchservices.json": ["zorvo", 3],
+    "2026-11-20-long-hidden.json": ["zorvo", 2],
+  };
+  for (const [name, [mode, version]] of Object.entries(expected)) {
+    assert.ok(names.includes(name), "Missing required evidence: " + name);
+    const value = JSON.parse(await readFile(new URL("./results/" + name, import.meta.url), "utf8"));
+    assert.equal(value.mode, mode);
+    assert.equal(value.schemaVersion ?? 1, version);
+  }
   for (const name of names) {
     const recorded = JSON.parse(await readFile(new URL("./results/" + name, import.meta.url), "utf8"));
     assert.deepEqual(recorded.assessment, assessReport(recorded, recorded.mode));
@@ -165,7 +177,7 @@ test("all three actual hidden conditions are required independently of the fallb
 test("long hidden evidence requires both three-minute quiet windows", () => {
   const rows = hiddenRows().filter(row => ["hidden", "minimized"].includes(row.mode)).map(row => ({
     ...row, mode: row.mode + "-after-idle", quietDurationMs: 180010,
-    lastFiveSecondsOfQuiet: { windowMs: 5000 },
+    lastFiveSecondsOfQuiet: { windowMs: 5100, oldestSampleAgeMs: 5100 },
   }));
   assert.equal(hiddenInteractionPass(rows, true), true);
   rows[1].quietDurationMs = 5000;
@@ -252,7 +264,7 @@ test("the authorized direct launch and independent launch used the same signed s
 test("long hidden captures follow both quiet windows and retain all four counter paths", async () => {
   const recorded = JSON.parse(await readFile(new URL("./results/2026-11-20-long-hidden.json", import.meta.url), "utf8"));
   const measurements = recorded.results.find(row => row.gate === "hidden lifecycle measurements").evidence;
-  assert.equal(hiddenInteractionPass(measurements, true), true);
+  assert.equal(hiddenInteractionPass(measurements, true, recorded.schemaVersion >= 4), true);
   for (const gate of ["hidden React interaction", "visible-window fallback interaction", "long hidden React interaction"]) {
     assert.equal(recorded.results.find(row => row.gate === gate).status, "pass");
   }
@@ -269,3 +281,9 @@ test("long hidden captures follow both quiet windows and retain all four counter
     }
   }
 });
+
+ test("a stale or suspended quiet history cannot pass", () => {
+ const rows=hiddenRows().filter(row=>["hidden","minimized"].includes(row.mode)).map(row=>({...row,mode:row.mode+"-after-idle",quietDurationMs:180100,lastFiveSecondsOfQuiet:{windowMs:5100,oldestSampleAgeMs:5100}}));
+ assert.equal(hiddenInteractionPass(rows,true),true);
+ for (const age of [2000,7000,180000]) { rows[0].lastFiveSecondsOfQuiet={windowMs:age,oldestSampleAgeMs:age}; assert.equal(hiddenInteractionPass(rows,true),false); }
+ });

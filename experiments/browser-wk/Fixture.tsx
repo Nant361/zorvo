@@ -8,7 +8,7 @@ const history: Sample[] = [{ ...activity, time: performance.now() }];
 declare global {
   interface Window {
     probeActivity: typeof activity;
-    probeRecentActivity: () => { windowMs: number; sampleAgeMs: number; counts: typeof activity };
+    probeRecentActivity: () => { windowMs: number; oldestSampleAgeMs: number; sampleAgeMs: number; counts: typeof activity };
   }
 }
 window.probeActivity = activity;
@@ -20,7 +20,8 @@ window.probeRecentActivity = () => {
     baseline = sample;
   }
   return {
-    windowMs: Math.min(5000, now - baseline.time),
+    windowMs: now - baseline.time,
+    oldestSampleAgeMs: now - baseline.time,
     sampleAgeMs: now - history[history.length - 1].time,
     counts: {
       timeouts: activity.timeouts - baseline.timeouts,

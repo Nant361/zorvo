@@ -23,7 +23,7 @@ const modes = {
 
 export function requiredChecks(mode, version = 1, longHidden = false) {
   if (!Object.hasOwn(modes, mode)) throw new Error("Invalid probe mode.");
-  if (![1, 2, 3].includes(version)) throw new Error("Unsupported report schema.");
+  if (![1, 2, 3, 4].includes(version)) throw new Error("Unsupported report schema.");
   const required = [...modes[mode].required];
   if (version >= 2 && mode === "zorvo") {
     required.push("visible-window fallback interaction");
@@ -32,7 +32,7 @@ export function requiredChecks(mode, version = 1, longHidden = false) {
   return required;
 }
 
-export function hiddenInteractionPass(measurements, delayed = false) {
+export function hiddenInteractionPass(measurements, delayed = false, accurateSpan = true) {
   const names = delayed ? ["hidden-after-idle", "minimized-after-idle"] : ["hidden", "covered", "minimized"];
   if (!Array.isArray(measurements)) return false;
   return names.every(name => {
@@ -45,7 +45,9 @@ export function hiddenInteractionPass(measurements, delayed = false) {
       row.beforeImage.sha256 !== row.afterImage.sha256 &&
       (!name.startsWith("minimized") || row.windowMiniaturized === true) &&
       (name !== "covered" || row.windowVisible === false) &&
-      (!delayed || (row.quietDurationMs >= 180000 && row.lastFiveSecondsOfQuiet?.windowMs >= 4990));
+      (!delayed || (row.quietDurationMs >= 180000 &&
+        (accurateSpan ? row.lastFiveSecondsOfQuiet?.windowMs >= 5000 && row.lastFiveSecondsOfQuiet.windowMs <= 6500 &&
+        row.lastFiveSecondsOfQuiet.oldestSampleAgeMs >= 5000 && row.lastFiveSecondsOfQuiet.oldestSampleAgeMs <= 6500 : row.lastFiveSecondsOfQuiet?.windowMs >= 4990)));
   });
 }
 
@@ -76,6 +78,12 @@ export function assessReport(report, mode) {
   if (version >= 2) {
     if (typeof report.longHidden !== "boolean") throw new Error("Missing hidden-run scope.");
     for (const row of report.results) {
+      if (version >= 4 && row.gate.startsWith("capture APIs in ") && row.status === "unverified") {
+        if (report.launchContext?.launch !== "direct" || row.evidence?.mediaDevices !== "undefined" ||
+          row.evidence?.screen !== "undefined" || !row.evidence?.inheritedAuthorization) {
+          throw new Error("Unverified capture surface must name the unexercised inherited authorization.");
+        }
+      }
       if (version >= 3 && row.status === "pass" && row.gate.startsWith("capture APIs in ")) {
         const evidence = row.evidence;
         const direct = report.launchContext?.launch === "direct";
@@ -94,7 +102,7 @@ export function assessReport(report, mode) {
       const measurements = report.results.find(row => row.gate === "hidden lifecycle measurements")?.evidence;
       for (const [gate, delayed] of [["hidden React interaction", false], ["long hidden React interaction", true]]) {
         const row = report.results.find(row => row.gate === gate);
-        if (row?.status === "pass" && !hiddenInteractionPass(measurements, delayed)) {
+        if (row?.status === "pass" && !hiddenInteractionPass(measurements, delayed, version >= 4)) {
           throw new Error("Hidden interaction pass contradicts the recorded conditions.");
         }
       }

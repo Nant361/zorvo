@@ -118,7 +118,7 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       let registered = NSWorkspace.shared.urlForApplication(
         withBundleIdentifier: Bundle.main.bundleIdentifier ?? "missing")
       let output: [String: Any] = [
-        "schemaVersion": 3, "longHidden": longHidden, "launchContext": launchContext(),
+        "schemaVersion": 4, "longHidden": longHidden, "launchContext": launchContext(),
         "os": ProcessInfo.processInfo.operatingSystemVersionString,
         "mode": args[3],
         "bundleIdentifier": Bundle.main.bundleIdentifier ?? "missing",
@@ -363,7 +363,12 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       ])
     record(
       "screen recording grant precondition", CGPreflightScreenCaptureAccess() ? true : nil,
-      "Canonical spike 7 also requires the test app's own Screen Recording grant.")
+      [
+        "required": "Screen Recording authorization in the responsible process context",
+        "responsibleApplication": launchContext()["responsibleApplication"] ?? [:],
+        "independentApplication": ProcessInfo.processInfo.environment["ZORVO_BROWSER_SPIKE_LAUNCH"]
+          != "direct",
+      ])
 
     for (label, address) in [
       ("same-origin frame", "http://127.0.0.1:\(args[1])/?same"),
@@ -443,16 +448,28 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       ? present : expectedSurface == "absent" ? absent : absent || present
     surfaces["expectedMediaDevices"] = expectedSurface
     surfaces["usageStringBoundaryHolds"] = absent
+    surfaces["inheritedAuthorization"] = [
+      "camera": authorizationName(.video), "microphone": authorizationName(.audio),
+    ]
+    let surfaceValid =
+      surfaces["secure"] as? Bool == true
+      && surfaces["screen"] as? String == "undefined" && surfaces["wasm"] as? String == "object"
+      && surfaces["dynamicJavaScript"] as? Int == 42
     record(
       "capture APIs in " + label,
-      surfaces["secure"] as? Bool == true && expected
-        && surfaces["screen"] as? String == "undefined" && surfaces["wasm"] as? String == "object"
-        && surfaces["dynamicJavaScript"] as? Int == 42, surfaces)
+      inherited && absent && surfaceValid ? nil : surfaceValid && expected, surfaces)
 
     // A single usage string exposes mediaDevices, but the undeclared device can
     // terminate the app in TCC before our delegate. These modes observe APIs only.
     if usesCamera == usesMicrophone {
       for (kind, constraints) in [("camera", "{video:true}"), ("microphone", "{audio:true}")] {
+        let authorization = authorizationName(kind == "camera" ? .video : .audio)
+        if inherited && authorization != "authorized" {
+          record(
+            kind + " denied in " + label, nil,
+            ["result": "not attempted", "callbacks": 0, "inheritedAuthorization": authorization])
+          continue
+        }
         let before = mediaDecisions
         let outcome = try await asyncJS(
           view,
