@@ -51,10 +51,8 @@ pub fn check_url(url: &str) -> UrlCheck {
 
     let mut warnings = Vec::new();
     match parsed.host() {
-        Some(Host::Domain(domain)) => {
-            if domain.split('.').any(|label| label.starts_with("xn--")) {
-                warnings.push(UrlWarning::Punycode);
-            }
+        Some(Host::Domain(domain)) if domain.split('.').any(|label| label.starts_with("xn--")) => {
+            warnings.push(UrlWarning::Punycode);
         }
         Some(Host::Ipv4(_) | Host::Ipv6(_)) if !is_loopback(&host) => {
             warnings.push(UrlWarning::IpAddress);
