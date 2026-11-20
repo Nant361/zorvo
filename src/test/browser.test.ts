@@ -32,3 +32,10 @@ it("offers the wide Browser tab only for a session", () => {
   expect(offeredTabs({ hasFolder: true, isRepository: false, hasSession: false })).not.toContain("browser");
   expect(minInspectorWidth("browser")).toBe(560);
 });
+
+it("searches for text whose first word ends in a colon instead of reading it as a scheme", () => {
+  for (const text of ["TODO: fix login", "python: list comprehension", "error: cannot find module"]) {
+    expect(browserAddress(text)).toBe("https://www.google.com/search?q=" + encodeURIComponent(text));
+  }
+  expect(() => browserAddress("mailto:someone@example.com")).toThrow();
+});

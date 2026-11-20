@@ -315,7 +315,7 @@ pub fn close(app: &AppHandle, session: Option<&str>) {
     std::thread::spawn(move || drop(removed));
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn browser_runtime_status(app: AppHandle) -> Result<Value, String> {
     let root = app
         .path()

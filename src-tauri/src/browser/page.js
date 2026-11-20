@@ -81,7 +81,8 @@
     return elements.slice(0, 1000);
   }
   const describe = el => ({ref: ref(el), role: el.getAttribute('role') || el.localName, name: name(el),
-    ...(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement ? {value: bounded(el.value), type: el.type, disabled: el.disabled} : {}),
+    // A password stays in the page: its type and ref are enough to fill the field.
+    ...(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement ? {...(el.type === 'password' ? {} : {value: bounded(el.value)}), type: el.type, disabled: el.disabled} : {}),
     ...(el instanceof HTMLInputElement && ['checkbox','radio'].includes(el.type) ? {checked: el.checked} : {}),
     ...(el instanceof HTMLAnchorElement ? {url: bounded(el.href, 8192)} : {})});
   function fill(el, value) {
