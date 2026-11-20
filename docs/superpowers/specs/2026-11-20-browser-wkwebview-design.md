@@ -1,9 +1,9 @@
 # Browser: a native view beside the chat
 
 Date: 2026-11-20. Status: design and spike evidence, waiting for review.
-The public per-view restriction passes the permission spike on macOS 27.0.1.
-Its compatibility costs and the supported OS matrix need review before the
-engine implementation.
+The proposed browser preserves WebKit's normal JavaScript configuration.
+Permission-denial coverage and the supported OS matrix need review before
+engine implementation. The restricted configuration remains an experiment.
 
 This replaces the CEF implementation in PR #256, following the
 [review](https://github.com/zakyirsyaad/zorvo/pull/256#pullrequestreview-5984396049)
@@ -55,6 +55,10 @@ The screen deny callback tested here lives in
 [`WKUIDelegatePrivate.h`](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/API/Cocoa/WKUIDelegatePrivate.h),
 outside the public SDK. Both selector shapes are confined to the optional
 `--screen-spi` diagnostic. The restricted run does not enable them.
+The repeated SPI run with the current harness records a trusted, active native
+click, one screen-denial callback and `NotAllowedError`, while ordinary
+JavaScript remains enabled. Camera and microphone each record a separate
+denial callback. This supplies a compatibility-preserving option for API review.
 
 The new public-only option sets
 [`WKWebpagePreferences.isLockdownModeEnabled`](https://developer.apple.com/documentation/webkit/wkwebpagepreferences/islockdownmodeenabled)
@@ -64,6 +68,18 @@ capture APIs. The spike confirms that JavaScript works and the context is
 secure before testing API absence. It also repeats session sharing/isolation,
 the isolated command world and hidden-tab commands with the restriction on.
 The option leaves the system setting alone.
+
+Preserve the ordinary site's JavaScript configuration in the proposed browser.
+The restricted run establishes an alternative for review, with its compatibility
+and performance costs measured separately. Promoting it to the browser's default
+would require an explicit product decision. The default-delegate run and the
+SPI diagnostic show the remaining permission-policy question on this Mac.
+
+HTTP response-header rewriting has not supplied another demonstrated solution.
+WebKit's upstream implementation says declared policy is unimplemented in
+[`featureValueForOrigin`](https://github.com/WebKit/WebKit/blob/e958e39c186465927650068356ef76d143fb709a/Source/WebCore/html/PermissionsPolicy.cpp#L418).
+Applying an iframe policy would also require validating sites that reject framing.
+The native child-view design keeps ordinary top-level navigation.
 
 The browser page and chat must use separate child views. Restricting a view
 that also renders the chat changes the chat workload and fails to represent
@@ -197,8 +213,9 @@ layouts and scheduling. They supply no native scroll latency measurement.
 ## Review and delivery order
 
 1. Independent Clippy and transport PRs (#257, #258).
-2. This design plus reproducible spikes. Review the public per-view restriction,
-   location coverage, OS matrix and performance criteria before engine work.
+2. This design plus reproducible spikes. Review a denial strategy that preserves
+   ordinary JavaScript, location coverage, OS matrix and performance criteria.
+   The restricted configuration remains an evaluated alternative.
 3. Engine and native view with the integrated lifetime/permission-denial tests.
 4. Agent operations and session grant with denial, cancellation, stale-ref,
    cross-session and capture-cleanup tests.
@@ -211,3 +228,31 @@ Ordered tabs, live-session limits, grant checks, safe address handling and
 non-revealing captures remain acceptance criteria for the WK implementation.
 The old UI and engine are not being presented as reviewed fixes or shipped
 alongside this design.
+
+## Review disposition
+
+The current PR changes the design, standalone experiments and their CI test
+step. Application source, package/Cargo manifests, lockfiles, Tauri settings
+and packaging scripts match the base revision. This retires the implementation referenced by the outdated inline
+threads. The following requirements carry into the focused implementation PRs.
+
+| Original finding | Acceptance in its implementation PR |
+| --- | --- |
+| Chat file names treated as sites | Explicit intent checks with `main.py`, `Cargo.lock`, `App.jsx`, `server.go`, `schema.sql`, `index.vue` and `tailwind.config.mjs` regressions. Address-bar parsing has a separate entry point. |
+| Agent browser call without permission | Session grant before every operation path, with concurrent calls, denial and cancellation tests. |
+| Shortcut replay on remount | Button actions and Escape for picking. Inspector remounts preserve the page without replaying commands. |
+| Worker captures and children left behind | Native resource disposal on final-tab close, session end, timeout, crash and shutdown. Captures expire with their session. |
+| Main-binary browser entitlements | Existing main-binary signing and CSP boundary, verified from the release bundle. |
+| Arbitrary tab order | Ordered records with stable creation order through opening and closing tabs. |
+| Historical sessions exhausting the cap | Reclaim a session's browser on final-tab close and test reuse across more sessions than the live limit. |
+| Screenshots stealing the Inspector | User actions reveal the panel. Agent reads and captures preserve the user's selection. |
+| Third dependency build for universal helpers | Native OS WebKit linked through the existing application targets. |
+| Browser pump waking indefinitely | Native view scheduling and lifetime tests after the last tab closes. |
+| CodeQL expression construction | Fixed helpers with typed `callAsyncJavaScript` arguments and injection regression inputs. Explicit page evaluation remains separately authorized. |
+
+The main review's keyboard, Inspector, design-system, English-copy and focused-hook
+requirements are specified above. README privacy and the implemented-tool
+inventory change together when the corresponding feature ships. Independent
+fixes remain in #257 and #258. CI and Security runs on the latest contributor
+commits require the repository maintainer's approval. Vercel additionally
+requires the owning team's deployment authorization.

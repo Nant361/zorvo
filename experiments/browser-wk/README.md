@@ -39,7 +39,10 @@ denial. The test does not select a capture surface or record a screen stream.
 Camera, microphone and location requests are denied by the test delegates.
 
 The runner prints the JSON report path under the OS temporary directory.
-It returns 2 if a recorded check fails or remains unverified. The interactive
+It validates the complete set of checks for the selected mode before assessing
+the report. Empty, partial, duplicate or malformed results fail validation.
+The report records its assessment scope. It returns 2 if a recorded check fails
+or remains unverified. The interactive
 modes include an unverified scroll-performance gate. Restricted mode tests
 only permissions and isolation and can return 0 for those checks on macOS 27.
 The [separate renderer workload](scroll/README.md) measures scripted scrolling
@@ -52,6 +55,21 @@ The server binds only `127.0.0.1` on an OS-selected port and serves only a
 synthetic page and synthetic cookies. It is intentionally temporary test
 infrastructure; regular browser navigation needs no HTTP server. The runner
 closes it in `finally`, including compilation, startup or test failures.
+Active fixture connections are closed during teardown as well. The fixture
+accepts only GET requests for its declared routes with the selected loopback
+port and either the `127.0.0.1` or `localhost` host.
+
+The runner copies the Swift source, fixture, plist and runner modules into its
+temporary output directory before compilation. It compiles that Swift snapshot
+and loads that fixture and validator snapshot. Report hashes identify the
+snapshots, so editing the checkout during a long test cannot change the sources
+the report attributes to the run. Node version and compilation target are recorded.
+
+Run the regression checks for report validation and fixture request handling.
+
+```sh
+node --test experiments/browser-wk/report.test.mjs experiments/browser-wk/fixture.test.mjs
+```
 
 The named content world is a JavaScript-variable boundary. The DOM is shared
 and still controlled by the page. The example dispatcher and its two operations
@@ -63,9 +81,10 @@ Recorded runs on macOS 27.0.1, arm64:
 - [Diagnostic screen SPI](results/2026-11-20-screen-spi.json): screen denial passed; scroll performance unverified.
 - [Public per-view restriction](results/2026-11-20-restricted.json) passes ten permission and isolation checks on macOS 27.0.1. It uses no display-capture SPI.
 
-Reports include hashes of the exact Swift source and fixture. The default and
-SPI reports were collected from commit `4aa6cc8c`. The restricted report uses
-the source in this change. Their small frame samples do not measure trackpad
+Reports include hashes of the exact Swift source and fixture. The default
+report was collected from commit `4aa6cc8c`. The restricted and SPI reports use
+the snapshotted source in this change. The renderer comparison was collected
+from `01d6063b`, as verified by its manifest. Their small frame samples do not measure trackpad
 parity with OpenCode. Intel compilation passes, while Intel runtime and older
 macOS runtime coverage remain open.
 
@@ -73,3 +92,10 @@ The restricted probe records native frame identities through a diagnostic
 handler in the isolated content world. The page-world check verifies that
 this handler remains inaccessible there. This permits native evaluation in a
 cross-origin frame without trusting page messages about its capabilities.
+
+The current SPI run repeats a trusted native screen-request click with ordinary
+JavaScript settings. Camera, microphone and screen each require their own
+native denial callback to count as passing. Location is explicitly denied as
+well. Its native scroll smoke check passes and its separate performance check
+remains unverified, so the runner correctly exits with status 2. CI runs the
+report-validation and loopback-fixture regression tests on Linux.

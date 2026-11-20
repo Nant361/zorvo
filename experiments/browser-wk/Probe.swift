@@ -204,14 +204,18 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       try await checkRestrictedPermissions(a1)
       return
     }
+    let beforeCamera = mediaDecisions
     let camera = try await permission(
       a1, "camera",
       "navigator.mediaDevices.getUserMedia({video:true}).then(s=>{s.getTracks().forEach(t=>t.stop());permissionResults.camera='GRANTED'},e=>permissionResults.camera=e.name)"
     )
+    let cameraDecisions = mediaDecisions - beforeCamera
+    let beforeMicrophone = mediaDecisions
     let mic = try await permission(
       a1, "microphone",
       "navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{s.getTracks().forEach(t=>t.stop());permissionResults.microphone='GRANTED'},e=>permissionResults.microphone=e.name)"
     )
+    let microphoneDecisions = mediaDecisions - beforeMicrophone
     var geo = "unsupported public delegate"
     if #available(macOS 27.0, *) {
       geo = try await permission(
@@ -220,11 +224,11 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       )
     }
     record(
-      "camera denied", camera == "NotAllowedError",
-      ["result": camera, "delegateCalls": mediaDecisions])
+      "camera denied", camera == "NotAllowedError" && cameraDecisions > 0,
+      ["result": camera, "delegateCalls": cameraDecisions])
     record(
-      "microphone denied", mic == "NotAllowedError",
-      ["result": mic, "delegateCalls": mediaDecisions])
+      "microphone denied", mic == "NotAllowedError" && microphoneDecisions > 0,
+      ["result": mic, "delegateCalls": microphoneDecisions])
     record(
       "geolocation denied",
       geo == "unsupported public delegate" ? nil : geo == "1" && locationDecisions > 0,
@@ -310,7 +314,9 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
       }
     record("restricted capture in top document and subframe", protected, surfaces)
     guard #available(macOS 27.0, *) else {
-      record("geolocation denied", nil, "This runtime has no public geolocation deny delegate.")
+      record("location denied in document", nil, "The public location delegate requires macOS 27.")
+      record("location denied in frame", nil, "The public location delegate requires macOS 27.")
+      try await checkCrossOriginFrame(tab)
       return
     }
     for (label, target) in [
@@ -372,6 +378,12 @@ final class Probe: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         && surface["cameraOrMicrophone"] as? String == "undefined"
         && surface["screen"] as? String == "undefined"
         && surface["legacy"] as? String == "undefined", surface)
+    guard #available(macOS 27.0, *) else {
+      record(
+        "location denied in cross-origin frame", nil,
+        "The public location delegate requires macOS 27.")
+      return
+    }
     let before = locationDecisions
     let outcome: Any = try await withCheckedThrowingContinuation { continuation in
       tab.callAsyncJavaScript(

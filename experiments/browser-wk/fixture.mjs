@@ -20,7 +20,13 @@ ${Array.from({length:200},(_,i)=>`<section>Row ${i}</section>`).join('')}`;
 
 export async function startFixture() {
   const server=http.createServer((req,res)=>{
+    const port=server.address().port;
+    if(![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) {
+      res.writeHead(403).end();return;
+    }
+    if(req.method!=='GET') {res.writeHead(405,{'Allow':'GET'}).end();return;}
     const url=new URL(req.url,'http://localhost');
+    if(!['/','/seed','/who'].includes(url.pathname)) {res.writeHead(404).end();return;}
     res.setHeader('Cache-Control','no-store');
     if(url.pathname==='/seed') {
       const value=url.searchParams.get('value');

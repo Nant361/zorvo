@@ -55,7 +55,7 @@
     },
     {
       "evidence": {
-        "delegateCalls": 2,
+        "delegateCalls": 1,
         "result": "NotAllowedError"
       },
       "gate": "camera denied",
@@ -63,7 +63,7 @@
     },
     {
       "evidence": {
-        "delegateCalls": 2,
+        "delegateCalls": 1,
         "result": "NotAllowedError"
       },
       "gate": "microphone denied",
@@ -90,9 +90,9 @@
     },
     {
       "evidence": {
-        "frames": 7,
-        "p95": 17,
-        "y": 1040
+        "frames": 6,
+        "p95": 18,
+        "y": 1184
       },
       "gate": "native scroll smoke check",
       "status": "pass"
@@ -103,11 +103,25 @@
       "status": "unverified"
     }
   ],
+  "assessment": {
+    "scope": "Diagnostic screen-SPI permission, isolation and scroll checks",
+    "status": "unverified"
+  },
   "harness": {
-    "collectedAt": "2026-11-19T23:34:08.574Z",
+    "collectedAt": "2026-11-20T00:50:41.563Z",
     "arch": "arm64",
-    "sourceSha256": "ced91498addf5ea9f3763fbd6a569e4ca0d42f358713e16fa976f3c7695709e7",
-    "fixtureSha256": "62ca25ceb24206d690e90f4e126c9b25dd27a3d0a8bf780e70850fd680009d96",
-    "screenSPI": true
+    "target": "arm64-apple-macosx12.0",
+    "node": "v22.23.5",
+    "sources": {
+      "Probe.swift": "ce27577ca515c19e78d4f107f9a90e660279858c5e138325efcbe49545ef9594",
+      "fixture.mjs": "691eb2bb187aea9532e35369492de48059ac3d8118154f77a299b78b80854fad",
+      "Info.plist": "87e95a346b2d42410c4ee0cf24f7d7a25d2a505dfbb6ca92d876ff9a5e090926",
+      "run.mjs": "0aa1e28fd68905cc56dab211daa428d774cb860b99db581b7bb19d2516a7b126",
+      "report.mjs": "b29743c7fffcfe96c73084551ab9f93ab699633a7279d61a2316db6b7ab1442a"
+    },
+    "sourceSha256": "ce27577ca515c19e78d4f107f9a90e660279858c5e138325efcbe49545ef9594",
+    "fixtureSha256": "691eb2bb187aea9532e35369492de48059ac3d8118154f77a299b78b80854fad",
+    "screenSPI": true,
+    "restricted": false
   }
 }

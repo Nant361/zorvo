@@ -93,7 +93,7 @@
       "evidence": {
         "cameraOrMicrophone": "undefined",
         "legacy": "undefined",
-        "origin": "http://localhost:61177",
+        "origin": "http://localhost:62891",
         "screen": "undefined",
         "secure": true
       },
@@ -109,11 +109,24 @@
       "status": "pass"
     }
   ],
+  "assessment": {
+    "scope": "Restricted-view permission and isolation checks",
+    "status": "pass"
+  },
   "harness": {
-    "collectedAt": "2026-11-20T00:26:28.442Z",
+    "collectedAt": "2026-11-20T00:46:38.723Z",
     "arch": "arm64",
-    "sourceSha256": "8977b6e48f1acf3b4c38a173557e95870287fa01bc475340298bf9f95e4962bb",
-    "fixtureSha256": "62ca25ceb24206d690e90f4e126c9b25dd27a3d0a8bf780e70850fd680009d96",
+    "target": "arm64-apple-macosx12.0",
+    "node": "v22.23.5",
+    "sources": {
+      "Probe.swift": "ce27577ca515c19e78d4f107f9a90e660279858c5e138325efcbe49545ef9594",
+      "fixture.mjs": "691eb2bb187aea9532e35369492de48059ac3d8118154f77a299b78b80854fad",
+      "Info.plist": "87e95a346b2d42410c4ee0cf24f7d7a25d2a505dfbb6ca92d876ff9a5e090926",
+      "run.mjs": "0aa1e28fd68905cc56dab211daa428d774cb860b99db581b7bb19d2516a7b126",
+      "report.mjs": "b29743c7fffcfe96c73084551ab9f93ab699633a7279d61a2316db6b7ab1442a"
+    },
+    "sourceSha256": "ce27577ca515c19e78d4f107f9a90e660279858c5e138325efcbe49545ef9594",
+    "fixtureSha256": "691eb2bb187aea9532e35369492de48059ac3d8118154f77a299b78b80854fad",
     "screenSPI": false,
     "restricted": true
   }
