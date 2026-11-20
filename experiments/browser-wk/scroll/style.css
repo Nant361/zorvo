@@ -1,0 +1,9 @@
+@import "../../../src/styles/globals.css";
+@source "../../../src";
+
+main { padding: 4px; }
+header { display: flex; gap: 8px; align-items: center; height: 32px; }
+.panes { display: flex; width: 420px; height: 340px; }
+.page { width: 240px; height: 100%; overflow: auto; }
+.page article { min-height: 88px; padding: 8px; border-bottom: 1px solid var(--color-border); }
+#chat { width: 180px; display: flex; flex-direction: column; overflow: hidden; }

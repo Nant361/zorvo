@@ -1,0 +1,188 @@
+{
+  "bundleIdentifier": "xyz.zorvo.browser-spike.microphone-only.zorvo-browser-wk-uY4DeG",
+  "mediaAuthorization": {
+    "camera": "not determined",
+    "microphone": "not determined"
+  },
+  "mode": "microphone-only",
+  "os": "Version 27.0.1 (Build 26A434)",
+  "registeredApplication": {
+    "resolved": false,
+    "snapshotRelativePath": "unresolved"
+  },
+  "results": [
+    {
+      "evidence": {
+        "otherSession": "",
+        "sameSession": "session=alpha"
+      },
+      "gate": "cookies per session",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "storeA": "alpha",
+        "storeB": "beta"
+      },
+      "gate": "no cookie overwrite across sessions",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "count": 1,
+        "input": "'); globalThis.__zorvoProbe = null; //",
+        "proof": "{\"isInput\":true}",
+        "source": "trusted",
+        "state": "0",
+        "title": "WK browser spike"
+      },
+      "gate": "isolated content world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "renderedValue": "'); globalThis.__zorvoProbe = null; //"
+      },
+      "gate": "React controlled input",
+      "status": "pass"
+    },
+    {
+      "evidence": "undefined,undefined",
+      "gate": "no app bridge in page world",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "checkedConfigurations": 3,
+        "enabled": [
+          false,
+          false,
+          false
+        ]
+      },
+      "gate": "screen capture preference disabled",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "camera": false,
+        "location": false,
+        "microphone": true
+      },
+      "gate": "bundle usage declarations",
+      "status": "pass"
+    },
+    {
+      "evidence": "Canonical spike 7 also requires the test app's own Screen Recording grant.",
+      "gate": "screen recording grant precondition",
+      "status": "unverified"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": true,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://127.0.0.1:54963",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in document",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://127.0.0.1:54963",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in same-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "cameraOrMicrophone": "function",
+        "documentHasFocus": false,
+        "documentHidden": false,
+        "dynamicJavaScript": 42,
+        "legacy": "undefined",
+        "mediaDevices": "object",
+        "origin": "http://localhost:54963",
+        "screen": "undefined",
+        "secure": true,
+        "wasm": "object"
+      },
+      "gate": "capture APIs in cross-origin frame",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "callbacks": 1,
+        "publicDelegateAvailable": true,
+        "result": "1"
+      },
+      "gate": "location denied in cross-origin frame",
+      "status": "pass"
+    }
+  ],
+  "screenRecordingGranted": false,
+  "assessment": {
+    "scope": "API surface and location with only the microphone declaration; media requests not attempted",
+    "status": "unverified"
+  },
+  "harness": {
+    "collectedAt": "2026-11-20T10:57:01.799Z",
+    "node": "v22.23.5",
+    "mode": "microphone-only",
+    "identifier": "xyz.zorvo.browser-spike.microphone-only.zorvo-browser-wk-uY4DeG",
+    "arch": "arm64",
+    "target": "arm64-apple-macosx12.0",
+    "sources": {
+      "Probe.swift": "40260ed3d5efc4da3120905e13f7802a2e0a7caf49d199425a6000de2f4d29f3",
+      "HiddenProbe.swift": "bca95d2e9ca5c852e82b3bbdfe005a92839448fc4487f03bbcaa59cbbab531da",
+      "Fixture.tsx": "e45952e576b41995fa1eaeaadc293669416d9d951f35ab5b22e1865ede37f447",
+      "fixture.mjs": "9a875f1d5d8bd5209a2b68c6006ff33e426054d9f4a2f4e91f1e22b731da1ae7",
+      "Info.plist": "7a8a948bd4d2913257630a2da02817d40cc346dcb94bbbba704080a5c692191c",
+      "run.mjs": "cef935e05db053ac6c19d9dfb49be2b97e891fc436447d056ad867e0cf467109",
+      "report.mjs": "d2175d571acf7f84b352ac476b7bc089a52e7b30457026947bd5fabc1ca84e33",
+      "fixture.bundle.js": "9490cecbbfe5a73752a0a878c864139c7d2d6289077c21d5873053cb6f538734"
+    },
+    "usageStrings": [
+      "NSMicrophoneUsageDescription"
+    ],
+    "binarySha256": "24d0f856075846b55a3bdb07693d7399b2f5c6987c91adfaeef7cb1e979cd075",
+    "bundleInfoSha256": "dda1511deac8ff543f40d661e1319c13b1be70f899f86792a425416b9cbd4cd1",
+    "buildManifestSha256": "69876433e9a73c4c0735d3226bb5e1d34598e4a58234fdb58a2774389ac9aeb4",
+    "reusedBinary": false,
+    "launch": "LaunchServices via open -W -n",
+    "sourceCommit": "f09ca7a3f245fe4c71b2925980336ca65e9a179c"
+  }
+}

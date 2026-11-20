@@ -17,7 +17,8 @@ export default mergeConfig(
       // Agent worktrees under .claude/ hold copies of the tests; run only this checkout's.
       // server/ is its own package with its own Vitest setup (Workers runtime).
       // src-tauri/resources/ tests run with Node's own `node --test`, not in jsdom.
-      exclude: [...configDefaults.exclude, ".claude/**", "server/**", "src-tauri/**"],
+      // experiments/ also keeps standalone Node tests outside the app's Vitest suite.
+      exclude: [...configDefaults.exclude, ".claude/**", "server/**", "src-tauri/**", "experiments/**"],
     },
   }),
 );
