@@ -775,7 +775,7 @@ export default function App() {
     showTab: () => inspector.show("artifacts"),
     view: inspector.viewArtifact,
   });
-  useBrowserOpening({ sessionId: activeSession?.id ?? null, show: () => inspector.show("browser"), onError: reportError, onArtifactShown });
+  useBrowserOpening({ sessionId: activeSession?.id ?? null, show: () => inspector.show("browser"), onError: reportError });
   const gallery = useMemo(
     () => galleryRows(sessions, artifacts.bySession, (profileId) => agentNameOr(agents.find((agent) => agent.id === profileId))),
     [sessions, artifacts.bySession, agents],

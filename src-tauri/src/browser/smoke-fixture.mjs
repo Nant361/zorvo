@@ -38,6 +38,8 @@ const server = http.createServer((request, response) => {
   <label>Password <input id="secret-password" type="password" value="synthetic-password-secret"></label>
   <label>Code <input id="secret-code" autocomplete="one-time-code" value="synthetic-code-secret"></label>
   <label>Card number <input id="secret-card" autocomplete="section-checkout billing cc-number" value="synthetic-card-secret"></label>
+  <textarea autocomplete="cc-number">synthetic-unlabeled-card-secret</textarea>
+  <label>Card code<textarea autocomplete="cc-csc">synthetic-wrapped-card-secret</textarea></label>
   <a id="popup-link" href="/frame?popup=user" target="_blank" rel="opener">Open background popup</a>
   <div id="drag" draggable="true">Drag</div><div id="drop">Drop here</div>
   ${frame ? '' : `<iframe title="Same origin" src="/frame"></iframe><iframe title="Other origin" src="http://localhost:${server.address().port}/frame"></iframe>`}

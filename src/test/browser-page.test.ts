@@ -39,6 +39,24 @@ function page() {
 }
 
 describe("native browser page helper", () => {
+  it("does not authorize a popup for a script-generated link click", () => {
+    const p = page();
+    p.document.body.innerHTML = '<a href="https://example.com/" target="_blank">Popup</a>';
+    const link = p.document.querySelector<HTMLAnchorElement>('a')!;
+    link.addEventListener('click', event => event.preventDefault());
+    link.click();
+    expect(p.messages.map(message => JSON.parse(message)).some(message => message.kind === 'popup-link')).toBe(false);
+  });
+  it("rejects interaction operations outside the first WebKit version", async () => {
+    const p = page();
+    p.document.body.innerHTML = '<input value="untouched"><button>Untouched</button>';
+    for (const operation of ["hover", "drag", "fill_form", "press"]) {
+      expect(await p.dispatch(operation, { selector: "input", value: "changed", key: "Enter", fields: [] }))
+        .toEqual({ ok: false, error: "Unsupported embedded browser operation." });
+    }
+    expect(p.document.querySelector("input")!.value).toBe("untouched");
+  });
+
   it("omits credential, one-time code and payment values from default reads while preserving refs", async () => {
     const p = page();
     p.document.body.innerHTML = `
@@ -66,6 +84,16 @@ describe("native browser page helper", () => {
     expect(p.document.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("replacement-secret");
     const after = await p.call<{ controls: Control[] }>("snapshot");
     expect(JSON.stringify(after.controls)).not.toContain("replacement-secret");
+  });
+
+  it("omits sensitive textarea defaults from names, wrapping labels and page text", async () => {
+    const p = page();
+    p.document.body.innerHTML = '<p>Public page text</p><textarea autocomplete="cc-number">unlabeled-card-secret</textarea><label>Card code<textarea autocomplete="cc-csc">wrapped-card-secret</textarea></label>';
+    const snapshot = await p.call<{ controls: Control[]; text: string }>("snapshot");
+    expect(snapshot.controls.map(control => control.name)).toEqual(["", "Card code"]);
+    expect(snapshot.text).toContain("Public page text");
+    expect(JSON.stringify(snapshot)).not.toContain("card-secret");
+    expect(await p.call<Control[]>("find", { text: "Card code" })).toHaveLength(1);
   });
 
   it("finds ordinary and nested open-shadow controls and drives their snapshot refs", async () => {

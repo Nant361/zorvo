@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use block2::RcBlock;
@@ -72,15 +72,20 @@ pub(super) struct Tab {
     frames: Vec<(String, Retained<WKFrameInfo>)>,
     loading: bool,
     initial_url: String,
-    dialog: Option<policy::Dialog>,
     document: Option<String>,
     picker: Option<Picker>,
+    popup_link: Option<PopupLink>,
     pending: Vec<WeakReply>,
 }
 pub(super) struct Picker {
     document: String,
     nonce: String,
     request_id: String,
+}
+pub(super) struct PopupLink {
+    url: String,
+    document: String,
+    at: Instant,
 }
 struct Session {
     store: Retained<WKWebsiteDataStore>,
@@ -120,8 +125,7 @@ fn state(session_id: &str) -> Value {
     SESSIONS.with(|sessions| {
         let sessions=sessions.borrow();
         if let Some(session)=sessions.get(session_id) {
-            let dialog=session.active.as_ref().and_then(|id|session.tabs.iter().find(|(tid,_)|tid==id)).and_then(|(_,tab)|tab.dialog.as_ref()).map(|d|d.info.clone());
-            json!({"sessionId":session_id,"tabs":session.tabs.iter().map(|(id,t)|metadata(id,t)).collect::<Vec<_>>(),"activeTabId":session.active,"dialog":dialog})
+            json!({"sessionId":session_id,"tabs":session.tabs.iter().map(|(id,t)|metadata(id,t)).collect::<Vec<_>>(),"activeTabId":session.active})
         } else { json!({"sessionId":session_id,"tabs":[],"activeTabId":null}) }
     })
 }
@@ -307,14 +311,12 @@ fn create_tab(app: &AppHandle, sid: &str, url: &str, activate: bool) -> Result<S
                     with_tab(&sid, &tid, |tab| {
                         tab.loading = matches!(event, wry::PageLoadEvent::Started);
                         if tab.loading {
+                            tab.popup_link = None;
                             cancel_pending(&mut tab.pending);
                             tab.frames.clear();
                             tab.document = None;
                             if let Some(picker) = tab.picker.take() {
                                 let _ = app.emit("browser-element-picked", json!({"sessionId":sid,"tabId":tid,"requestId":picker.request_id,"cancelled":true}));
-                            }
-                            if let Some(d) = tab.dialog.take() {
-                                d.dismiss();
                             }
                         } else {
                             let meta = metadata(&tid, tab);
@@ -352,9 +354,9 @@ fn create_tab(app: &AppHandle, sid: &str, url: &str, activate: bool) -> Result<S
                 frames: vec![],
                 loading: url != "about:blank",
                 initial_url: url.into(),
-                dialog: None,
                 document: None,
                 picker: None,
+                popup_link: None,
                 pending: vec![],
             },
         ));
@@ -374,9 +376,6 @@ fn rect(b: Bounds) -> wry::Rect {
 
 fn end(mut tab: Tab) {
     cancel_pending(&mut tab.pending);
-    if let Some(dialog) = tab.dialog.take() {
-        dialog.dismiss();
-    }
     let view = tab.view.webview();
     // SAFETY: this retained WKWebView stays on its main thread. Each private
     // termination/reset/close selector is checked before a no-argument void
@@ -530,14 +529,7 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
         });
         if !matches!(
             operation,
-            "navigate"
-                | "back"
-                | "forward"
-                | "reload"
-                | "stop"
-                | "dialog"
-                | "frames"
-                | "__manual_zoom"
+            "navigate" | "back" | "forward" | "reload" | "stop" | "__manual_zoom"
         ) {
             if tab.pending.len() >= 64 {
                 let _ = reply.send(Err(
@@ -645,11 +637,6 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                     .and_then(navigation_url)
                     .and_then(|u| {
                         cancel_pending(&mut tab.pending);
-                        // A dialog can prevent navigation from starting, so the
-                        // load-start callback is too late to dismiss it.
-                        if let Some(dialog) = tab.dialog.take() {
-                            dialog.dismiss();
-                        }
                         tab.view.load_url(&u).map_err(|e| e.to_string())
                     })
                     .map(|_| json!({"navigating":true}));
@@ -658,9 +645,6 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
             "back" | "forward" | "reload" | "stop" => {
                 if operation != "stop" {
                     cancel_pending(&mut tab.pending);
-                    if let Some(dialog) = tab.dialog.take() {
-                        dialog.dismiss();
-                    }
                 }
                 unsafe {
                     let v = tab.view.webview();
@@ -678,42 +662,6 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                     }
                 }
                 let _ = reply.send(Ok(json!({"accepted":true})));
-            }
-            "frames" => {
-                let values=tab.frames.iter().map(|(id,f)|unsafe{json!({"id":id,"isMainFrame":f.isMainFrame(),"url":f.request().URL().and_then(|u|u.absoluteString()).map(|s|s.to_string())})}).collect::<Vec<_>>();
-                let _ = reply.send(Ok(json!({"frames":values})));
-            }
-            "dialog" => {
-                let action = args.get("action").and_then(Value::as_str).unwrap_or(
-                    if args.get("accept").is_some() {
-                        "answer"
-                    } else {
-                        "inspect"
-                    },
-                );
-                if action == "inspect" {
-                    let _ = reply.send(Ok(
-                        json!({"dialog":tab.dialog.as_ref().map(|d|d.info.clone())}),
-                    ));
-                    return;
-                }
-                if !matches!(action, "accept" | "dismiss" | "answer") {
-                    let _ = reply.send(Err(
-                        "Dialog action must be inspect, accept or dismiss.".into()
-                    ));
-                    return;
-                }
-                if let Some(dialog) = tab.dialog.take() {
-                    dialog.answer(
-                        action == "accept"
-                            || (action == "answer"
-                                && args.get("accept").and_then(Value::as_bool).unwrap_or(false)),
-                        args.get("text").and_then(Value::as_str),
-                    );
-                    let _ = reply.send(Ok(json!({"answered":true})));
-                } else {
-                    let _ = reply.send(Err("There is no pending page dialog.".into()));
-                }
             }
             "screenshot" => screenshot(&tab.view.webview(), reply),
             "evaluate" | "console" => {
@@ -743,8 +691,7 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                         && args.get("script").is_some(),
                 );
             }
-            "snapshot" | "find" | "wait" | "click" | "hover" | "drag" | "fill" | "fill_form"
-            | "select" | "check" | "press" | "scroll" => {
+            "snapshot" | "find" | "wait" | "click" | "fill" | "select" | "check" | "scroll" => {
                 helper(
                     &tab.view.webview(),
                     args.get("frameId"),
@@ -754,10 +701,7 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
                 );
             }
             _ => {
-                let _ = reply.send(Err(
-                    "This operation requires the Chromium debug engine. Set engine to chromium."
-                        .into(),
-                ));
+                let _ = reply.send(Err("Unsupported embedded browser operation.".into()));
             }
         }
     });
@@ -770,7 +714,7 @@ fn dispatch(app: &AppHandle, sid: &str, args: Value, reply: Reply) {
     }
     if matches!(
         operation,
-        "dialog" | "navigate" | "back" | "forward" | "reload" | "stop" | "__manual_zoom"
+        "navigate" | "back" | "forward" | "reload" | "stop" | "__manual_zoom"
     ) {
         changed(app, sid);
     }
